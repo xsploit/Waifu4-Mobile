@@ -35,6 +35,7 @@ class FakeAudioContext {
       start: (when: number) => {
         this.starts.push(when);
       },
+      stop: () => {},
     };
     return source;
   }

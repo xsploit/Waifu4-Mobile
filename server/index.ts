@@ -3,6 +3,7 @@ import { buildHealth, SERVICE_NAME } from './health';
 import { handleChat } from './ai/chat';
 import { handleModels } from './ai/models';
 import { handleTtsStream } from './tts/stream';
+import { handleLocalBackupSettings } from './localBackup';
 
 const PORT = Number(process.env.PORT ?? 8797);
 
@@ -12,6 +13,11 @@ app.use(express.json({ limit: '8mb' }));
 // GET /health — boring liveness check the web app polls (StatusPanel).
 app.get('/health', (_req, res) => {
   res.json(buildHealth());
+});
+
+// GET /local/backup-settings — local convenience import for the user's backup JSON.
+app.get('/local/backup-settings', (req, res) => {
+  void handleLocalBackupSettings(req, res);
 });
 
 // GET /ai/models — model capability metadata for automatic lane selection.

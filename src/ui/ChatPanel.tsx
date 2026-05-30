@@ -1,7 +1,8 @@
-import { useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { fetchModels, streamChat } from '../llm/LlmClient';
 import { AudioPlayback, type PlaybackSnapshot } from '../tts/AudioPlayback';
 import { streamTts, type TtsStreamEvent } from '../tts/TtsClient';
+import { createSpeechBuffer } from '../tts/SpeechBuffer';
 import { buildSystemPrompt } from '../brain/prompt';
 import { selectReplyFormat, type ProviderModelInfo } from '../brain/modelCapability';
 import type { GatewayId, LlmMessage, ReplyFormat, ReplyMetadata } from '../brain/BrainTypes';
@@ -9,6 +10,16 @@ import type { GatewayId, LlmMessage, ReplyFormat, ReplyMetadata } from '../brain
 const DEFAULT_PERSONA = 'You are Hikari, a warm, playful AI companion. Keep replies short and natural.';
 
 type Turn = { role: 'user' | 'assistant'; content: string };
+
+type LocalBackupSettings = {
+  provider?: GatewayId;
+  model?: string;
+  llmKey?: string;
+  byokOpenAiKey?: string;
+  ttsKey?: string;
+  fishVoiceId?: string;
+  autoSpeak?: boolean;
+};
 
 const inputStyle: React.CSSProperties = {
   background: '#202028',
@@ -41,6 +52,10 @@ export function ChatPanel() {
   const [busy, setBusy] = useState(false);
   const abortRef = useRef<AbortController | null>(null);
   const ttsAbortRef = useRef<AbortController | null>(null);
+  const ttsControllersRef = useRef<Set<AbortController>>(new Set());
+  const ttsQueueRef = useRef<Promise<void>>(Promise.resolve());
+  const speechRunRef = useRef(0);
+  const ttsTotalsRef = useRef({ segments: 0, chunks: 0, bytes: 0, firstAudioMs: null as number | null });
   const playbackRef = useRef<AudioPlayback | null>(null);
 
   const modelInfo = useMemo(
@@ -50,6 +65,36 @@ export function ChatPanel() {
   const effectiveFormat: ReplyFormat = autoLane
     ? selectReplyFormat(provider, modelInfo)
     : manualFormat;
+
+  useEffect(() => {
+    let cancelled = false;
+    async function loadLocalBackup() {
+      try {
+        const res = await fetch('/local/backup-settings');
+        if (!res.ok) {
+          return;
+        }
+        const settings = (await res.json()) as LocalBackupSettings;
+        if (cancelled) {
+          return;
+        }
+        setProvider(settings.provider ?? 'vercel-gateway');
+        setModel(settings.model || 'openai/gpt-5-nano');
+        setApiKey(settings.llmKey ?? '');
+        setByok(settings.byokOpenAiKey ?? '');
+        setTtsKey(settings.ttsKey ?? '');
+        setVoiceId(settings.fishVoiceId ?? '');
+        setAutoSpeak(settings.autoSpeak ?? true);
+        setModelsMsg('loaded local backup settings');
+      } catch {
+        /* local backup import is optional */
+      }
+    }
+    void loadLocalBackup();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   const loadModels = async () => {
     setModelsMsg('loading…');
@@ -86,6 +131,15 @@ export function ChatPanel() {
     setInput('');
     setBusy(true);
     setStreaming('');
+    const canStreamSpeech = autoSpeak && Boolean(ttsKey.trim());
+    const speechRun = speechRunRef.current + 1;
+    speechRunRef.current = speechRun;
+    const speechBuffer = createSpeechBuffer();
+    if (canStreamSpeech) {
+      stopTts('starting reply audio…');
+      speechRunRef.current = speechRun;
+      ttsTotalsRef.current = { segments: 0, chunks: 0, bytes: 0, firstAudioMs: null };
+    }
 
     const messages: LlmMessage[] = [
       { role: 'system', content: buildSystemPrompt(DEFAULT_PERSONA, effectiveFormat) },
@@ -104,12 +158,21 @@ export function ChatPanel() {
         if (ev.type === 'delta') {
           acc += ev.text;
           setStreaming(acc);
+          if (canStreamSpeech) {
+            for (const segment of speechBuffer.push(ev.text)) {
+              queueSpeechSegment(segment, speechRun);
+            }
+          }
         } else if (ev.type === 'done') {
           const message = ev.text || acc;
           setLog((prev) => [...prev, { role: 'assistant', content: message }]);
           setStreaming('');
           setMeta(ev.meta);
-          if (autoSpeak && ttsKey.trim() && message.trim()) {
+          if (canStreamSpeech) {
+            for (const segment of speechBuffer.flush()) {
+              queueSpeechSegment(segment, speechRun);
+            }
+          } else if (autoSpeak && ttsKey.trim() && message.trim()) {
             void speak(message);
           }
         } else {
@@ -124,23 +187,51 @@ export function ChatPanel() {
     }
   };
 
-  const stop = () => abortRef.current?.abort();
-  const stopTts = () => {
-    ttsAbortRef.current?.abort();
+  const stop = () => {
+    abortRef.current?.abort();
+    stopTts('stopped');
+  };
+  const stopTts = (status = 'stopped') => {
+    speechRunRef.current += 1;
+    for (const controller of ttsControllersRef.current) {
+      controller.abort();
+    }
+    ttsControllersRef.current.clear();
+    ttsQueueRef.current = Promise.resolve();
+    playbackRef.current?.stop();
     ttsAbortRef.current = null;
-    setTtsStatus('stopped');
+    setTtsStatus(status);
   };
 
   const speak = async (message: string) => {
+    stopTts('speaking…');
+    const runId = speechRunRef.current;
+    ttsTotalsRef.current = { segments: 0, chunks: 0, bytes: 0, firstAudioMs: null };
+    await synthesizeQueuedText(message, runId);
+  };
+
+  const queueSpeechSegment = (message: string, runId: number) => {
+    ttsQueueRef.current = ttsQueueRef.current
+      .catch(() => undefined)
+      .then(async () => {
+        if (speechRunRef.current !== runId) {
+          return;
+        }
+        await synthesizeQueuedText(message, runId);
+      });
+    void ttsQueueRef.current;
+  };
+
+  const synthesizeQueuedText = async (message: string, runId: number) => {
     if (!ttsKey.trim()) {
       setError('Enter a TTS provider key first.');
       return;
     }
-    ttsAbortRef.current?.abort();
     const controller = new AbortController();
+    ttsControllersRef.current.add(controller);
     ttsAbortRef.current = controller;
     playbackRef.current ??= new AudioPlayback({ onState: setPlaybackState });
-    setTtsStatus('speaking…');
+    setTtsStatus(`speaking segment ${ttsTotalsRef.current.segments + 1}…`);
     setPlaybackState(playbackRef.current.getState());
     try {
       for await (const ev of streamTts(
@@ -148,6 +239,10 @@ export function ChatPanel() {
         { ttsKey: ttsKey.trim() },
         controller.signal,
       )) {
+        if (speechRunRef.current !== runId) {
+          controller.abort();
+          break;
+        }
         await handleTtsEvent(ev, playbackRef.current);
       }
     } catch (err) {
@@ -155,6 +250,7 @@ export function ChatPanel() {
         setTtsStatus(`error: ${err instanceof Error ? err.message : String(err)}`);
       }
     } finally {
+      ttsControllersRef.current.delete(controller);
       if (ttsAbortRef.current === controller) {
         ttsAbortRef.current = null;
       }
@@ -169,8 +265,15 @@ export function ChatPanel() {
       }
       await playback.playPcmChunk(ev.audio, ev.sampleRate ?? 44100);
     } else if (ev.type === 'done') {
+      const firstAudioMs = ttsTotalsRef.current.firstAudioMs ?? ev.stats.firstAudioMs;
+      ttsTotalsRef.current = {
+        segments: ttsTotalsRef.current.segments + 1,
+        chunks: ttsTotalsRef.current.chunks + ev.stats.chunks,
+        bytes: ttsTotalsRef.current.bytes + ev.stats.bytes,
+        firstAudioMs,
+      };
       setTtsStatus(
-        `done · ${ev.stats.chunks} chunks · ${Math.round(ev.stats.bytes / 1024)} KB · first ${ev.stats.firstAudioMs ?? 'n/a'} ms`,
+        `done · ${ttsTotalsRef.current.segments} segments · ${ttsTotalsRef.current.chunks} chunks · ${Math.round(ttsTotalsRef.current.bytes / 1024)} KB · first ${firstAudioMs ?? 'n/a'} ms`,
       );
     } else {
       setTtsStatus(`error: ${ev.error}`);
@@ -324,7 +427,7 @@ export function ChatPanel() {
           </button>
         )}
         {ttsAbortRef.current && (
-          <button onClick={stopTts} style={{ ...inputStyle, cursor: 'pointer' }}>
+          <button onClick={() => stopTts()} style={{ ...inputStyle, cursor: 'pointer' }}>
             stop audio
           </button>
         )}

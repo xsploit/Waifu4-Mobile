@@ -17,6 +17,7 @@ export type PlaybackSnapshot = {
 type AudioNodeLike = {
   connect(destination: unknown): void;
   start(when: number): void;
+  stop?: () => void;
   onended: (() => void) | null;
 };
 
@@ -38,6 +39,7 @@ export class AudioPlayback {
   private context: AudioContextLike | null;
   private playhead = 0;
   private activeSources = 0;
+  private sources = new Set<AudioNodeLike>();
   private snapshot: PlaybackSnapshot = {
     status: 'idle',
     chunks: 0,
@@ -65,6 +67,21 @@ export class AudioPlayback {
     this.update({ status: 'idle', chunks: 0, bytes: 0, queuedSeconds: 0, amplitude: 0 });
   }
 
+  stop(): void {
+    for (const source of this.sources) {
+      try {
+        source.stop?.();
+      } catch {
+        /* already stopped */
+      }
+      source.onended = null;
+    }
+    this.sources.clear();
+    this.playhead = this.context?.currentTime ?? 0;
+    this.activeSources = 0;
+    this.update({ status: 'idle', queuedSeconds: 0, amplitude: 0 });
+  }
+
   async playPcmChunk(chunk: Uint8Array, sampleRate: number): Promise<PlaybackSnapshot> {
     const context = this.ensureContext();
     if (context.state === 'suspended') {
@@ -85,7 +102,9 @@ export class AudioPlayback {
     const startAt = Math.max(now, this.playhead);
     this.playhead = startAt + buffer.duration;
     this.activeSources += 1;
+    this.sources.add(source);
     source.onended = () => {
+      this.sources.delete(source);
       this.activeSources = Math.max(0, this.activeSources - 1);
       if (this.activeSources === 0) {
         this.update({ status: 'idle', queuedSeconds: 0, amplitude: 0 });

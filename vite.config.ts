@@ -12,6 +12,7 @@ export default defineConfig({
     port: 5173,
     proxy: {
       '/health': BACKEND,
+      '/local': BACKEND,
       '/ai': BACKEND,
       '/tts': BACKEND,
     },
