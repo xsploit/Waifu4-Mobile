@@ -1,6 +1,7 @@
 import express from 'express';
 import { buildHealth, SERVICE_NAME } from './health';
 import { handleChat } from './ai/chat';
+import { handleModels } from './ai/models';
 
 const PORT = Number(process.env.PORT ?? 8797);
 
@@ -10,6 +11,11 @@ app.use(express.json({ limit: '8mb' }));
 // GET /health — boring liveness check the web app polls (StatusPanel).
 app.get('/health', (_req, res) => {
   res.json(buildHealth());
+});
+
+// GET /ai/models — model capability metadata for automatic lane selection.
+app.get('/ai/models', (req, res) => {
+  void handleModels(req, res);
 });
 
 // POST /ai/chat — SSE reply stream (delta / done / error).

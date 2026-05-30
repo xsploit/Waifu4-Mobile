@@ -6,6 +6,34 @@ import type {
   ReplyFormat,
   ReplyMetadata,
 } from '../brain/BrainTypes';
+import type { ProviderModelInfo } from '../brain/modelCapability';
+
+/** Fetch model capability metadata from the backend for automatic lane selection. */
+export async function fetchModels(
+  provider: GatewayId,
+  creds: LlmCredentials,
+): Promise<ProviderModelInfo[]> {
+  const res = await fetch(`/ai/models?provider=${encodeURIComponent(provider)}`, {
+    headers: {
+      'x-yourwifey-llm-provider': provider,
+      ...(creds.llmKey ? { 'x-yourwifey-llm-provider-key': creds.llmKey } : {}),
+    },
+  });
+  if (!res.ok) {
+    let message = `HTTP ${res.status}`;
+    try {
+      const body = (await res.json()) as { error?: string };
+      if (body.error) {
+        message = body.error;
+      }
+    } catch {
+      /* keep status message */
+    }
+    throw new Error(message);
+  }
+  const body = (await res.json()) as { models?: ProviderModelInfo[] };
+  return body.models ?? [];
+}
 
 export type LlmChatRequest = {
   provider: GatewayId;

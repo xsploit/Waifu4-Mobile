@@ -1,6 +1,7 @@
-import { useRef, useState } from 'react';
-import { streamChat } from '../llm/LlmClient';
+import { useMemo, useRef, useState } from 'react';
+import { fetchModels, streamChat } from '../llm/LlmClient';
 import { buildSystemPrompt } from '../brain/prompt';
+import { selectReplyFormat, type ProviderModelInfo } from '../brain/modelCapability';
 import type { GatewayId, LlmMessage, ReplyFormat, ReplyMetadata } from '../brain/BrainTypes';
 
 const DEFAULT_PERSONA = 'You are Hikari, a warm, playful AI companion. Keep replies short and natural.';
@@ -21,7 +22,10 @@ export function ChatPanel() {
   const [model, setModel] = useState('openai/gpt-5-nano');
   const [apiKey, setApiKey] = useState('');
   const [byok, setByok] = useState('');
-  const [replyFormat, setReplyFormat] = useState<ReplyFormat>('text');
+  const [autoLane, setAutoLane] = useState(true);
+  const [manualFormat, setManualFormat] = useState<ReplyFormat>('text');
+  const [models, setModels] = useState<ProviderModelInfo[]>([]);
+  const [modelsMsg, setModelsMsg] = useState<string | null>(null);
   const [input, setInput] = useState('');
   const [log, setLog] = useState<Turn[]>([]);
   const [streaming, setStreaming] = useState('');
@@ -29,6 +33,33 @@ export function ChatPanel() {
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const abortRef = useRef<AbortController | null>(null);
+
+  const modelInfo = useMemo(
+    () => models.find((m) => m.id === model) ?? null,
+    [models, model],
+  );
+  const effectiveFormat: ReplyFormat = autoLane
+    ? selectReplyFormat(provider, modelInfo)
+    : manualFormat;
+
+  const loadModels = async () => {
+    setModelsMsg('loading…');
+    try {
+      const list = await fetchModels(provider, { llmKey: apiKey.trim() });
+      setModels(list);
+      const known = list.find((m) => m.id === model);
+      setModelsMsg(
+        `${list.length} models` +
+          (provider === 'openrouter-responses'
+            ? known
+              ? ` · ${model} structured: ${known.supportsStructuredOutputs ? 'yes' : 'no'}`
+              : ' · selected model not in list'
+            : ' · gateway defaults to structured'),
+      );
+    } catch (err) {
+      setModelsMsg(`error: ${err instanceof Error ? err.message : String(err)}`);
+    }
+  };
 
   const send = async () => {
     const userText = input.trim();
@@ -48,7 +79,7 @@ export function ChatPanel() {
     setStreaming('');
 
     const messages: LlmMessage[] = [
-      { role: 'system', content: buildSystemPrompt(DEFAULT_PERSONA, replyFormat) },
+      { role: 'system', content: buildSystemPrompt(DEFAULT_PERSONA, effectiveFormat) },
       ...history.map((t) => ({ role: t.role, content: t.content })),
     ];
 
@@ -57,7 +88,7 @@ export function ChatPanel() {
     let acc = '';
     try {
       for await (const ev of streamChat(
-        { provider, model, messages, replyFormat },
+        { provider, model, messages, replyFormat: effectiveFormat },
         { llmKey: apiKey.trim(), byokOpenAiKey: byok.trim() || undefined },
         controller.signal,
       )) {
@@ -99,14 +130,30 @@ export function ChatPanel() {
           placeholder="model id"
           style={{ ...inputStyle, width: 200 }}
         />
-        <select
-          value={replyFormat}
-          onChange={(e) => setReplyFormat(e.target.value as ReplyFormat)}
-          style={inputStyle}
-        >
-          <option value="text">Lane B (text + meta)</option>
-          <option value="structured">Lane A (structured)</option>
-        </select>
+        <button onClick={() => void loadModels()} style={{ ...inputStyle, cursor: 'pointer' }}>
+          load models
+        </button>
+      </div>
+      <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'center', fontSize: 12 }}>
+        <label style={{ display: 'flex', alignItems: 'center', gap: 4, color: '#9b9ba3' }}>
+          <input type="checkbox" checked={autoLane} onChange={(e) => setAutoLane(e.target.checked)} />
+          auto lane
+        </label>
+        {autoLane ? (
+          <span style={{ color: '#9b9ba3' }}>
+            → {effectiveFormat === 'structured' ? 'Lane A (structured)' : 'Lane B (text + meta)'}
+          </span>
+        ) : (
+          <select
+            value={manualFormat}
+            onChange={(e) => setManualFormat(e.target.value as ReplyFormat)}
+            style={inputStyle}
+          >
+            <option value="text">Lane B (text + meta)</option>
+            <option value="structured">Lane A (structured)</option>
+          </select>
+        )}
+        {modelsMsg && <span style={{ color: '#7a7a82' }}>{modelsMsg}</span>}
       </div>
       <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
         <input
