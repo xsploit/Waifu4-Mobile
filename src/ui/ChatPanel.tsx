@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { fetchModels, streamChat } from '../llm/LlmClient';
 import { AudioPlayback, type PlaybackSnapshot } from '../tts/AudioPlayback';
-import { streamTts, type TtsStreamEvent } from '../tts/TtsClient';
+import { streamTts, type TtsStreamEvent, type TtsTimestampInfo } from '../tts/TtsClient';
 import { createSpeechBuffer } from '../tts/SpeechBuffer';
 import { createWLipSyncMouth, type WLipSyncMouth } from '../lipsync/WLipSyncMouth';
 import { ZERO_MOUTH_WEIGHTS, type MouthWeights } from '../lipsync/MouthWeights';
@@ -12,6 +12,10 @@ import type { GatewayId, LlmMessage, ReplyFormat, ReplyMetadata } from '../brain
 const DEFAULT_PERSONA = 'You are Hikari, a warm, playful AI companion. Keep replies short and natural.';
 
 type Turn = { role: 'user' | 'assistant'; content: string };
+type TtsProvider = 'fish' | 'inworld';
+type InworldTransport = 'http' | 'websocket';
+type InworldTimestampStrategy = 'SYNC' | 'ASYNC';
+type InworldDeliveryMode = 'STABLE' | 'BALANCED' | 'CREATIVE' | 'EXPRESSIVE';
 
 type LocalBackupSettings = {
   provider?: GatewayId;
@@ -20,7 +24,20 @@ type LocalBackupSettings = {
   byokOpenAiKey?: string;
   ttsKey?: string;
   fishVoiceId?: string;
+  inworldKey?: string;
+  inworldVoiceId?: string;
+  inworldModelId?: string;
+  inworldDeliveryMode?: InworldDeliveryMode;
+  inworldBufferCharThreshold?: number;
+  ttsProvider?: string;
   autoSpeak?: boolean;
+};
+
+type TimingTotals = {
+  timestampChunks: number;
+  words: number;
+  phonemes: number;
+  visemes: number;
 };
 
 const inputStyle: React.CSSProperties = {
@@ -32,15 +49,32 @@ const inputStyle: React.CSSProperties = {
   fontSize: 13,
 };
 
+const ZERO_TIMING_TOTALS: TimingTotals = {
+  timestampChunks: 0,
+  words: 0,
+  phonemes: 0,
+  visemes: 0,
+};
+
 export function ChatPanel() {
   const [provider, setProvider] = useState<GatewayId>('vercel-gateway');
   const [model, setModel] = useState('openai/gpt-5-nano');
   const [apiKey, setApiKey] = useState('');
   const [byok, setByok] = useState('');
+  const [ttsProvider, setTtsProvider] = useState<TtsProvider>('fish');
   const [ttsKey, setTtsKey] = useState('');
   const [voiceId, setVoiceId] = useState('');
+  const [inworldKey, setInworldKey] = useState('');
+  const [inworldVoiceId, setInworldVoiceId] = useState('Ashley');
+  const [inworldModelId, setInworldModelId] = useState('inworld-tts-2');
+  const [inworldTransport, setInworldTransport] = useState<InworldTransport>('http');
+  const [inworldDeliveryMode, setInworldDeliveryMode] = useState<InworldDeliveryMode>('BALANCED');
+  const [inworldTimestampStrategy, setInworldTimestampStrategy] =
+    useState<InworldTimestampStrategy>('SYNC');
+  const [inworldBufferCharThreshold, setInworldBufferCharThreshold] = useState(120);
   const [autoSpeak, setAutoSpeak] = useState(true);
   const [ttsStatus, setTtsStatus] = useState('idle');
+  const [ttsTimingStatus, setTtsTimingStatus] = useState('timing=idle');
   const [playbackState, setPlaybackState] = useState<PlaybackSnapshot | null>(null);
   const [mouthState, setMouthState] = useState<{
     ready: boolean;
@@ -64,6 +98,7 @@ export function ChatPanel() {
   const ttsQueueRef = useRef<Promise<void>>(Promise.resolve());
   const speechRunRef = useRef(0);
   const ttsTotalsRef = useRef({ segments: 0, chunks: 0, bytes: 0, firstAudioMs: null as number | null });
+  const ttsTimingTotalsRef = useRef<TimingTotals>(ZERO_TIMING_TOTALS);
   const playbackRef = useRef<AudioPlayback | null>(null);
   const mouthRef = useRef<WLipSyncMouth | null>(null);
   const mouthFrameRef = useRef<number | null>(null);
@@ -75,6 +110,8 @@ export function ChatPanel() {
   const effectiveFormat: ReplyFormat = autoLane
     ? selectReplyFormat(provider, modelInfo)
     : manualFormat;
+
+  const getActiveTtsKey = () => (ttsProvider === 'inworld' ? inworldKey : ttsKey);
 
   useEffect(() => {
     let cancelled = false;
@@ -94,6 +131,12 @@ export function ChatPanel() {
         setByok(settings.byokOpenAiKey ?? '');
         setTtsKey(settings.ttsKey ?? '');
         setVoiceId(settings.fishVoiceId ?? '');
+        setInworldKey(settings.inworldKey ?? '');
+        setInworldVoiceId(settings.inworldVoiceId || 'Ashley');
+        setInworldModelId(settings.inworldModelId || 'inworld-tts-2');
+        setInworldDeliveryMode(settings.inworldDeliveryMode ?? 'BALANCED');
+        setInworldBufferCharThreshold(settings.inworldBufferCharThreshold ?? 120);
+        setTtsProvider(settings.ttsProvider === 'inworld' ? 'inworld' : 'fish');
         setAutoSpeak(settings.autoSpeak ?? true);
         setModelsMsg('loaded local backup settings');
       } catch {
@@ -141,7 +184,7 @@ export function ChatPanel() {
     setInput('');
     setBusy(true);
     setStreaming('');
-    const canStreamSpeech = autoSpeak && Boolean(ttsKey.trim());
+    const canStreamSpeech = autoSpeak && Boolean(getActiveTtsKey().trim());
     const speechRun = speechRunRef.current + 1;
     speechRunRef.current = speechRun;
     const speechBuffer = createSpeechBuffer();
@@ -149,6 +192,8 @@ export function ChatPanel() {
       stopTts('starting reply audio…');
       speechRunRef.current = speechRun;
       ttsTotalsRef.current = { segments: 0, chunks: 0, bytes: 0, firstAudioMs: null };
+      ttsTimingTotalsRef.current = ZERO_TIMING_TOTALS;
+      setTtsTimingStatus('timing=waiting');
     }
 
     const messages: LlmMessage[] = [
@@ -182,7 +227,7 @@ export function ChatPanel() {
             for (const segment of speechBuffer.flush()) {
               queueSpeechSegment(segment, speechRun);
             }
-          } else if (autoSpeak && ttsKey.trim() && message.trim()) {
+          } else if (autoSpeak && getActiveTtsKey().trim() && message.trim()) {
             void speak(message);
           }
         } else {
@@ -211,6 +256,8 @@ export function ChatPanel() {
     playbackRef.current?.stop();
     ttsAbortRef.current = null;
     setTtsStatus(status);
+    ttsTimingTotalsRef.current = ZERO_TIMING_TOTALS;
+    setTtsTimingStatus(status === 'stopped' ? 'timing=stopped' : 'timing=idle');
     setMouthState((prev) => ({ ...prev, volume: 0, weights: ZERO_MOUTH_WEIGHTS }));
   };
 
@@ -218,6 +265,8 @@ export function ChatPanel() {
     stopTts('speaking…');
     const runId = speechRunRef.current;
     ttsTotalsRef.current = { segments: 0, chunks: 0, bytes: 0, firstAudioMs: null };
+    ttsTimingTotalsRef.current = ZERO_TIMING_TOTALS;
+    setTtsTimingStatus('timing=waiting');
     await synthesizeQueuedText(message, runId);
   };
 
@@ -234,8 +283,9 @@ export function ChatPanel() {
   };
 
   const synthesizeQueuedText = async (message: string, runId: number) => {
-    if (!ttsKey.trim()) {
-      setError('Enter a TTS provider key first.');
+    const activeTtsKey = getActiveTtsKey().trim();
+    if (!activeTtsKey) {
+      setError(`Enter a ${ttsProvider === 'inworld' ? 'Inworld' : 'Fish'} TTS key first.`);
       return;
     }
     const controller = new AbortController();
@@ -246,8 +296,23 @@ export function ChatPanel() {
     setPlaybackState(playback.getState());
     try {
       for await (const ev of streamTts(
-        { text: message, voiceId: voiceId.trim() || undefined },
-        { ttsKey: ttsKey.trim() },
+        ttsProvider === 'inworld'
+          ? {
+              provider: 'inworld',
+              text: message,
+              voiceId: inworldVoiceId.trim() || 'Ashley',
+              inworldModelId: inworldModelId.trim() || 'inworld-tts-2',
+              inworldTransport,
+              format: 'pcm',
+              sampleRate: 48000,
+              timestampType: 'WORD',
+              timestampTransportStrategy: inworldTimestampStrategy,
+              deliveryMode: inworldDeliveryMode,
+              bufferCharThreshold: inworldBufferCharThreshold,
+              autoMode: true,
+            }
+          : { provider: 'fish', text: message, voiceId: voiceId.trim() || undefined },
+        { ttsKey: activeTtsKey },
         controller.signal,
       )) {
         if (speechRunRef.current !== runId) {
@@ -309,12 +374,50 @@ export function ChatPanel() {
     mouthFrameRef.current = window.requestAnimationFrame(tick);
   };
 
+  const summarizeTimestamps = (timestamps: TtsTimestampInfo | undefined): TimingTotals => {
+    const words = timestamps?.wordAlignment?.words?.length ?? 0;
+    const phonemes =
+      timestamps?.wordAlignment?.phoneticDetails?.reduce(
+        (total, detail) => total + (detail.phones?.length ?? 0),
+        0,
+      ) ?? 0;
+    const visemes = new Set(
+      timestamps?.wordAlignment?.phoneticDetails?.flatMap((detail) =>
+        (detail.phones ?? []).map((phone) => phone.visemeSymbol).filter(Boolean),
+      ) ?? [],
+    ).size;
+    return {
+      timestampChunks: words || phonemes || visemes ? 1 : 0,
+      words,
+      phonemes,
+      visemes,
+    };
+  };
+
+  const addTiming = (timestamps: TtsTimestampInfo | undefined) => {
+    const counts = summarizeTimestamps(timestamps);
+    if (!counts.timestampChunks) {
+      return;
+    }
+    const totals = {
+      timestampChunks: ttsTimingTotalsRef.current.timestampChunks + counts.timestampChunks,
+      words: ttsTimingTotalsRef.current.words + counts.words,
+      phonemes: ttsTimingTotalsRef.current.phonemes + counts.phonemes,
+      visemes: ttsTimingTotalsRef.current.visemes + counts.visemes,
+    };
+    ttsTimingTotalsRef.current = totals;
+    setTtsTimingStatus(
+      `timing=${totals.timestampChunks} chunks · words=${totals.words} · phones=${totals.phonemes} · visemes=${totals.visemes}`,
+    );
+  };
+
   const handleTtsEvent = async (ev: TtsStreamEvent, playback: AudioPlayback) => {
     if (ev.type === 'audio') {
       if (ev.format !== 'pcm') {
         setTtsStatus(`error: unsupported audio format ${ev.format}`);
         return;
       }
+      addTiming(ev.timestamps);
       await playback.playPcmChunk(ev.audio, ev.sampleRate ?? 44100);
     } else if (ev.type === 'done') {
       const firstAudioMs = ttsTotalsRef.current.firstAudioMs ?? ev.stats.firstAudioMs;
@@ -324,8 +427,19 @@ export function ChatPanel() {
         bytes: ttsTotalsRef.current.bytes + ev.stats.bytes,
         firstAudioMs,
       };
+      if (ev.stats.timestampChunks !== undefined && ttsTimingTotalsRef.current.timestampChunks === 0) {
+        ttsTimingTotalsRef.current = {
+          timestampChunks: ev.stats.timestampChunks,
+          words: ev.stats.words ?? ttsTimingTotalsRef.current.words,
+          phonemes: ev.stats.phonemes ?? ttsTimingTotalsRef.current.phonemes,
+          visemes: ev.stats.visemes ?? ttsTimingTotalsRef.current.visemes,
+        };
+        setTtsTimingStatus(
+          `timing=${ttsTimingTotalsRef.current.timestampChunks} chunks · words=${ttsTimingTotalsRef.current.words} · phones=${ttsTimingTotalsRef.current.phonemes} · visemes=${ttsTimingTotalsRef.current.visemes}`,
+        );
+      }
       setTtsStatus(
-        `done · ${ttsTotalsRef.current.segments} segments · ${ttsTotalsRef.current.chunks} chunks · ${Math.round(ttsTotalsRef.current.bytes / 1024)} KB · first ${firstAudioMs ?? 'n/a'} ms`,
+        `done · ${ttsProvider}/${ev.stats.transport ?? 'stream'} · ${ttsTotalsRef.current.segments} segments · ${ttsTotalsRef.current.chunks} chunks · ${Math.round(ttsTotalsRef.current.bytes / 1024)} KB · first ${firstAudioMs ?? 'n/a'} ms`,
       );
     } else {
       setTtsStatus(`error: ${ev.error}`);
@@ -391,24 +505,97 @@ export function ChatPanel() {
         />
       </div>
       <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
-        <input
-          value={ttsKey}
-          onChange={(e) => setTtsKey(e.target.value)}
-          placeholder="Fish TTS API key"
-          type="password"
-          style={{ ...inputStyle, flex: 1, minWidth: 220 }}
-        />
-        <input
-          value={voiceId}
-          onChange={(e) => setVoiceId(e.target.value)}
-          placeholder="Fish voice id (optional)"
-          style={{ ...inputStyle, flex: 1, minWidth: 180 }}
-        />
+        <select
+          value={ttsProvider}
+          onChange={(e) => setTtsProvider(e.target.value as TtsProvider)}
+          style={inputStyle}
+        >
+          <option value="fish">Fish</option>
+          <option value="inworld">Inworld</option>
+        </select>
         <label style={{ display: 'flex', alignItems: 'center', gap: 4, color: '#9b9ba3', fontSize: 12 }}>
           <input type="checkbox" checked={autoSpeak} onChange={(e) => setAutoSpeak(e.target.checked)} />
           auto speak
         </label>
+        {ttsProvider === 'inworld' && (
+          <>
+            <select
+              value={inworldTransport}
+              onChange={(e) => setInworldTransport(e.target.value as InworldTransport)}
+              style={inputStyle}
+            >
+              <option value="http">HTTP stream</option>
+              <option value="websocket">WebSocket</option>
+            </select>
+            <select
+              value={inworldTimestampStrategy}
+              onChange={(e) => setInworldTimestampStrategy(e.target.value as InworldTimestampStrategy)}
+              style={inputStyle}
+            >
+              <option value="SYNC">timestamps sync</option>
+              <option value="ASYNC">timestamps async</option>
+            </select>
+          </>
+        )}
       </div>
+      {ttsProvider === 'fish' ? (
+        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
+          <input
+            value={ttsKey}
+            onChange={(e) => setTtsKey(e.target.value)}
+            placeholder="Fish TTS API key"
+            type="password"
+            style={{ ...inputStyle, flex: 1, minWidth: 220 }}
+          />
+          <input
+            value={voiceId}
+            onChange={(e) => setVoiceId(e.target.value)}
+            placeholder="Fish voice id (optional)"
+            style={{ ...inputStyle, flex: 1, minWidth: 180 }}
+          />
+        </div>
+      ) : (
+        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
+          <input
+            value={inworldKey}
+            onChange={(e) => setInworldKey(e.target.value)}
+            placeholder="Inworld API key"
+            type="password"
+            style={{ ...inputStyle, flex: 1, minWidth: 220 }}
+          />
+          <input
+            value={inworldVoiceId}
+            onChange={(e) => setInworldVoiceId(e.target.value)}
+            placeholder="Inworld voice id"
+            style={{ ...inputStyle, flex: 1, minWidth: 180 }}
+          />
+          <input
+            value={inworldModelId}
+            onChange={(e) => setInworldModelId(e.target.value)}
+            placeholder="Inworld model id"
+            style={{ ...inputStyle, width: 160 }}
+          />
+          <select
+            value={inworldDeliveryMode}
+            onChange={(e) => setInworldDeliveryMode(e.target.value as InworldDeliveryMode)}
+            style={inputStyle}
+          >
+            <option value="STABLE">STABLE</option>
+            <option value="BALANCED">BALANCED</option>
+            <option value="CREATIVE">CREATIVE</option>
+            <option value="EXPRESSIVE">EXPRESSIVE</option>
+          </select>
+          <input
+            value={inworldBufferCharThreshold}
+            onChange={(e) => setInworldBufferCharThreshold(Number(e.target.value) || 120)}
+            min={1}
+            max={1000}
+            type="number"
+            aria-label="Inworld buffer character threshold"
+            style={{ ...inputStyle, width: 88 }}
+          />
+        </div>
+      )}
 
       <div
         style={{
@@ -446,6 +633,7 @@ export function ChatPanel() {
             ? ` · playback=${playbackState.status} · queued=${playbackState.queuedSeconds.toFixed(2)}s · amp=${playbackState.amplitude.toFixed(3)}`
             : ''}
         </div>
+        <div style={{ fontSize: 12, color: '#9b9ba3' }}>{ttsTimingStatus}</div>
         <div style={{ fontSize: 12, color: '#9b9ba3' }}>
           mouth={mouthState.status}
           {mouthState.ready
@@ -478,7 +666,7 @@ export function ChatPanel() {
         {log.length > 0 && log[log.length - 1]?.role === 'assistant' && (
           <button
             onClick={() => void speak(log[log.length - 1]?.content ?? '')}
-            disabled={!ttsKey.trim()}
+            disabled={!getActiveTtsKey().trim()}
             style={{ ...inputStyle, cursor: 'pointer' }}
           >
             speak

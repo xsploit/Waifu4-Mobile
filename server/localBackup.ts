@@ -21,6 +21,11 @@ type LocalBackup = {
       llmProvider?: string;
       model?: string;
       fishSpeechVoiceId?: string;
+      inworldVoiceId?: string;
+      inworldModelId?: string;
+      inworldDeliveryMode?: string;
+      inworldBufferCharThreshold?: number;
+      ttsProvider?: string;
       ttsAutoSpeak?: boolean;
     };
   };
@@ -48,6 +53,12 @@ export async function handleLocalBackupSettings(_req: Request, res: Response): P
       byokOpenAiKey: secrets['openai.apiKey'] ?? '',
       ttsKey: secrets['fishSpeech.apiKey'] ?? '',
       fishVoiceId: ai.fishSpeechVoiceId ?? '',
+      inworldKey: secrets['inworld.apiKey'] ?? '',
+      inworldVoiceId: ai.inworldVoiceId ?? '',
+      inworldModelId: ai.inworldModelId ?? 'inworld-tts-2',
+      inworldDeliveryMode: ai.inworldDeliveryMode ?? 'BALANCED',
+      inworldBufferCharThreshold: ai.inworldBufferCharThreshold ?? 120,
+      ttsProvider: ai.ttsProvider ?? 'fish-speech',
       autoSpeak: ai.ttsAutoSpeak ?? true,
     });
   } catch (err) {

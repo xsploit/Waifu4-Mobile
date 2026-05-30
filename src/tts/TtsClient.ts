@@ -4,6 +4,7 @@ export type TtsCredentials = {
 
 export type TtsStreamRequest = {
   text: string;
+  provider?: 'fish' | 'inworld';
   voiceId?: string;
   backend?: 's1' | 's2-pro';
   format?: 'pcm' | 'mp3' | 'wav' | 'opus';
@@ -11,6 +12,45 @@ export type TtsStreamRequest = {
   chunkLength?: number;
   latency?: 'normal' | 'balanced';
   conditionOnPreviousChunks?: boolean;
+  inworldTransport?: 'http' | 'websocket';
+  inworldModelId?: string;
+  timestampType?: 'NONE' | 'WORD' | 'CHARACTER';
+  timestampTransportStrategy?: 'SYNC' | 'ASYNC';
+  deliveryMode?: 'STABLE' | 'BALANCED' | 'CREATIVE' | 'EXPRESSIVE';
+  bufferCharThreshold?: number;
+  maxBufferDelayMs?: number;
+  autoMode?: boolean;
+};
+
+export type TtsPhoneInfo = {
+  phoneSymbol?: string;
+  startTimeSeconds?: number;
+  durationSeconds?: number;
+  visemeSymbol?: string;
+};
+
+export type TtsTimestampInfo = {
+  wordAlignment?: {
+    words?: string[];
+    wordStartTimeSeconds?: number[];
+    wordEndTimeSeconds?: number[];
+    phoneticDetails?: Array<{
+      wordIndex?: number;
+      phones?: TtsPhoneInfo[];
+    }>;
+  };
+  characterAlignment?: {
+    characters?: string[];
+    characterStartTimeSeconds?: number[];
+    characterEndTimeSeconds?: number[];
+  };
+};
+
+export type TtsTimingSummary = {
+  timestampChunks: number;
+  words: number;
+  phonemes: number;
+  visemes: number;
 };
 
 export type TtsAudioEvent = {
@@ -18,11 +58,25 @@ export type TtsAudioEvent = {
   audio: Uint8Array;
   format: 'pcm' | 'mp3' | 'wav' | 'opus';
   sampleRate?: number;
+  timestamps?: TtsTimestampInfo;
 };
 
 export type TtsStreamEvent =
   | TtsAudioEvent
-  | { type: 'done'; stats: { firstAudioMs: number | null; chunks: number; bytes: number; totalMs: number } }
+  | {
+      type: 'done';
+      stats: {
+        firstAudioMs: number | null;
+        chunks: number;
+        bytes: number;
+        totalMs: number;
+        transport?: string;
+        timestampChunks?: number;
+        words?: number;
+        phonemes?: number;
+        visemes?: number;
+      };
+    }
   | { type: 'error'; error: string };
 
 type WireTtsEvent = {
@@ -30,6 +84,7 @@ type WireTtsEvent = {
   audio?: unknown;
   format?: unknown;
   sampleRate?: unknown;
+  timestamps?: unknown;
   stats?: unknown;
   error?: unknown;
 };
@@ -77,6 +132,8 @@ function toTtsEvent(ev: WireTtsEvent): TtsStreamEvent | null {
       audio: base64ToBytes(ev.audio),
       format: ev.format === 'mp3' || ev.format === 'wav' || ev.format === 'opus' ? ev.format : 'pcm',
       sampleRate: typeof ev.sampleRate === 'number' ? ev.sampleRate : undefined,
+      timestamps:
+        ev.timestamps && typeof ev.timestamps === 'object' ? (ev.timestamps as TtsTimestampInfo) : undefined,
     };
   }
   if (ev.type === 'done') {
@@ -88,6 +145,11 @@ function toTtsEvent(ev: WireTtsEvent): TtsStreamEvent | null {
         chunks: typeof stats.chunks === 'number' ? stats.chunks : 0,
         bytes: typeof stats.bytes === 'number' ? stats.bytes : 0,
         totalMs: typeof stats.totalMs === 'number' ? stats.totalMs : 0,
+        transport: typeof stats.transport === 'string' ? stats.transport : undefined,
+        timestampChunks: typeof stats.timestampChunks === 'number' ? stats.timestampChunks : undefined,
+        words: typeof stats.words === 'number' ? stats.words : undefined,
+        phonemes: typeof stats.phonemes === 'number' ? stats.phonemes : undefined,
+        visemes: typeof stats.visemes === 'number' ? stats.visemes : undefined,
       },
     };
   }
@@ -110,13 +172,22 @@ export async function* streamTts(
     },
     body: JSON.stringify({
       text: request.text,
+      provider: request.provider ?? 'fish',
       voiceId: request.voiceId,
       backend: request.backend ?? 's2-pro',
       format: request.format ?? 'pcm',
-      sampleRate: request.sampleRate ?? 44100,
+      sampleRate: request.sampleRate ?? (request.provider === 'inworld' ? 48000 : 44100),
       chunkLength: request.chunkLength,
       latency: request.latency ?? 'balanced',
       conditionOnPreviousChunks: request.conditionOnPreviousChunks ?? true,
+      inworldTransport: request.inworldTransport,
+      inworldModelId: request.inworldModelId,
+      timestampType: request.timestampType,
+      timestampTransportStrategy: request.timestampTransportStrategy,
+      deliveryMode: request.deliveryMode,
+      bufferCharThreshold: request.bufferCharThreshold,
+      maxBufferDelayMs: request.maxBufferDelayMs,
+      autoMode: request.autoMode,
     }),
     signal,
   });

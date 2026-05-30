@@ -6,6 +6,7 @@ release/
 .env.local
 .DS_Store
 coverage/
+.lean-ctx/
 art/
 public/assets/*
 !public/assets/

@@ -2,9 +2,11 @@ import type { Request, Response } from 'express';
 import { z } from 'zod';
 import { readProviderKeys } from '../ai/providerKeys';
 import { streamFishTts } from './FishTtsStream';
+import { streamInworldTts } from './InworldTtsStream';
 
 const ttsRequestSchema = z.object({
   text: z.string().min(1),
+  provider: z.enum(['fish', 'inworld']).optional(),
   voiceId: z.string().optional(),
   backend: z.enum(['s1', 's2-pro']).optional(),
   format: z.enum(['pcm', 'mp3', 'wav', 'opus']).optional(),
@@ -12,6 +14,14 @@ const ttsRequestSchema = z.object({
   chunkLength: z.number().int().min(100).max(300).optional(),
   latency: z.enum(['normal', 'balanced']).optional(),
   conditionOnPreviousChunks: z.boolean().optional(),
+  inworldTransport: z.enum(['http', 'websocket']).optional(),
+  inworldModelId: z.string().optional(),
+  timestampType: z.enum(['NONE', 'WORD', 'CHARACTER']).optional(),
+  timestampTransportStrategy: z.enum(['SYNC', 'ASYNC']).optional(),
+  deliveryMode: z.enum(['STABLE', 'BALANCED', 'CREATIVE', 'EXPRESSIVE']).optional(),
+  bufferCharThreshold: z.number().int().min(1).max(1000).optional(),
+  maxBufferDelayMs: z.number().int().min(0).max(10000).optional(),
+  autoMode: z.boolean().optional(),
 });
 
 /**
@@ -25,13 +35,18 @@ export async function handleTtsStream(req: Request, res: Response): Promise<void
     return;
   }
   const keys = readProviderKeys(req);
-  if (!keys.ttsKey) {
+  const provider = parsed.data.provider ?? 'fish';
+  const ttsKey = keys.ttsKey ?? (provider === 'inworld' ? process.env.INWORLD_API_KEY : undefined);
+  if (!ttsKey) {
     res.status(401).json({ ok: false, error: 'Missing TTS provider key' });
     return;
   }
 
   const format = parsed.data.format ?? 'pcm';
-  const sampleRate = format === 'pcm' ? (parsed.data.sampleRate ?? 44100) : undefined;
+  const sampleRate =
+    format === 'pcm'
+      ? (parsed.data.sampleRate ?? (provider === 'inworld' ? 48000 : 44100))
+      : undefined;
 
   res.writeHead(200, {
     'Content-Type': 'application/x-ndjson',
@@ -44,10 +59,38 @@ export async function handleTtsStream(req: Request, res: Response): Promise<void
   res.on('close', () => controller.abort());
 
   try {
-    const stats = await streamFishTts(
-      { ...parsed.data, apiKey: keys.ttsKey, signal: controller.signal },
-      (chunk) => send({ type: 'audio', audio: Buffer.from(chunk).toString('base64'), format, sampleRate }),
-    );
+    const stats =
+      provider === 'inworld'
+        ? await streamInworldTts(
+            {
+              apiKey: ttsKey,
+              text: parsed.data.text,
+              voiceId: parsed.data.voiceId,
+              modelId: parsed.data.inworldModelId,
+              transport: parsed.data.inworldTransport,
+              sampleRate: sampleRate ?? parsed.data.sampleRate,
+              timestampType: parsed.data.timestampType,
+              timestampTransportStrategy: parsed.data.timestampTransportStrategy,
+              deliveryMode: parsed.data.deliveryMode,
+              bufferCharThreshold: parsed.data.bufferCharThreshold,
+              maxBufferDelayMs: parsed.data.maxBufferDelayMs,
+              autoMode: parsed.data.autoMode,
+              signal: controller.signal,
+            },
+            (chunk, meta) =>
+              send({
+                type: 'audio',
+                audio: Buffer.from(chunk).toString('base64'),
+                format: 'pcm',
+                sampleRate: meta.sampleRate,
+                timestamps: meta.timestamps,
+              }),
+          )
+        : await streamFishTts(
+            { ...parsed.data, apiKey: ttsKey, signal: controller.signal },
+            (chunk) =>
+              send({ type: 'audio', audio: Buffer.from(chunk).toString('base64'), format, sampleRate }),
+          );
     send({ type: 'done', ok: true, stats });
   } catch (err) {
     send({ type: 'error', ok: false, error: err instanceof Error ? err.message : String(err) });
