@@ -3,6 +3,7 @@ import type { Request } from 'express';
 export type ProviderKeys = {
   llmKey?: string;
   byokOpenAiKey?: string;
+  ttsKey?: string;
 };
 
 function header(req: Request, name: string): string | undefined {
@@ -21,5 +22,9 @@ export function readProviderKeys(req: Request): ProviderKeys {
   return {
     llmKey: header(req, 'x-yourwifey-llm-provider-key') ?? process.env.LLM_PROVIDER_KEY,
     byokOpenAiKey: header(req, 'x-yourwifey-openai-byok-key') ?? process.env.OPENAI_BYOK_KEY,
+    ttsKey:
+      header(req, 'x-yourwifey-tts-provider-key') ??
+      process.env.FISH_AUDIO_API_KEY ??
+      process.env.FISHSPEECH_API_KEY,
   };
 }

@@ -2,6 +2,7 @@ import express from 'express';
 import { buildHealth, SERVICE_NAME } from './health';
 import { handleChat } from './ai/chat';
 import { handleModels } from './ai/models';
+import { handleTtsStream } from './tts/stream';
 
 const PORT = Number(process.env.PORT ?? 8797);
 
@@ -21,6 +22,11 @@ app.get('/ai/models', (req, res) => {
 // POST /ai/chat — SSE reply stream (delta / done / error).
 app.post('/ai/chat', (req, res) => {
   void handleChat(req, res);
+});
+
+// POST /tts/stream — NDJSON audio stream (audio / done / error).
+app.post('/tts/stream', (req, res) => {
+  void handleTtsStream(req, res);
 });
 
 app.listen(PORT, '127.0.0.1', () => {
