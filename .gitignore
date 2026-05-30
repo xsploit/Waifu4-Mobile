@@ -7,5 +7,7 @@ release/
 .DS_Store
 coverage/
 art/
-public/assets/
+public/assets/*
+!public/assets/
+!public/assets/lipsync-profile.json
 public/cdn-assets/

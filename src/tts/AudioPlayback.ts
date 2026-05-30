@@ -14,11 +14,15 @@ export type PlaybackSnapshot = {
   amplitude: number;
 };
 
+export type AudioPlaybackTap = {
+  input: unknown;
+};
+
 type AudioNodeLike = {
   connect(destination: unknown): void;
   start(when: number): void;
   stop?: () => void;
-  onended: (() => void) | null;
+  onended: unknown;
 };
 
 type AudioContextLike = {
@@ -51,6 +55,7 @@ export class AudioPlayback {
   constructor(
     private readonly options: {
       context?: AudioContextLike;
+      tap?: AudioPlaybackTap;
       onState?: (state: PlaybackSnapshot) => void;
     } = {},
   ) {
@@ -97,6 +102,9 @@ export class AudioPlayback {
     const source = context.createBufferSource();
     source.buffer = buffer;
     source.connect(context.destination);
+    if (this.options.tap) {
+      source.connect(this.options.tap.input);
+    }
 
     const now = context.currentTime;
     const startAt = Math.max(now, this.playhead);

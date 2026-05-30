@@ -20,6 +20,7 @@ class FakeAudioContext {
   state = 'running';
   destination = {};
   starts: number[] = [];
+  sources: Array<{ connections: unknown[] }> = [];
 
   async resume() {}
 
@@ -31,12 +32,16 @@ class FakeAudioContext {
     const source = {
       buffer: null as FakeAudioBuffer | null,
       onended: null as (() => void) | null,
-      connect: () => {},
+      connections: [] as unknown[],
+      connect: (target: unknown) => {
+        source.connections.push(target);
+      },
       start: (when: number) => {
         this.starts.push(when);
       },
       stop: () => {},
     };
+    this.sources.push(source);
     return source;
   }
 }
@@ -57,5 +62,14 @@ describe('AudioPlayback', () => {
     expect(context.starts).toEqual([10, 11]);
     expect(playback.getState()).toMatchObject({ status: 'playing', chunks: 2, bytes: 8, queuedSeconds: 2 });
     expect(states).toHaveLength(2);
+  });
+
+  it('routes playback audio into an optional lipsync tap', async () => {
+    const context = new FakeAudioContext();
+    const tap = { input: { kind: 'wlipsync' } };
+    const playback = new AudioPlayback({ context, tap });
+    await playback.playPcmChunk(new Uint8Array([0, 0]), 2);
+    expect(context.sources[0]?.connections).toEqual([context.destination, tap.input]);
+    expect(playback.getState().chunks).toBe(1);
   });
 });

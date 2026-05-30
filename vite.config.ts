@@ -8,6 +8,14 @@ const BACKEND = 'http://127.0.0.1:8797';
 // It talks to the local backend; Vite proxies the backend routes in dev.
 export default defineConfig({
   plugins: [react()],
+  build: {
+    target: 'esnext',
+  },
+  optimizeDeps: {
+    esbuildOptions: {
+      target: 'esnext',
+    },
+  },
   server: {
     port: 5173,
     proxy: {

@@ -3,6 +3,8 @@ import { fetchModels, streamChat } from '../llm/LlmClient';
 import { AudioPlayback, type PlaybackSnapshot } from '../tts/AudioPlayback';
 import { streamTts, type TtsStreamEvent } from '../tts/TtsClient';
 import { createSpeechBuffer } from '../tts/SpeechBuffer';
+import { createWLipSyncMouth, type WLipSyncMouth } from '../lipsync/WLipSyncMouth';
+import { ZERO_MOUTH_WEIGHTS, type MouthWeights } from '../lipsync/MouthWeights';
 import { buildSystemPrompt } from '../brain/prompt';
 import { selectReplyFormat, type ProviderModelInfo } from '../brain/modelCapability';
 import type { GatewayId, LlmMessage, ReplyFormat, ReplyMetadata } from '../brain/BrainTypes';
@@ -40,6 +42,12 @@ export function ChatPanel() {
   const [autoSpeak, setAutoSpeak] = useState(true);
   const [ttsStatus, setTtsStatus] = useState('idle');
   const [playbackState, setPlaybackState] = useState<PlaybackSnapshot | null>(null);
+  const [mouthState, setMouthState] = useState<{
+    ready: boolean;
+    status: string;
+    volume: number;
+    weights: MouthWeights;
+  }>({ ready: false, status: 'idle', volume: 0, weights: ZERO_MOUTH_WEIGHTS });
   const [autoLane, setAutoLane] = useState(true);
   const [manualFormat, setManualFormat] = useState<ReplyFormat>('text');
   const [models, setModels] = useState<ProviderModelInfo[]>([]);
@@ -57,6 +65,8 @@ export function ChatPanel() {
   const speechRunRef = useRef(0);
   const ttsTotalsRef = useRef({ segments: 0, chunks: 0, bytes: 0, firstAudioMs: null as number | null });
   const playbackRef = useRef<AudioPlayback | null>(null);
+  const mouthRef = useRef<WLipSyncMouth | null>(null);
+  const mouthFrameRef = useRef<number | null>(null);
 
   const modelInfo = useMemo(
     () => models.find((m) => m.id === model) ?? null,
@@ -201,6 +211,7 @@ export function ChatPanel() {
     playbackRef.current?.stop();
     ttsAbortRef.current = null;
     setTtsStatus(status);
+    setMouthState((prev) => ({ ...prev, volume: 0, weights: ZERO_MOUTH_WEIGHTS }));
   };
 
   const speak = async (message: string) => {
@@ -230,9 +241,9 @@ export function ChatPanel() {
     const controller = new AbortController();
     ttsControllersRef.current.add(controller);
     ttsAbortRef.current = controller;
-    playbackRef.current ??= new AudioPlayback({ onState: setPlaybackState });
+    const playback = await ensureAudioPlayback();
     setTtsStatus(`speaking segment ${ttsTotalsRef.current.segments + 1}…`);
-    setPlaybackState(playbackRef.current.getState());
+    setPlaybackState(playback.getState());
     try {
       for await (const ev of streamTts(
         { text: message, voiceId: voiceId.trim() || undefined },
@@ -243,7 +254,7 @@ export function ChatPanel() {
           controller.abort();
           break;
         }
-        await handleTtsEvent(ev, playbackRef.current);
+        await handleTtsEvent(ev, playback);
       }
     } catch (err) {
       if (!controller.signal.aborted) {
@@ -255,6 +266,47 @@ export function ChatPanel() {
         ttsAbortRef.current = null;
       }
     }
+  };
+
+  const ensureAudioPlayback = async (): Promise<AudioPlayback> => {
+    if (playbackRef.current) {
+      return playbackRef.current;
+    }
+    const Ctor = window.AudioContext ?? window.webkitAudioContext;
+    const context = new Ctor();
+    setMouthState((prev) => ({ ...prev, status: 'loading wlipsync…' }));
+    const mouth = await createWLipSyncMouth(context);
+    mouthRef.current = mouth;
+    startMouthMonitor();
+    setMouthState({
+      ready: true,
+      status: 'wlipsync live',
+      volume: mouth.getVolume(),
+      weights: mouth.getMouthWeights(),
+    });
+    const playback = new AudioPlayback({ context, tap: mouth, onState: setPlaybackState });
+    playbackRef.current = playback;
+    return playback;
+  };
+
+  const startMouthMonitor = () => {
+    if (mouthFrameRef.current !== null) {
+      return;
+    }
+    const tick = () => {
+      const mouth = mouthRef.current;
+      if (mouth) {
+        const playing = playbackRef.current?.getState().status === 'playing';
+        setMouthState({
+          ready: true,
+          status: 'wlipsync live',
+          volume: playing ? mouth.getVolume() : 0,
+          weights: playing ? mouth.getMouthWeights() : ZERO_MOUTH_WEIGHTS,
+        });
+      }
+      mouthFrameRef.current = window.requestAnimationFrame(tick);
+    };
+    mouthFrameRef.current = window.requestAnimationFrame(tick);
   };
 
   const handleTtsEvent = async (ev: TtsStreamEvent, playback: AudioPlayback) => {
@@ -392,6 +444,12 @@ export function ChatPanel() {
           tts={ttsStatus}
           {playbackState
             ? ` · playback=${playbackState.status} · queued=${playbackState.queuedSeconds.toFixed(2)}s · amp=${playbackState.amplitude.toFixed(3)}`
+            : ''}
+        </div>
+        <div style={{ fontSize: 12, color: '#9b9ba3' }}>
+          mouth={mouthState.status}
+          {mouthState.ready
+            ? ` · vol=${mouthState.volume.toFixed(3)} · aa=${mouthState.weights.aa.toFixed(2)} ih=${mouthState.weights.ih.toFixed(2)} ou=${mouthState.weights.ou.toFixed(2)} ee=${mouthState.weights.ee.toFixed(2)} oh=${mouthState.weights.oh.toFixed(2)}`
             : ''}
         </div>
         {error && <div style={{ fontSize: 13, color: '#ff5470' }}>error: {error}</div>}

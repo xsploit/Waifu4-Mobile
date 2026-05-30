@@ -39,6 +39,16 @@ _Avoid_: text mode, fallback mode.
 **`<yw-meta>`**:
 The single metadata block appended at the end of a Lane B reply. The parser streams the visible text, hides this block, and parses it for metadata. Raw `<yw-meta>` JSON must never be spoken.
 
+### Audio And Mouth
+
+**WLipSync mouth**:
+The mouth driver for avatar visemes. The same Web Audio source that reaches the speakers is also connected to a WLipSync node; WLipSync volume/weights are the source for `aa/ih/ou/ee/oh`.
+_Avoid_: fake mouth, text-only mouth, separate analyzer path.
+
+**audio-reactive state**:
+Live values derived from the playing audio path, including playback amplitude and WLipSync volume/weights. Useful for debug panels and later visual reactivity, but amplitude alone is not lipsync.
+_Avoid_: treating amplitude as visemes.
+
 ### Roles & boundaries
 
 **Persona**:

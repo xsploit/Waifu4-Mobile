@@ -20,12 +20,14 @@ Linear `main`, one commit per slice. Each passing slice is an annotated tag `gre
 - **Phase 4 (TTS)** — `POST /tts/stream` NDJSON audio via official `fish-audio` SDK `convertRealtime` (websocket). Streaming-first (D10), `condition_on_previous_chunks=true`, backend `s2-pro`, latency `balanced`, pcm@44.1k. Live: 4 chunks, first audio ~943ms.
 - **Phase 4b (client audio playback)** — `src/tts/TtsClient.ts` parses `/tts/stream` NDJSON; `src/tts/AudioPlayback.ts` schedules pcm@44.1k chunks through Web Audio with a running playhead and exposes playback state + RMS amplitude. ChatPanel can auto-speak the final Reply `message` or replay the last assistant turn.
 - **Phase 4c (incremental speak queue)** — `src/tts/SpeechBuffer.ts` turns streamed LLM deltas into sentence/length-bounded speakable segments. ChatPanel now starts TTS during reply generation, queues segments in order, and interrupts old audio when a new user turn starts. This is the fast client-side bridge; a single backend LLM→Fish websocket bridge can still reduce per-segment setup overhead later.
+- **Phase 4d (WLipSync audio-reactive foundation)** — `wlipsync` is installed, `public/assets/lipsync-profile.json` is tracked, and `AudioPlayback` routes the exact same audio source to speakers plus a WLipSync tap. ChatPanel initializes WLipSync before playback and exposes live volume + `aa/ih/ou/ee/oh` debug weights. Amplitude remains a meter only; mouth comes from WLipSync.
 
 ## Architecture / boundaries
 - **D1:** browser never calls providers; client facades POST to the local backend, which holds provider calls. Keys forwarded via headers: `x-yourwifey-llm-provider-key`, `x-yourwifey-openai-byok-key`, `x-yourwifey-tts-provider-key` (env fallback: `LLM_PROVIDER_KEY`, `OPENAI_BYOK_KEY`, `FISH_AUDIO_API_KEY`).
 - `src/brain/` = schema (`BrainTypes`), parser (`replyParser`), prompt, capability. `src/llm/LlmClient` + `src/tts` = client facades. `server/ai/*`, `server/tts/*` = provider calls.
 - Canonical reply (D3): `{ message, emotion, valence, arousal, dominance }`. Only `message` spoken; emotion/VAD parsed+logged, consumed by avatar only from Phase 9.
 - **Frontend transplant rule:** the old app may be copied mechanically for visual UI only. `legacy-frontend/src/components` is a one-to-one component mirror; `src/style.css` is the copied old stylesheet and is imported by `src/main.tsx`. Do not port old brain/runtime behavior from the legacy source.
+- **Mouth ownership rule:** only the audio/WLipSync layer writes `aa/ih/ou/ee/oh`. Emotion/VAD and animation code must not overwrite mouth visemes.
 
 ## Gotchas already paid for (don't relearn)
 - **SSE/stream cancel must listen on `res` 'close', NOT `req` 'close'** (req close fires when the POST body is read → aborts the stream instantly). See `server/ai/chat.ts`, `server/tts/stream.ts`.
@@ -35,14 +37,14 @@ Linear `main`, one commit per slice. Each passing slice is an annotated tag `gre
 - Windows: start server with `npm run server` (bare `tsx` isn't on PATH). Kill via `netstat -ano | grep :8797` → `taskkill //PID <pid> //F`.
 
 ## Verify / run
-`npm run typecheck` · `npm test` (31 tests) · `npm run build` · `npm run server` (backend) · `npm run dev` (web+server).
+`npm run typecheck` · `npm test` (34 tests) · `npm run build` · `npm run server` (backend) · `npm run dev` (web+server).
 Keys for live tests are in `C:\Users\SUBSECT\Downloads\web-waifu-4-local-backup-2026-05-30T03-03-43.json` (`providerSecrets[].keyName/secret`; Fish voice id at `state.aiSettings.fishSpeechVoiceId`).
 
 Copied visual assets are local under `public/` and `art/`. Heavy asset folders (`public/assets`, `public/cdn-assets`, `art`) are intentionally ignored for now to avoid accidentally committing ~660 MB of binaries.
 
 ## Next slices (recommended order)
 1. **Backend LLM→TTS websocket bridge** — optional latency polish: keep one Fish `convertRealtime` connection open and feed sentence/clause chunks into its text stream instead of opening one `/tts/stream` request per segment.
-2. **Avatar + mouth** (doc Phase 1) — VRM load, AvatarStage, MouthController driven by `AudioPlayback` amplitude; mouth debug panel. Only the audio/lipsync layer writes `aa/ih/ou/ee/oh`.
+2. **Avatar + mouth** (doc Phase 1) — VRM load, AvatarStage, MouthController driven by WLipSync mouth weights from the active `AudioPlayback` tap; mouth debug panel. Only the audio/WLipSync layer writes `aa/ih/ou/ee/oh`.
 3. Settings persistence/import-export → persona isolation → GRILLO (backend memory worker) → emotion/animation (Phase 9, incl. the S1/S2 `[bracket]` emotion-tag switch, D9) → live-bridge hardening.
 
 ## Parked (D8)
