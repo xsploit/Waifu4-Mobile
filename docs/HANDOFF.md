@@ -18,6 +18,7 @@ Linear `main`, one commit per slice. Each passing slice is an annotated tag `gre
 - **Phase 3 (LLM)** — `POST /ai/chat` SSE (`delta`/`done`/`error`). AI SDK v6 `streamText`+`Output.object`+`partialOutputStream`. Both gateways (`vercel-gateway`, `openrouter-responses`). Lane A (structured) + Lane B (text + `<yw-meta>`, split-tag-safe parser). reasoningEffort default `minimal`. Only `message` is ever spoken.
 - **Phase 3b (capability)** — `GET /ai/models` → OpenRouter metadata → `supportsStructuredOutputs` → centralized `selectReplyFormat()` → ChatPanel auto-selects lane (manual = debug override).
 - **Phase 4 (TTS)** — `POST /tts/stream` NDJSON audio via official `fish-audio` SDK `convertRealtime` (websocket). Streaming-first (D10), `condition_on_previous_chunks=true`, backend `s2-pro`, latency `balanced`, pcm@44.1k. Live: 4 chunks, first audio ~943ms.
+- **Phase 4b (client audio playback)** — `src/tts/TtsClient.ts` parses `/tts/stream` NDJSON; `src/tts/AudioPlayback.ts` schedules pcm@44.1k chunks through Web Audio with a running playhead and exposes playback state + RMS amplitude. ChatPanel can auto-speak the final Reply `message` or replay the last assistant turn.
 
 ## Architecture / boundaries
 - **D1:** browser never calls providers; client facades POST to the local backend, which holds provider calls. Keys forwarded via headers: `x-yourwifey-llm-provider-key`, `x-yourwifey-openai-byok-key`, `x-yourwifey-tts-provider-key` (env fallback: `LLM_PROVIDER_KEY`, `OPENAI_BYOK_KEY`, `FISH_AUDIO_API_KEY`).
@@ -32,14 +33,13 @@ Linear `main`, one commit per slice. Each passing slice is an annotated tag `gre
 - Windows: start server with `npm run server` (bare `tsx` isn't on PATH). Kill via `netstat -ano | grep :8797` → `taskkill //PID <pid> //F`.
 
 ## Verify / run
-`npm run typecheck` · `npm test` (24 tests) · `npm run build` · `npm run server` (backend) · `npm run dev` (web+server).
+`npm run typecheck` · `npm test` (28 tests) · `npm run build` · `npm run server` (backend) · `npm run dev` (web+server).
 Keys for live tests are in `C:\Users\SUBSECT\Downloads\web-waifu-4-local-backup-2026-05-30T03-03-43.json` (`providerSecrets[].keyName/secret`; Fish voice id at `state.aiSettings.fishSpeechVoiceId`).
 
 ## Next slices (recommended order)
-1. **Client audio playback** — `src/tts/AudioPlayback.ts`: schedule the NDJSON pcm chunks via Web Audio with a running playhead; expose playback state + amplitude (the doc's TTS debug counters). Wire a "speak" button / auto-speak the reply in ChatPanel.
-2. **LLM→TTS bridge** (doc Phase 4) — sentence/clause-buffer LLM `delta`s and feed them into `convertRealtime`'s text stream for lowest first-audio (currently `/tts/stream` speaks one whole string).
-3. **Avatar + mouth** (doc Phase 1) — VRM load, AvatarStage, MouthController driven by playback amplitude; mouth debug panel. Only the audio/lipsync layer writes `aa/ih/ou/ee/oh`.
-4. Settings persistence/import-export → persona isolation → GRILLO (backend memory worker) → emotion/animation (Phase 9, incl. the S1/S2 `[bracket]` emotion-tag switch, D9) → live-bridge hardening.
+1. **LLM→TTS bridge** (doc Phase 4) — sentence/clause-buffer LLM `delta`s and feed them into `convertRealtime`'s text stream for lowest first-audio (currently `/tts/stream` speaks one whole string after the Reply finishes).
+2. **Avatar + mouth** (doc Phase 1) — VRM load, AvatarStage, MouthController driven by `AudioPlayback` amplitude; mouth debug panel. Only the audio/lipsync layer writes `aa/ih/ou/ee/oh`.
+3. Settings persistence/import-export → persona isolation → GRILLO (backend memory worker) → emotion/animation (Phase 9, incl. the S1/S2 `[bracket]` emotion-tag switch, D9) → live-bridge hardening.
 
 ## Parked (D8)
 Capture model **reasoning text** as a separate channel (a `reasoning` SSE event) → feed GRILLO reflection/diary. Don't speak it. Memory: `reasoning-as-thinking-for-grillo.md`.

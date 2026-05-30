@@ -1,5 +1,7 @@
 import { useMemo, useRef, useState } from 'react';
 import { fetchModels, streamChat } from '../llm/LlmClient';
+import { AudioPlayback, type PlaybackSnapshot } from '../tts/AudioPlayback';
+import { streamTts, type TtsStreamEvent } from '../tts/TtsClient';
 import { buildSystemPrompt } from '../brain/prompt';
 import { selectReplyFormat, type ProviderModelInfo } from '../brain/modelCapability';
 import type { GatewayId, LlmMessage, ReplyFormat, ReplyMetadata } from '../brain/BrainTypes';
@@ -22,6 +24,11 @@ export function ChatPanel() {
   const [model, setModel] = useState('openai/gpt-5-nano');
   const [apiKey, setApiKey] = useState('');
   const [byok, setByok] = useState('');
+  const [ttsKey, setTtsKey] = useState('');
+  const [voiceId, setVoiceId] = useState('');
+  const [autoSpeak, setAutoSpeak] = useState(true);
+  const [ttsStatus, setTtsStatus] = useState('idle');
+  const [playbackState, setPlaybackState] = useState<PlaybackSnapshot | null>(null);
   const [autoLane, setAutoLane] = useState(true);
   const [manualFormat, setManualFormat] = useState<ReplyFormat>('text');
   const [models, setModels] = useState<ProviderModelInfo[]>([]);
@@ -33,6 +40,8 @@ export function ChatPanel() {
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const abortRef = useRef<AbortController | null>(null);
+  const ttsAbortRef = useRef<AbortController | null>(null);
+  const playbackRef = useRef<AudioPlayback | null>(null);
 
   const modelInfo = useMemo(
     () => models.find((m) => m.id === model) ?? null,
@@ -96,9 +105,13 @@ export function ChatPanel() {
           acc += ev.text;
           setStreaming(acc);
         } else if (ev.type === 'done') {
-          setLog((prev) => [...prev, { role: 'assistant', content: ev.text || acc }]);
+          const message = ev.text || acc;
+          setLog((prev) => [...prev, { role: 'assistant', content: message }]);
           setStreaming('');
           setMeta(ev.meta);
+          if (autoSpeak && ttsKey.trim() && message.trim()) {
+            void speak(message);
+          }
         } else {
           setError(ev.error);
         }
@@ -112,6 +125,57 @@ export function ChatPanel() {
   };
 
   const stop = () => abortRef.current?.abort();
+  const stopTts = () => {
+    ttsAbortRef.current?.abort();
+    ttsAbortRef.current = null;
+    setTtsStatus('stopped');
+  };
+
+  const speak = async (message: string) => {
+    if (!ttsKey.trim()) {
+      setError('Enter a TTS provider key first.');
+      return;
+    }
+    ttsAbortRef.current?.abort();
+    const controller = new AbortController();
+    ttsAbortRef.current = controller;
+    playbackRef.current ??= new AudioPlayback({ onState: setPlaybackState });
+    setTtsStatus('speaking…');
+    setPlaybackState(playbackRef.current.getState());
+    try {
+      for await (const ev of streamTts(
+        { text: message, voiceId: voiceId.trim() || undefined },
+        { ttsKey: ttsKey.trim() },
+        controller.signal,
+      )) {
+        await handleTtsEvent(ev, playbackRef.current);
+      }
+    } catch (err) {
+      if (!controller.signal.aborted) {
+        setTtsStatus(`error: ${err instanceof Error ? err.message : String(err)}`);
+      }
+    } finally {
+      if (ttsAbortRef.current === controller) {
+        ttsAbortRef.current = null;
+      }
+    }
+  };
+
+  const handleTtsEvent = async (ev: TtsStreamEvent, playback: AudioPlayback) => {
+    if (ev.type === 'audio') {
+      if (ev.format !== 'pcm') {
+        setTtsStatus(`error: unsupported audio format ${ev.format}`);
+        return;
+      }
+      await playback.playPcmChunk(ev.audio, ev.sampleRate ?? 44100);
+    } else if (ev.type === 'done') {
+      setTtsStatus(
+        `done · ${ev.stats.chunks} chunks · ${Math.round(ev.stats.bytes / 1024)} KB · first ${ev.stats.firstAudioMs ?? 'n/a'} ms`,
+      );
+    } else {
+      setTtsStatus(`error: ${ev.error}`);
+    }
+  };
 
   return (
     <section style={{ display: 'flex', flexDirection: 'column', gap: 10, maxWidth: 640 }}>
@@ -171,6 +235,25 @@ export function ChatPanel() {
           style={{ ...inputStyle, flex: 1, minWidth: 180 }}
         />
       </div>
+      <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
+        <input
+          value={ttsKey}
+          onChange={(e) => setTtsKey(e.target.value)}
+          placeholder="Fish TTS API key"
+          type="password"
+          style={{ ...inputStyle, flex: 1, minWidth: 220 }}
+        />
+        <input
+          value={voiceId}
+          onChange={(e) => setVoiceId(e.target.value)}
+          placeholder="Fish voice id (optional)"
+          style={{ ...inputStyle, flex: 1, minWidth: 180 }}
+        />
+        <label style={{ display: 'flex', alignItems: 'center', gap: 4, color: '#9b9ba3', fontSize: 12 }}>
+          <input type="checkbox" checked={autoSpeak} onChange={(e) => setAutoSpeak(e.target.checked)} />
+          auto speak
+        </label>
+      </div>
 
       <div
         style={{
@@ -202,6 +285,12 @@ export function ChatPanel() {
             emotion={meta.emotion} · v={meta.valence} a={meta.arousal} d={meta.dominance}
           </div>
         )}
+        <div style={{ fontSize: 12, color: '#9b9ba3' }}>
+          tts={ttsStatus}
+          {playbackState
+            ? ` · playback=${playbackState.status} · queued=${playbackState.queuedSeconds.toFixed(2)}s · amp=${playbackState.amplitude.toFixed(3)}`
+            : ''}
+        </div>
         {error && <div style={{ fontSize: 13, color: '#ff5470' }}>error: {error}</div>}
       </div>
 
@@ -223,6 +312,20 @@ export function ChatPanel() {
         {busy && (
           <button onClick={stop} style={{ ...inputStyle, cursor: 'pointer' }}>
             stop
+          </button>
+        )}
+        {log.length > 0 && log[log.length - 1]?.role === 'assistant' && (
+          <button
+            onClick={() => void speak(log[log.length - 1]?.content ?? '')}
+            disabled={!ttsKey.trim()}
+            style={{ ...inputStyle, cursor: 'pointer' }}
+          >
+            speak
+          </button>
+        )}
+        {ttsAbortRef.current && (
+          <button onClick={stopTts} style={{ ...inputStyle, cursor: 'pointer' }}>
+            stop audio
           </button>
         )}
       </div>
