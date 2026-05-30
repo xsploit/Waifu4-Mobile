@@ -25,6 +25,7 @@ Linear `main`, one commit per slice. Each passing slice is an annotated tag `gre
 - **D1:** browser never calls providers; client facades POST to the local backend, which holds provider calls. Keys forwarded via headers: `x-yourwifey-llm-provider-key`, `x-yourwifey-openai-byok-key`, `x-yourwifey-tts-provider-key` (env fallback: `LLM_PROVIDER_KEY`, `OPENAI_BYOK_KEY`, `FISH_AUDIO_API_KEY`).
 - `src/brain/` = schema (`BrainTypes`), parser (`replyParser`), prompt, capability. `src/llm/LlmClient` + `src/tts` = client facades. `server/ai/*`, `server/tts/*` = provider calls.
 - Canonical reply (D3): `{ message, emotion, valence, arousal, dominance }`. Only `message` spoken; emotion/VAD parsed+logged, consumed by avatar only from Phase 9.
+- **Frontend transplant rule:** the old app may be copied mechanically for visual UI only. `legacy-frontend/src/components` is a one-to-one component mirror; `src/style.css` is the copied old stylesheet and is imported by `src/main.tsx`. Do not port old brain/runtime behavior from the legacy source.
 
 ## Gotchas already paid for (don't relearn)
 - **SSE/stream cancel must listen on `res` 'close', NOT `req` 'close'** (req close fires when the POST body is read → aborts the stream instantly). See `server/ai/chat.ts`, `server/tts/stream.ts`.
@@ -36,6 +37,8 @@ Linear `main`, one commit per slice. Each passing slice is an annotated tag `gre
 ## Verify / run
 `npm run typecheck` · `npm test` (31 tests) · `npm run build` · `npm run server` (backend) · `npm run dev` (web+server).
 Keys for live tests are in `C:\Users\SUBSECT\Downloads\web-waifu-4-local-backup-2026-05-30T03-03-43.json` (`providerSecrets[].keyName/secret`; Fish voice id at `state.aiSettings.fishSpeechVoiceId`).
+
+Copied visual assets are local under `public/` and `art/`. Heavy asset folders (`public/assets`, `public/cdn-assets`, `art`) are intentionally ignored for now to avoid accidentally committing ~660 MB of binaries.
 
 ## Next slices (recommended order)
 1. **Backend LLM→TTS websocket bridge** — optional latency polish: keep one Fish `convertRealtime` connection open and feed sentence/clause chunks into its text stream instead of opening one `/tts/stream` request per segment.

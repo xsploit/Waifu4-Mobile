@@ -6,3 +6,6 @@ release/
 .env.local
 .DS_Store
 coverage/
+art/
+public/assets/
+public/cdn-assets/
