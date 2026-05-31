@@ -185,6 +185,10 @@ import {
 } from './lib/stream/overlay-events';
 import { DirectTwitchIrcClient, type DirectTwitchChatMessage } from './lib/twitch/direct-irc';
 import {
+  getDirectStreamCommandHelp,
+  parseDirectStreamCommand,
+} from './lib/twitch/stream-command';
+import {
   formatTwitchStreamTranscriptContext,
   isLikelyVisionModel,
   normalizeTwitchStreamTranscriptionModel,
@@ -1461,30 +1465,6 @@ function resolveAnimationIndex(
 
 function clampNumber(value: number, min: number, max: number) {
   return Math.min(max, Math.max(min, value));
-}
-
-function tokenizeCommand(input: string) {
-  const tokens: string[] = [];
-  const pattern = /"([^"]*)"|'([^']*)'|(\S+)/g;
-  let match: RegExpExecArray | null;
-  while ((match = pattern.exec(input)) !== null) {
-    tokens.push(match[1] ?? match[2] ?? match[3] ?? '');
-  }
-  return tokens;
-}
-
-function parseCommandBoolean(value: string | undefined) {
-  const normalized = value?.trim().toLowerCase();
-  if (!normalized) {
-    return null;
-  }
-  if (['on', 'yes', 'true', '1', 'enable', 'enabled'].includes(normalized)) {
-    return true;
-  }
-  if (['off', 'no', 'false', '0', 'disable', 'disabled'].includes(normalized)) {
-    return false;
-  }
-  return null;
 }
 
 function delay(ms: number) {
@@ -5385,29 +5365,22 @@ function App() {
 
   const handleDirectTwitchCommand = useCallback(
     (message: CommandChatMessage) => {
-      const text = message.text.trim();
-      const lowerText = text.toLowerCase();
-      const prefix = DIRECT_COMMAND_PREFIXES.find(
-        (candidate) => lowerText === candidate || lowerText.startsWith(`${candidate} `),
-      );
-      if (!prefix) {
+      const parsed = parseDirectStreamCommand(message, {
+        admins: ['subsect'],
+        allowMods: true,
+        allowTrustedControllers: true,
+        prefixes: DIRECT_COMMAND_PREFIXES,
+      });
+      if (!parsed.matched) {
         return false;
       }
 
-      const isController =
-        message.isTrustedController ||
-        message.user.toLowerCase() === 'subsect' ||
-        message.isBroadcaster ||
-        message.isMod;
-      if (!isController) {
+      if (!parsed.authorized) {
         console.info(`[DirectTwitch] Ignored command from ${message.displayName}.`);
         return true;
       }
 
-      const commandText = text.slice(prefix.length).trim();
-      const tokens = tokenizeCommand(commandText);
-      const verb = (tokens.shift() ?? 'help').toLowerCase();
-      const rest = tokens.join(' ').trim();
+      const command = parsed.command;
       const respond = (response: string) => {
         appendSystemMessage(`[Command] ${response}`);
       };
@@ -5424,207 +5397,139 @@ function App() {
         return true;
       };
 
-      if (verb === 'help' || verb === '?') {
-        respond(
-          'Commands: status, audio, state, state reset, refresh, channel <name>, persona <riko|neuro|hikari>, personas, llm <model>, vrm <id>, vrms, camera full|half|close, anim <name|index>, anims, anim start|stop|next|random, anim speed <n>, anim duration <sec>, tts on|off, autospeak on|off, say <text>, chat on|off.',
-        );
-        return true;
-      }
-
-      if (verb === 'status') {
-        const activeChatters = pruneActiveTwitchChatters(
-          twitchActiveChattersRef.current,
-          Date.now(),
-        );
-        const currentChannel = directTwitchClientRef.current?.channel ?? twitchChannel;
-        const chatStateKey = message.isLocal
-          ? getLocalConversationStateKey(activePersona ?? DEFAULT_PERSONA)
-          : getTwitchConversationStateKey(currentChannel, activePersona ?? DEFAULT_PERSONA);
-        respond(
-          `Direct Twitch IRC: #${currentChannel}, controller=${twitchSettingsRef.current.localDisplayName}, activeChatters=${activeChatters}, aiQueue=${twitchAiQueueRef.current.length}/${twitchSettingsRef.current.maxPendingJobs}, batchPending=${twitchBatchRef.current.length}, state=${chatStateKey}.`,
-        );
-        return true;
-      }
-
-      if (verb === 'audio') {
-        const stream = ttsManager.getOutputStream();
-        respond(
-          `Browser audio: context=${ttsManager.getAudioState()}, streamTracks=${stream?.getAudioTracks().length ?? 0}, tts=${aiSettingsRef.current.ttsEnabled ? 'on' : 'off'}, autospeak=${aiSettingsRef.current.ttsAutoSpeak ? 'on' : 'off'}, volume=${aiSettingsRef.current.ttsVolume}.`,
-        );
-        return true;
-      }
-
-      if (['state', 'aistate', 'ai-state'].includes(verb)) {
-        const subcommand = (tokens[0] ?? '').toLowerCase();
-        if (['reset', 'clear', 'restart'].includes(subcommand)) {
+      switch (command.kind) {
+        case 'help':
+          respond(getDirectStreamCommandHelp());
+          return true;
+        case 'status': {
+          const activeChatters = pruneActiveTwitchChatters(
+            twitchActiveChattersRef.current,
+            Date.now(),
+          );
+          const currentChannel = directTwitchClientRef.current?.channel ?? twitchChannel;
+          const chatStateKey = message.isLocal
+            ? getLocalConversationStateKey(activePersona ?? DEFAULT_PERSONA)
+            : getTwitchConversationStateKey(currentChannel, activePersona ?? DEFAULT_PERSONA);
+          respond(
+            `Direct Twitch IRC: #${currentChannel}, controller=${twitchSettingsRef.current.localDisplayName}, activeChatters=${activeChatters}, aiQueue=${twitchAiQueueRef.current.length}/${twitchSettingsRef.current.maxPendingJobs}, batchPending=${twitchBatchRef.current.length}, state=${chatStateKey}.`,
+          );
+          return true;
+        }
+        case 'audio': {
+          const stream = ttsManager.getOutputStream();
+          respond(
+            `Browser audio: context=${ttsManager.getAudioState()}, streamTracks=${stream?.getAudioTracks().length ?? 0}, tts=${aiSettingsRef.current.ttsEnabled ? 'on' : 'off'}, autospeak=${aiSettingsRef.current.ttsAutoSpeak ? 'on' : 'off'}, volume=${aiSettingsRef.current.ttsVolume}.`,
+          );
+          return true;
+        }
+        case 'ai-state':
+          respond(
+            `Client AI: route=${getClientAiRouteLabel()}, model=${aiSettingsRef.current.model}, state=${getTwitchConversationStateKey(directTwitchClientRef.current?.channel ?? twitchChannel, activePersona ?? DEFAULT_PERSONA)}, queue=${twitchAiQueueRef.current.length}/${twitchSettingsRef.current.maxPendingJobs}, batchPending=${twitchBatchRef.current.length}.`,
+          );
+          return true;
+        case 'reset-ai-state':
           twitchAiQueueRef.current = [];
           twitchBatchRef.current = [];
           twitchKnownUsersRef.current.clear();
           commitScopedRelationshipMemory(getCommandStateKey(), createDefaultRelationshipMemory());
           respond('Client AI queue and relationship state reset.');
           return true;
-        }
-
-        respond(
-          `Client AI: route=${getClientAiRouteLabel()}, model=${aiSettingsRef.current.model}, state=${getTwitchConversationStateKey(directTwitchClientRef.current?.channel ?? twitchChannel, activePersona ?? DEFAULT_PERSONA)}, queue=${twitchAiQueueRef.current.length}/${twitchSettingsRef.current.maxPendingJobs}, batchPending=${twitchBatchRef.current.length}.`,
-        );
-        return true;
-      }
-
-      if (
-        ['resetstate', 'reset-state', 'reset-ai-state', 'clearstate', 'clear-state'].includes(verb)
-      ) {
-        twitchAiQueueRef.current = [];
-        twitchBatchRef.current = [];
-        twitchKnownUsersRef.current.clear();
-        commitScopedRelationshipMemory(getCommandStateKey(), createDefaultRelationshipMemory());
-        respond('Client AI queue and relationship state reset.');
-        return true;
-      }
-
-      if (['refresh', 'reload', 'restart'].includes(verb)) {
-        return runOverlayCommand({ action: 'reload' }, 'Refreshing the overlay.');
-      }
-
-      if (['channel', 'join', 'room'].includes(verb) && rest) {
-        const channel = rest.replace(/^#/, '').toLowerCase();
-        directTwitchClientRef.current?.switchChannel(channel);
-        setTwitchChannel(channel);
-        respond(`Switching Twitch chat to #${channel}.`);
-        return true;
-      }
-
-      if (['llm', 'model', 'ai'].includes(verb) && rest) {
-        return runOverlayCommand(
-          { action: 'set-ai-model', model: rest },
-          `LLM model set to ${rest}.`,
-        );
-      }
-
-      if (['personas', 'personalities', 'profiles'].includes(verb)) {
-        respond(`Personas: ${personas.map((persona) => persona.name).join(', ')}.`);
-        return true;
-      }
-
-      if (['persona', 'personality', 'profile', 'character', 'char'].includes(verb) && rest) {
-        const nextPersona = resolvePersonaSelector(rest, personas);
-        if (nextPersona) {
-          setActivePersonaId(nextPersona.id);
-          respond(`Persona switched to ${nextPersona.name}; scene preset is applying.`);
+        case 'refresh':
+          return runOverlayCommand({ action: 'reload' }, 'Refreshing the overlay.');
+        case 'channel':
+          directTwitchClientRef.current?.switchChannel(command.channel);
+          setTwitchChannel(command.channel);
+          respond(`Switching Twitch chat to #${command.channel}.`);
           return true;
-        }
-
-        if (['persona', 'personality', 'profile'].includes(verb)) {
-          respond(
-            `Unknown persona "${rest}". Try: ${personas.map((persona) => persona.name).join(', ')}.`,
+        case 'set-ai-model':
+          return runOverlayCommand(
+            { action: 'set-ai-model', model: command.model },
+            `LLM model set to ${command.model}.`,
           );
+        case 'list-personas':
+          respond(`Personas: ${personas.map((persona) => persona.name).join(', ')}.`);
           return true;
-        }
-      }
-
-      if (verb === 'vrms') {
-        return runOverlayCommand({ action: 'list-vrms' }, 'Asked overlay to list bundled VRMs.');
-      }
-
-      if (['vrm', 'avatar', 'character', 'char'].includes(verb) && rest) {
-        return runOverlayCommand({ action: 'load-vrm', model: rest }, `Loading VRM ${rest}.`);
-      }
-
-      if (['camera', 'frame', 'framing'].includes(verb)) {
-        const mode = (tokens[0] ?? '').toLowerCase();
-        if (['full', 'full-body', 'fullbody', 'body'].includes(mode)) {
-          return runOverlayCommand(
-            { action: 'set-camera-view', viewMode: 'full-body' },
-            'Camera framing set to Full Body.',
-          );
-        }
-        if (['half', 'half-body', 'halfbody', 'close', 'closeup', 'close-up'].includes(mode)) {
-          return runOverlayCommand(
-            { action: 'set-camera-view', viewMode: 'half-body' },
-            'Camera framing set to Half Body / Close.',
-          );
-        }
-      }
-
-      if (['anims', 'animations'].includes(verb)) {
-        return runOverlayCommand(
-          { action: 'list-animations' },
-          'Asked overlay to list animations.',
-        );
-      }
-
-      if (['anim', 'animation', 'dance'].includes(verb)) {
-        const subcommand = (tokens[0] ?? '').toLowerCase();
-        if (['start', 'stop', 'next', 'random'].includes(subcommand)) {
-          return runOverlayCommand(
-            { action: 'sequencer', command: subcommand as 'start' | 'stop' | 'next' | 'random' },
-            `Animation sequencer ${subcommand}.`,
-          );
-        }
-        if (subcommand === 'speed') {
-          const speed = Number.parseFloat(tokens[1] ?? '');
-          if (Number.isFinite(speed)) {
-            return runOverlayCommand(
-              { action: 'set-animation-speed', speed },
-              `Animation speed set to ${speed}.`,
+        case 'set-persona': {
+          const nextPersona = resolvePersonaSelector(command.selector, personas);
+          if (nextPersona) {
+            setActivePersonaId(nextPersona.id);
+            respond(`Persona switched to ${nextPersona.name}; scene preset is applying.`);
+          } else {
+            respond(
+              `Unknown persona "${command.selector}". Try: ${personas.map((persona) => persona.name).join(', ')}.`,
             );
           }
-        }
-        if (['duration', 'time'].includes(subcommand)) {
-          const duration = Number.parseFloat(tokens[1] ?? '');
-          if (Number.isFinite(duration)) {
-            return runOverlayCommand(
-              { action: 'set-animation-duration', duration },
-              `Animation duration set to ${duration}s.`,
-            );
-          }
-        }
-        if (rest) {
-          return runOverlayCommand(
-            { action: 'play-animation', selector: rest },
-            `Playing animation ${rest}.`,
-          );
-        }
-      }
-
-      if (verb === 'tts') {
-        const enabled = parseCommandBoolean(tokens[0]);
-        if (enabled !== null) {
-          return runOverlayCommand(
-            { action: 'set-tts', enabled },
-            `TTS ${enabled ? 'enabled' : 'disabled'}.`,
-          );
-        }
-      }
-
-      if (['autospeak', 'autosay'].includes(verb)) {
-        const enabled = parseCommandBoolean(tokens[0]);
-        if (enabled !== null) {
-          return runOverlayCommand(
-            { action: 'set-auto-speak', enabled },
-            `Auto-speak ${enabled ? 'enabled' : 'disabled'}.`,
-          );
-        }
-      }
-
-      if (verb === 'say' && rest) {
-        return runOverlayCommand(
-          { action: 'say', text: rest },
-          'Sending manual line to the overlay.',
-        );
-      }
-
-      if (['chat', 'reply', 'replies'].includes(verb)) {
-        const enabled = parseCommandBoolean(tokens[0]);
-        if (enabled !== null) {
-          setChatLogOpen(enabled);
-          respond(`Twitch overlay chat ${enabled ? 'expanded' : 'collapsed'}.`);
           return true;
         }
+        case 'set-character': {
+          const nextPersona = resolvePersonaSelector(command.selector, personas);
+          if (nextPersona) {
+            setActivePersonaId(nextPersona.id);
+            respond(`Persona switched to ${nextPersona.name}; scene preset is applying.`);
+            return true;
+          }
+          return runOverlayCommand(
+            { action: 'load-vrm', model: command.selector },
+            `Loading VRM ${command.selector}.`,
+          );
+        }
+        case 'list-vrms':
+          return runOverlayCommand({ action: 'list-vrms' }, 'Asked overlay to list bundled VRMs.');
+        case 'set-vrm':
+          return runOverlayCommand(
+            { action: 'load-vrm', model: command.model },
+            `Loading VRM ${command.model}.`,
+          );
+        case 'set-camera-view':
+          return runOverlayCommand(
+            { action: 'set-camera-view', viewMode: command.mode },
+            `Camera framing set to ${command.mode === 'half-body' ? 'Half Body / Close' : 'Full Body'}.`,
+          );
+        case 'list-animations':
+          return runOverlayCommand(
+            { action: 'list-animations' },
+            'Asked overlay to list animations.',
+          );
+        case 'play-animation':
+          return runOverlayCommand(
+            { action: 'play-animation', selector: command.selector },
+            `Playing animation ${command.selector}.`,
+          );
+        case 'sequencer':
+          return runOverlayCommand(
+            { action: 'sequencer', command: command.action },
+            `Animation sequencer ${command.action}.`,
+          );
+        case 'set-animation-speed':
+          return runOverlayCommand(
+            { action: 'set-animation-speed', speed: command.speed },
+            `Animation speed set to ${command.speed}.`,
+          );
+        case 'set-animation-duration':
+          return runOverlayCommand(
+            { action: 'set-animation-duration', duration: command.duration },
+            `Animation duration set to ${command.duration}s.`,
+          );
+        case 'set-tts':
+          return runOverlayCommand(
+            { action: 'set-tts', enabled: command.enabled },
+            `TTS ${command.enabled ? 'enabled' : 'disabled'}.`,
+          );
+        case 'set-auto-speak':
+          return runOverlayCommand(
+            { action: 'set-auto-speak', enabled: command.enabled },
+            `Auto-speak ${command.enabled ? 'enabled' : 'disabled'}.`,
+          );
+        case 'say':
+          return runOverlayCommand(
+            { action: 'say', text: command.text },
+            'Sending manual line to the overlay.',
+          );
+        case 'set-chat-overlay':
+          setChatLogOpen(command.enabled);
+          respond(`Twitch overlay chat ${command.enabled ? 'expanded' : 'collapsed'}.`);
+          return true;
       }
-
-      respond('Unknown command. Use !yw help.');
-      return true;
     },
     [
       activePersona,
