@@ -204,7 +204,7 @@ Verification item:
 
 ## AI
 
-Status: `LIVE`.
+Status: `LIVE / PARTIAL`.
 
 Purpose:
 
@@ -218,6 +218,10 @@ State/seams:
 - `aiSettings` is app state and persisted under `yourwifey.aiSettings.v1`.
 - Model metadata comes from backend `/ai/models`.
 - Chat uses rebuilt backend `/ai/chat`.
+
+Current gap:
+
+- Tool settings (`toolChoiceMode`, `maxToolRounds`) and the Account-tab Tavily key surface are present, but main assistant `/ai/chat` does not yet execute AI SDK tools. Current live tool execution is GRILLO/Ladybug memory-worker tooling only. Restoring main assistant web/tool calls is LLM-adjacent and needs a deliberate implementation slice.
 
 Constraint:
 
