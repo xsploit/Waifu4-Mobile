@@ -44,6 +44,7 @@ export class AudioPlayback {
   private playhead = 0;
   private activeSources = 0;
   private sources = new Set<AudioNodeLike>();
+  private idleResolvers = new Set<() => void>();
   private snapshot: PlaybackSnapshot = {
     status: 'idle',
     chunks: 0,
@@ -66,10 +67,20 @@ export class AudioPlayback {
     return { ...this.snapshot };
   }
 
+  waitForIdle(): Promise<void> {
+    if (this.snapshot.status === 'idle') {
+      return Promise.resolve();
+    }
+    return new Promise((resolve) => {
+      this.idleResolvers.add(resolve);
+    });
+  }
+
   reset(): void {
     this.playhead = this.context?.currentTime ?? 0;
     this.activeSources = 0;
     this.update({ status: 'idle', chunks: 0, bytes: 0, queuedSeconds: 0, amplitude: 0 });
+    this.resolveIdle();
   }
 
   stop(): void {
@@ -85,6 +96,7 @@ export class AudioPlayback {
     this.playhead = this.context?.currentTime ?? 0;
     this.activeSources = 0;
     this.update({ status: 'idle', queuedSeconds: 0, amplitude: 0 });
+    this.resolveIdle();
   }
 
   async playPcmChunk(chunk: Uint8Array, sampleRate: number): Promise<PlaybackSnapshot> {
@@ -116,6 +128,7 @@ export class AudioPlayback {
       this.activeSources = Math.max(0, this.activeSources - 1);
       if (this.activeSources === 0) {
         this.update({ status: 'idle', queuedSeconds: 0, amplitude: 0 });
+        this.resolveIdle();
       }
     };
     source.start(startAt);
@@ -142,6 +155,13 @@ export class AudioPlayback {
   private update(patch: Partial<PlaybackSnapshot>): void {
     this.snapshot = { ...this.snapshot, ...patch };
     this.options.onState?.(this.getState());
+  }
+
+  private resolveIdle(): void {
+    for (const resolve of this.idleResolvers) {
+      resolve();
+    }
+    this.idleResolvers.clear();
   }
 }
 

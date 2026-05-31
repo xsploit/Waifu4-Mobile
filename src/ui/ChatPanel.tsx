@@ -40,6 +40,36 @@ type TimingTotals = {
   visemes: number;
 };
 
+type BenchmarkCandidate = {
+  id: string;
+  label: string;
+  key: string;
+  request: {
+    provider: TtsProvider;
+    voiceId?: string;
+    inworldTransport?: InworldTransport;
+    inworldModelId?: string;
+    sampleRate: number;
+    timestampTransportStrategy?: InworldTimestampStrategy;
+    deliveryMode?: InworldDeliveryMode;
+    bufferCharThreshold?: number;
+  };
+};
+
+type BenchmarkResult = {
+  id: string;
+  label: string;
+  round: number;
+  ok: boolean;
+  firstAudioMs: number | null;
+  totalMs: number;
+  playbackMs: number;
+  chunks: number;
+  bytes: number;
+  timing: TimingTotals;
+  error?: string;
+};
+
 const inputStyle: React.CSSProperties = {
   background: '#202028',
   color: '#e8e8ec',
@@ -55,6 +85,9 @@ const ZERO_TIMING_TOTALS: TimingTotals = {
   phonemes: 0,
   visemes: 0,
 };
+
+const DEFAULT_BENCHMARK_TEXT =
+  'The little star smiled, took one careful breath, and said hello to the morning.';
 
 export function ChatPanel() {
   const [provider, setProvider] = useState<GatewayId>('vercel-gateway');
@@ -87,6 +120,11 @@ export function ChatPanel() {
   const [models, setModels] = useState<ProviderModelInfo[]>([]);
   const [modelsMsg, setModelsMsg] = useState<string | null>(null);
   const [input, setInput] = useState('');
+  const [benchmarkText, setBenchmarkText] = useState(DEFAULT_BENCHMARK_TEXT);
+  const [benchmarkRounds, setBenchmarkRounds] = useState(2);
+  const [benchmarkRunning, setBenchmarkRunning] = useState(false);
+  const [benchmarkStatus, setBenchmarkStatus] = useState('bench=idle');
+  const [benchmarkResults, setBenchmarkResults] = useState<BenchmarkResult[]>([]);
   const [log, setLog] = useState<Turn[]>([]);
   const [streaming, setStreaming] = useState('');
   const [meta, setMeta] = useState<ReplyMetadata | null>(null);
@@ -95,6 +133,7 @@ export function ChatPanel() {
   const abortRef = useRef<AbortController | null>(null);
   const ttsAbortRef = useRef<AbortController | null>(null);
   const ttsControllersRef = useRef<Set<AbortController>>(new Set());
+  const benchmarkAbortRef = useRef<AbortController | null>(null);
   const ttsQueueRef = useRef<Promise<void>>(Promise.resolve());
   const speechRunRef = useRef(0);
   const ttsTotalsRef = useRef({ segments: 0, chunks: 0, bytes: 0, firstAudioMs: null as number | null });
@@ -244,6 +283,7 @@ export function ChatPanel() {
 
   const stop = () => {
     abortRef.current?.abort();
+    benchmarkAbortRef.current?.abort();
     stopTts('stopped');
   };
   const stopTts = (status = 'stopped') => {
@@ -409,6 +449,234 @@ export function ChatPanel() {
     setTtsTimingStatus(
       `timing=${totals.timestampChunks} chunks · words=${totals.words} · phones=${totals.phonemes} · visemes=${totals.visemes}`,
     );
+  };
+
+  const mergeTimingTotals = (left: TimingTotals, right: TimingTotals): TimingTotals => ({
+    timestampChunks: left.timestampChunks + right.timestampChunks,
+    words: left.words + right.words,
+    phonemes: left.phonemes + right.phonemes,
+    visemes: left.visemes + right.visemes,
+  });
+
+  const benchmarkCandidates = (): BenchmarkCandidate[] => {
+    const candidates: BenchmarkCandidate[] = [];
+    if (ttsKey.trim()) {
+      candidates.push({
+        id: 'fish',
+        label: 'Fish realtime',
+        key: ttsKey.trim(),
+        request: {
+          provider: 'fish',
+          voiceId: voiceId.trim() || undefined,
+          sampleRate: 44100,
+        },
+      });
+    }
+    if (inworldKey.trim()) {
+      const baseInworld = {
+        provider: 'inworld' as const,
+        voiceId: inworldVoiceId.trim() || 'Ashley',
+        inworldModelId: inworldModelId.trim() || 'inworld-tts-2',
+        sampleRate: 48000,
+        timestampTransportStrategy: inworldTimestampStrategy,
+        deliveryMode: inworldDeliveryMode,
+        bufferCharThreshold: inworldBufferCharThreshold,
+      };
+      candidates.push(
+        {
+          id: 'inworld-http',
+          label: 'Inworld HTTP',
+          key: inworldKey.trim(),
+          request: { ...baseInworld, inworldTransport: 'http' },
+        },
+        {
+          id: 'inworld-websocket',
+          label: 'Inworld WebSocket',
+          key: inworldKey.trim(),
+          request: { ...baseInworld, inworldTransport: 'websocket' },
+        },
+      );
+    }
+    return candidates;
+  };
+
+  const runBenchmark = async () => {
+    const text = benchmarkText.trim();
+    if (!text || benchmarkRunning) {
+      return;
+    }
+    const candidates = benchmarkCandidates();
+    if (!candidates.length) {
+      setBenchmarkStatus('bench=no TTS keys');
+      return;
+    }
+    const rounds = Math.max(1, Math.min(10, Math.floor(benchmarkRounds) || 1));
+    const controller = new AbortController();
+    benchmarkAbortRef.current = controller;
+    setBenchmarkRunning(true);
+    setBenchmarkResults([]);
+    setBenchmarkStatus(`bench=running ${candidates.length} candidates x ${rounds}`);
+    stopTts('benchmark starting…');
+    const runId = speechRunRef.current;
+    const results: BenchmarkResult[] = [];
+    try {
+      const playback = await ensureAudioPlayback();
+      for (let round = 1; round <= rounds; round += 1) {
+        for (const candidate of candidates) {
+          if (controller.signal.aborted) {
+            throw new Error('Benchmark stopped');
+          }
+          playback.stop();
+          playback.reset();
+          ttsTimingTotalsRef.current = ZERO_TIMING_TOTALS;
+          setBenchmarkStatus(`bench=${candidate.label} round ${round}/${rounds}`);
+          setTtsStatus(`benchmark · ${candidate.label} · round ${round}/${rounds}`);
+          let timing = ZERO_TIMING_TOTALS;
+          const startedAt = performance.now();
+          let doneStats: BenchmarkResult['firstAudioMs'] = null;
+          let chunks = 0;
+          let bytes = 0;
+          try {
+            for await (const ev of streamTts(
+              {
+                text,
+                provider: candidate.request.provider,
+                voiceId: candidate.request.voiceId,
+                inworldTransport: candidate.request.inworldTransport,
+                inworldModelId: candidate.request.inworldModelId,
+                sampleRate: candidate.request.sampleRate,
+                format: 'pcm',
+                timestampType: candidate.request.provider === 'inworld' ? 'WORD' : undefined,
+                timestampTransportStrategy: candidate.request.timestampTransportStrategy,
+                deliveryMode: candidate.request.deliveryMode,
+                bufferCharThreshold: candidate.request.bufferCharThreshold,
+                autoMode: true,
+              },
+              { ttsKey: candidate.key },
+              controller.signal,
+            )) {
+              if (ev.type === 'audio') {
+                if (ev.format !== 'pcm') {
+                  throw new Error(`Unsupported audio format ${ev.format}`);
+                }
+                const counts = summarizeTimestamps(ev.timestamps);
+                timing = mergeTimingTotals(timing, counts);
+                addTiming(ev.timestamps);
+                await playback.playPcmChunk(ev.audio, ev.sampleRate ?? candidate.request.sampleRate);
+              } else if (ev.type === 'done') {
+                doneStats = ev.stats.firstAudioMs;
+                chunks = ev.stats.chunks;
+                bytes = ev.stats.bytes;
+                if (timing.timestampChunks === 0 && ev.stats.timestampChunks !== undefined) {
+                  timing = {
+                    timestampChunks: ev.stats.timestampChunks,
+                    words: ev.stats.words ?? 0,
+                    phonemes: ev.stats.phonemes ?? 0,
+                    visemes: ev.stats.visemes ?? 0,
+                  };
+                }
+              } else {
+                throw new Error(ev.error);
+              }
+            }
+            const networkDoneAt = performance.now();
+            await playback.waitForIdle();
+            const result: BenchmarkResult = {
+              id: candidate.id,
+              label: candidate.label,
+              round,
+              ok: true,
+              firstAudioMs: doneStats,
+              totalMs: Math.round(networkDoneAt - startedAt),
+              playbackMs: Math.round(performance.now() - startedAt),
+              chunks,
+              bytes,
+              timing,
+            };
+            results.push(result);
+            setBenchmarkResults([...results]);
+          } catch (err) {
+            const result: BenchmarkResult = {
+              id: candidate.id,
+              label: candidate.label,
+              round,
+              ok: false,
+              firstAudioMs: null,
+              totalMs: Math.round(performance.now() - startedAt),
+              playbackMs: Math.round(performance.now() - startedAt),
+              chunks,
+              bytes,
+              timing,
+              error: err instanceof Error ? err.message : String(err),
+            };
+            results.push(result);
+            setBenchmarkResults([...results]);
+          }
+        }
+      }
+      setBenchmarkStatus(`bench=done · ${results.filter((result) => result.ok).length}/${results.length} ok`);
+    } catch (err) {
+      setBenchmarkStatus(`bench=${err instanceof Error ? err.message : String(err)}`);
+    } finally {
+      setBenchmarkRunning(false);
+      benchmarkAbortRef.current = null;
+      if (speechRunRef.current === runId) {
+        ttsAbortRef.current = null;
+      }
+    }
+  };
+
+  const stopBenchmark = () => {
+    benchmarkAbortRef.current?.abort();
+    stopTts('benchmark stopped');
+    setBenchmarkRunning(false);
+  };
+
+  const benchmarkSummary = () => {
+    const groups = new Map<string, BenchmarkResult[]>();
+    for (const result of benchmarkResults.filter((entry) => entry.ok)) {
+      groups.set(result.label, [...(groups.get(result.label) ?? []), result]);
+    }
+    return [...groups.entries()].map(([label, rows]) => {
+      const avg = (values: number[]) =>
+        values.length ? Math.round(values.reduce((total, value) => total + value, 0) / values.length) : null;
+      return {
+        label,
+        rounds: rows.length,
+        firstAudioMs: avg(rows.flatMap((row) => (row.firstAudioMs === null ? [] : [row.firstAudioMs]))),
+        totalMs: avg(rows.map((row) => row.totalMs)),
+        playbackMs: avg(rows.map((row) => row.playbackMs)),
+        chunks: avg(rows.map((row) => row.chunks)),
+        kb: avg(rows.map((row) => Math.round(row.bytes / 1024))),
+        words: avg(rows.map((row) => row.timing.words)),
+        phones: avg(rows.map((row) => row.timing.phonemes)),
+      };
+    });
+  };
+
+  const copyBenchmarkResults = async () => {
+    const summary = benchmarkSummary();
+    const table = [
+      '| voice | rounds | first ms | net ms | play ms | chunks | KB | words | phones |',
+      '| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |',
+      ...summary.map(
+        (row) =>
+          `| ${row.label} | ${row.rounds} | ${row.firstAudioMs ?? 'n/a'} | ${row.totalMs ?? 'n/a'} | ${row.playbackMs ?? 'n/a'} | ${row.chunks ?? 'n/a'} | ${row.kb ?? 'n/a'} | ${row.words ?? 'n/a'} | ${row.phones ?? 'n/a'} |`,
+      ),
+    ].join('\n');
+    const payload = [
+      '# WebWaifu TTS benchmark',
+      '',
+      `Text: ${benchmarkText.trim()}`,
+      '',
+      table,
+      '',
+      '```json',
+      JSON.stringify(benchmarkResults, null, 2),
+      '```',
+    ].join('\n');
+    await navigator.clipboard.writeText(payload);
+    setBenchmarkStatus('bench=copied');
   };
 
   const handleTtsEvent = async (ev: TtsStreamEvent, playback: AudioPlayback) => {
@@ -596,6 +864,88 @@ export function ChatPanel() {
           />
         </div>
       )}
+
+      <div
+        style={{
+          border: '1px solid #2a2a33',
+          borderRadius: 8,
+          padding: 10,
+          display: 'flex',
+          flexDirection: 'column',
+          gap: 8,
+        }}
+      >
+        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
+          <input
+            value={benchmarkText}
+            onChange={(e) => setBenchmarkText(e.target.value)}
+            placeholder="benchmark sentence"
+            style={{ ...inputStyle, flex: 1, minWidth: 260 }}
+          />
+          <input
+            value={benchmarkRounds}
+            onChange={(e) => setBenchmarkRounds(Number(e.target.value) || 1)}
+            min={1}
+            max={10}
+            type="number"
+            aria-label="Benchmark rounds"
+            style={{ ...inputStyle, width: 72 }}
+          />
+          <button
+            onClick={() => void runBenchmark()}
+            disabled={benchmarkRunning}
+            style={{ ...inputStyle, cursor: 'pointer' }}
+          >
+            {benchmarkRunning ? 'benchmarking…' : 'benchmark'}
+          </button>
+          {benchmarkRunning && (
+            <button onClick={stopBenchmark} style={{ ...inputStyle, cursor: 'pointer' }}>
+              stop bench
+            </button>
+          )}
+          <button
+            onClick={() => void copyBenchmarkResults()}
+            disabled={benchmarkResults.length === 0}
+            style={{ ...inputStyle, cursor: 'pointer' }}
+          >
+            copy results
+          </button>
+        </div>
+        <div style={{ fontSize: 12, color: '#9b9ba3' }}>{benchmarkStatus}</div>
+        {benchmarkSummary().length > 0 && (
+          <div style={{ display: 'grid', gap: 4, fontSize: 12, color: '#bdbdc7' }}>
+            {benchmarkSummary().map((row) => (
+              <div
+                key={row.label}
+                style={{
+                  display: 'grid',
+                  gridTemplateColumns: 'minmax(120px, 1fr) repeat(5, minmax(54px, auto))',
+                  gap: 8,
+                  alignItems: 'center',
+                }}
+              >
+                <span>{row.label}</span>
+                <span>first={row.firstAudioMs ?? 'n/a'}ms</span>
+                <span>net={row.totalMs ?? 'n/a'}ms</span>
+                <span>play={row.playbackMs ?? 'n/a'}ms</span>
+                <span>chunks={row.chunks ?? 'n/a'}</span>
+                <span>KB={row.kb ?? 'n/a'}</span>
+              </div>
+            ))}
+          </div>
+        )}
+        {benchmarkResults.some((result) => !result.ok) && (
+          <div style={{ display: 'grid', gap: 4, fontSize: 12, color: '#ff9aa8' }}>
+            {benchmarkResults
+              .filter((result) => !result.ok)
+              .map((result) => (
+                <span key={`${result.id}-${result.round}`}>
+                  {result.label} r{result.round}: {result.error}
+                </span>
+              ))}
+          </div>
+        )}
+      </div>
 
       <div
         style={{

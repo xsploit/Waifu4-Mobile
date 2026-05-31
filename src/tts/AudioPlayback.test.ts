@@ -20,7 +20,7 @@ class FakeAudioContext {
   state = 'running';
   destination = {};
   starts: number[] = [];
-  sources: Array<{ connections: unknown[] }> = [];
+  sources: Array<{ connections: unknown[]; onended: (() => void) | null }> = [];
 
   async resume() {}
 
@@ -71,5 +71,19 @@ describe('AudioPlayback', () => {
     await playback.playPcmChunk(new Uint8Array([0, 0]), 2);
     expect(context.sources[0]?.connections).toEqual([context.destination, tap.input]);
     expect(playback.getState().chunks).toBe(1);
+  });
+
+  it('resolves waitForIdle after the final source ends', async () => {
+    const context = new FakeAudioContext();
+    const playback = new AudioPlayback({ context });
+    await playback.playPcmChunk(new Uint8Array([0, 0]), 2);
+    let resolved = false;
+    const idle = playback.waitForIdle().then(() => {
+      resolved = true;
+    });
+    expect(resolved).toBe(false);
+    context.sources[0]?.onended?.();
+    await idle;
+    expect(resolved).toBe(true);
   });
 });
