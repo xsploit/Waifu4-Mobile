@@ -70,3 +70,26 @@ Remaining verification:
 - Voice Lab Fish/Inworld voice list/create with real Account-tab keys.
 - Twitch stream ASR/frame helpers against a real channel/provider key.
 - Packaged desktop launch after the web flow is stable enough.
+
+## 2026-05-31 Backend Smoke After Chat Metadata/Tab Parity Pass
+
+Command:
+
+```text
+npm run smoke:runtime
+```
+
+Result:
+
+| Surface | Route | Result |
+| --- | --- | --- |
+| Health | `GET /health` | `200` |
+| Twitch runtime | `GET /twitch/runtime/status` | `200` |
+| Memory | `GET /memory/status` | `200` |
+| POML render | `POST /ai/poml/render` | `200` |
+| Main chat no-key guard | `POST /ai/chat` without provider key | `401` |
+| TTS no-key guard | `POST /tts/stream` without provider key | `401` |
+| Voice list no-key guard | `GET /tts/voices?provider=fish-speech` without provider key | `401` |
+| Voice create validation guard | `POST /tts/voices/create` with invalid body | `400` |
+
+Meaning: the rebuilt local backend surfaces still boot and fail cleanly after the chat-stream `replyMetadata` SSE contract change and the latest tab parity coverage.
