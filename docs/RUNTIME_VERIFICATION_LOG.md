@@ -125,3 +125,24 @@ npm run build
 ```
 
 Result: passed. Voice Lab now receives the same remote provider voice catalog state and refresh callbacks used by the TTS tab. The tab can fetch Fish/Inworld voices, display loaded provider voices, and copy a provider voice id/name/provider into the voice draft without changing the backend TTS streaming path.
+
+## 2026-05-31 Runtime Smoke After Voice Lab Catalog
+
+Command:
+
+```text
+npm run smoke:runtime
+```
+
+Result: passed.
+
+```text
+health=200
+twitch runtime=200
+memory status=200
+poml render=200
+main chat no-key guard=401
+tts no-key guard=401
+voice list no-key guard=401
+voice create validation guard=400
+```
