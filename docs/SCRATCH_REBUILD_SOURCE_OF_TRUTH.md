@@ -82,6 +82,8 @@ EXCLUDE not part of this rebuild path
 
 This audit is the working answer to "what is each tab, and is it hooked up?" It tracks the active copied frontend shell, not the earlier prototype modules.
 
+Detailed tab/control primer: [`docs/FRONTEND_TAB_PRIMER.md`](./FRONTEND_TAB_PRIMER.md).
+
 | Tab | Purpose | Hook status | Notes / remaining work |
 | --- | --- | --- | --- |
 | Account | Browser-local provider keys and local transfer backup import/export. | DONE | Uses provider key vault and local backup worker. Import/export is wired to active app state, provider secrets, saved VRMs, personas, scoped chat histories, and relationship memory. |
