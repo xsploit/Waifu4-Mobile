@@ -1,4 +1,4 @@
-import { Output, streamText, type ModelMessage } from 'ai';
+import { Output, generateText, streamText, type ModelMessage } from 'ai';
 import { createGateway } from '@ai-sdk/gateway';
 import { createOpenRouter } from '@openrouter/ai-sdk-provider';
 import {
@@ -31,6 +31,39 @@ export type StreamChatRequest = {
   signal?: AbortSignal;
 };
 
+export type CompleteChatRequest = {
+  provider: GatewayId;
+  model: string;
+  messages: LlmMessage[];
+  temperature?: number;
+  maxTokens?: number;
+  reasoningEffort?: ReasoningEffort;
+  apiKey: string;
+  byokOpenAiKey?: string;
+  signal?: AbortSignal;
+  jsonMode?: boolean;
+};
+
+export type CompleteChatResult = {
+  text: string;
+  provider: GatewayId;
+  model: string;
+};
+
+const jsonTextOutput = {
+  name: 'json-text',
+  responseFormat: Promise.resolve({ type: 'json' as const }),
+  async parseCompleteOutput({ text }: { text: string }) {
+    return text;
+  },
+  async parsePartialOutput({ text }: { text: string }) {
+    return { partial: text };
+  },
+  createElementStreamTransform() {
+    return undefined;
+  },
+};
+
 /** OpenAI reasoning models (gpt-5 family, o-series) accept reasoningEffort. */
 function isReasoningModel(model: string): boolean {
   const leaf = model.toLowerCase();
@@ -45,7 +78,7 @@ export type StreamChatResult = {
 };
 
 function buildProviderOptions(
-  req: StreamChatRequest,
+  req: Pick<StreamChatRequest, 'provider' | 'model' | 'reasoningEffort' | 'byokOpenAiKey'>,
   structured: boolean,
 ): Record<string, unknown> | undefined {
   const options: Record<string, unknown> = {};
@@ -70,7 +103,7 @@ function buildProviderOptions(
   return Object.keys(options).length > 0 ? options : undefined;
 }
 
-function createModel(req: StreamChatRequest) {
+function createModel(req: Pick<StreamChatRequest, 'provider' | 'model' | 'apiKey'>) {
   // OpenRouter: just its own key. (Its BYOK is a website-dashboard feature, not
   // a confirmed API parameter, so we don't inject it here.)
   if (req.provider === 'openrouter-responses') {
@@ -83,6 +116,42 @@ function createModel(req: StreamChatRequest) {
 
 function toModelMessages(messages: LlmMessage[]): ModelMessage[] {
   return messages.map((m) => ({ role: m.role, content: m.content }) as ModelMessage);
+}
+
+export async function completeChat(req: CompleteChatRequest): Promise<CompleteChatResult> {
+  const model = createModel(req);
+  const providerOptions = buildProviderOptions(req, req.jsonMode === true);
+  const started = Date.now();
+
+  log.info('completion start', {
+    provider: req.provider,
+    model: req.model,
+    lane: req.jsonMode ? 'json' : 'text',
+    messages: req.messages.length,
+  });
+
+  const result = await generateText({
+    abortSignal: req.signal,
+    allowSystemInMessages: true,
+    model,
+    messages: toModelMessages(req.messages),
+    temperature: req.temperature,
+    maxOutputTokens: req.maxTokens,
+    output: req.jsonMode ? jsonTextOutput : undefined,
+    providerOptions: providerOptions as never,
+  });
+  const text =
+    req.jsonMode && typeof (result as { output?: unknown }).output === 'string'
+      ? (result as { output: string }).output
+      : result.text;
+  log.info('completion done', {
+    provider: req.provider,
+    model: req.model,
+    lane: req.jsonMode ? 'json' : 'text',
+    chars: text.length,
+    ms: Date.now() - started,
+  });
+  return { text, provider: req.provider, model: req.model };
 }
 
 /**

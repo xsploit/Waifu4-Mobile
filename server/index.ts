@@ -4,6 +4,7 @@ import { handleChat } from './ai/chat';
 import { handleModels } from './ai/models';
 import { handleTtsStream } from './tts/stream';
 import { handleLocalBackupSettings } from './localBackup';
+import { createMemoryRouter } from './memory/routes';
 
 const PORT = Number(process.env.PORT ?? 8797);
 
@@ -34,6 +35,8 @@ app.post('/ai/chat', (req, res) => {
 app.post('/tts/stream', (req, res) => {
   void handleTtsStream(req, res);
 });
+
+app.use('/memory', createMemoryRouter());
 
 app.listen(PORT, '127.0.0.1', () => {
   console.log(`[INFO] (${SERVICE_NAME}) listening on http://127.0.0.1:${PORT}`);
