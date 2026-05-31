@@ -7,6 +7,7 @@ import {
   type RemoteTtsProxyOptions,
   type RemoteTtsRequest,
 } from './remote';
+import type { SpeechTiming } from '../../tts/SpeechTimingTypes';
 
 const LIP_SYNC_PROFILE_URL =
   typeof window === 'undefined'
@@ -19,6 +20,7 @@ const AUTO_RESUME_AUDIO =
   import.meta.env['VITE_AUTO_RESUME_AUDIO'] === 'true' ||
   (typeof window !== 'undefined' &&
     new URLSearchParams(window.location.search).get('routelet') === '1');
+const PIPER_TIMING_TICKS_PER_SECOND = 10000000;
 interface ChunkData {
   audioBlob: Blob;
   wordBoundaries: WordBoundary[];
@@ -44,6 +46,44 @@ export function getRemotePcmChunkSchedule(now: number, playhead: number, duratio
   };
 }
 
+export function remoteSpeechTimingToWordBoundaries(
+  speechTiming: unknown,
+  scheduledOffsetSeconds: number,
+  playbackRate: number,
+): WordBoundary[] {
+  if (!speechTiming || typeof speechTiming !== 'object') {
+    return [];
+  }
+  const words = (speechTiming as Partial<SpeechTiming>).words;
+  if (!Array.isArray(words)) {
+    return [];
+  }
+  const safePlaybackRate = Math.max(0.01, playbackRate);
+  return words.flatMap((word): WordBoundary[] => {
+    if (
+      !word ||
+      typeof word.text !== 'string' ||
+      typeof word.start !== 'number' ||
+      typeof word.end !== 'number' ||
+      word.end < word.start
+    ) {
+      return [];
+    }
+    return [
+      {
+        duration: Math.round(
+          ((word.end - word.start) / safePlaybackRate) * PIPER_TIMING_TICKS_PER_SECOND,
+        ),
+        offset: Math.round(
+          (scheduledOffsetSeconds + word.start / safePlaybackRate) *
+            PIPER_TIMING_TICKS_PER_SECOND,
+        ),
+        word: word.text,
+      },
+    ];
+  });
+}
+
 function canAttemptAudioResume() {
   return AUTO_RESUME_AUDIO || navigator.userActivation?.isActive === true;
 }
@@ -60,6 +100,7 @@ export class TtsManager {
   private currentStreamSources = new Set<AudioBufferSourceNode>();
   private currentStreamGains = new Set<GainNode>();
   private streamPlaybackEndTime = 0;
+  private streamPlaybackStartTime = 0;
   private streamScheduledChunkCount = 0;
   private streamStartedTimer: number | null = null;
 
@@ -167,6 +208,7 @@ export class TtsManager {
       this.streamStartedTimer = null;
     }
     this.streamPlaybackEndTime = 0;
+    this.streamPlaybackStartTime = 0;
     this.streamScheduledChunkCount = 0;
     this.disconnectAudioSource();
     this.clearPlaybackState();
@@ -489,6 +531,7 @@ export class TtsManager {
       void this.audioContext.resume().catch(() => {});
     }
     this.streamPlaybackEndTime = this.audioContext.currentTime;
+    this.streamPlaybackStartTime = this.streamPlaybackEndTime;
     this.streamScheduledChunkCount = 0;
   }
 
@@ -531,6 +574,15 @@ export class TtsManager {
       duration,
     );
     this.streamPlaybackEndTime = endAt;
+    const timedWordBoundaries = remoteSpeechTimingToWordBoundaries(
+      chunk.speechTiming,
+      Math.max(0, startAt - this.streamPlaybackStartTime),
+      this.playbackRate,
+    );
+    if (timedWordBoundaries.length > 0) {
+      this.wordBoundaries = [...this.wordBoundaries, ...timedWordBoundaries];
+      this.onLipSyncData?.({ wordBoundaries: this.wordBoundaries, phonemes: null, text });
+    }
     this.currentStreamSources.add(source);
     this.streamScheduledChunkCount += 1;
 

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { getRemotePcmChunkSchedule } from './manager';
+import { getRemotePcmChunkSchedule, remoteSpeechTimingToWordBoundaries } from './manager';
 import { TtsManager } from './manager';
 
 function createPcm16Blob(samples: number[]) {
@@ -79,5 +79,26 @@ describe('TtsManager remote PCM scheduling', () => {
     ).resolves.toBeUndefined();
 
     expect(sourceOnEnded).toBeTypeOf('function');
+  });
+
+  it('converts provider speech timing into subtitle word boundaries with stream offsets', () => {
+    expect(
+      remoteSpeechTimingToWordBoundaries(
+        {
+          wordSource: 'provider',
+          phonemeSource: 'derived',
+          words: [
+            { text: 'hello', start: 0.1, end: 0.4 },
+            { text: 'world', start: 0.5, end: 0.9 },
+          ],
+          phonemes: [],
+        },
+        1.25,
+        1,
+      ),
+    ).toEqual([
+      { word: 'hello', offset: 13500000, duration: 3000000 },
+      { word: 'world', offset: 17500000, duration: 4000000 },
+    ]);
   });
 });
