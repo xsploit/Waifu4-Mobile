@@ -445,6 +445,7 @@ type AppCompletionResponse = {
     };
   }>;
   meta?: AiProxyHealth['providerState'];
+  replyMetadata?: AssistantReplyMetadata | null;
 };
 
 type AiProxyStreamEvent = {
@@ -453,8 +454,9 @@ type AiProxyStreamEvent = {
   delta?: string;
   error?: string;
   mimeType?: string;
-  meta?: AiProxyHealth['providerState'];
+  meta?: AiProxyHealth['providerState'] | AssistantReplyMetadata | null;
   ok?: boolean;
+  replyMetadata?: AssistantReplyMetadata | null;
   sampleRate?: number;
   text?: string;
 };
@@ -717,6 +719,19 @@ function decodeAiProxyAudioEvent(event: AiProxyStreamEvent): RemoteTtsAudioChunk
   };
 }
 
+function isAssistantReplyMetadata(value: unknown): value is AssistantReplyMetadata {
+  if (!value || typeof value !== 'object') {
+    return false;
+  }
+  const record = value as Record<string, unknown>;
+  return (
+    typeof record.emotion === 'string' &&
+    typeof record.valence === 'number' &&
+    typeof record.arousal === 'number' &&
+    typeof record.dominance === 'number'
+  );
+}
+
 function getActiveTtsLabel(settings: AiSettings, piperVoice?: PiperVoiceProfile | null) {
   return settings.ttsProvider === 'piper'
     ? (piperVoice?.name ?? 'Piper voice')
@@ -883,7 +898,11 @@ async function readAiProxyStream(
   onTextDelta?: (delta: string) => void,
   onAudioChunk?: (chunk: RemoteTtsAudioChunk) => void,
   signal?: AbortSignal,
-): Promise<{ meta?: AiProxyHealth['providerState']; text: string }> {
+): Promise<{
+  meta?: AiProxyHealth['providerState'];
+  replyMetadata?: AssistantReplyMetadata | null;
+  text: string;
+}> {
   if (!response.body) {
     throw new Error('Stream bot AI proxy did not return a readable stream.');
   }
@@ -894,6 +913,7 @@ async function readAiProxyStream(
   let streamedText = '';
   let finalText = '';
   let finalMeta: AiProxyHealth['providerState'] | undefined;
+  let finalReplyMetadata: AssistantReplyMetadata | null | undefined;
 
   const handleBlock = (block: string) => {
     const data = block
@@ -934,7 +954,14 @@ async function readAiProxyStream(
     }
     if (event.type === 'done') {
       finalText = event.text?.trim() || streamedText.trim();
-      finalMeta = event.meta;
+      if (isAssistantReplyMetadata(event.replyMetadata)) {
+        finalReplyMetadata = event.replyMetadata;
+      } else if (isAssistantReplyMetadata(event.meta)) {
+        finalReplyMetadata = event.meta;
+      } else {
+        finalMeta = event.meta ?? undefined;
+        finalReplyMetadata = event.replyMetadata ?? null;
+      }
     }
   };
 
@@ -970,6 +997,7 @@ async function readAiProxyStream(
 
   return {
     meta: finalMeta,
+    replyMetadata: finalReplyMetadata,
     text: finalText || streamedText.trim(),
   };
 }
@@ -1105,6 +1133,7 @@ async function requestChatCompletion({
         },
       ],
       meta: streamResult.meta,
+      replyMetadata: streamResult.replyMetadata,
     };
   }
 
@@ -6035,7 +6064,7 @@ function App() {
         if (!assistantContent) {
           throw new Error('AI backend returned an empty chat reply.');
         }
-        playAssistantMetadataAnimation(assistantReply.metadata, stateKey);
+        playAssistantMetadataAnimation(response.replyMetadata ?? assistantReply.metadata, stateKey);
         const completedAssistantMessage = {
           ...assistantMessage,
           content: assistantContent,

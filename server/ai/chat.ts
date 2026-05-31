@@ -7,6 +7,7 @@ import {
   waitForLiveTtsBridge,
 } from './liveTtsBridge';
 import { completeChat, streamChat } from './llmGateway';
+import type { StreamChatResult } from './llmGateway';
 import { readProviderKeys } from './providerKeys';
 import { streamFishTtsTextStream } from '../tts/FishTtsStream';
 
@@ -60,6 +61,20 @@ export function normalizeChatRequest(input: z.infer<typeof chatRequestInputSchem
     toolChoiceMode: input.toolChoiceMode,
     maxToolRounds: input.maxToolRounds,
     stream: input.stream,
+  };
+}
+
+export function buildChatDoneEventPayload(
+  result: Pick<StreamChatResult, 'metadata' | 'model' | 'provider' | 'visibleText'>,
+) {
+  return {
+    ok: true,
+    text: result.visibleText,
+    meta: {
+      provider: result.provider,
+      model: result.model,
+    },
+    replyMetadata: result.metadata,
   };
 }
 
@@ -191,7 +206,7 @@ export async function handleChat(req: Request, res: Response): Promise<void> {
         });
       }
     }
-    send('done', { ok: true, text: result.visibleText, meta: result.metadata });
+    send('done', buildChatDoneEventPayload(result));
   } catch (err) {
     bridge?.fail(err instanceof Error ? err : new Error(String(err)));
     if (bridgeDone) {
