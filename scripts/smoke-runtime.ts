@@ -34,6 +34,18 @@ const checks: Check[] = [
     expectedStatus: 401,
     body: { provider: 'fish', text: 'hi' },
   },
+  {
+    name: 'voice list no-key guard',
+    path: '/tts/voices?provider=fish-speech',
+    expectedStatus: 401,
+  },
+  {
+    name: 'voice create validation guard',
+    method: 'POST',
+    path: '/tts/voices/create',
+    expectedStatus: 400,
+    body: { provider: 'fish-speech', name: '', sampleBase64: '' },
+  },
 ];
 
 function delay(ms: number) {
@@ -116,4 +128,3 @@ main().catch((error) => {
   console.error(error instanceof Error ? error.message : String(error));
   process.exitCode = 1;
 });
-

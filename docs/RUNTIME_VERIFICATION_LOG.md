@@ -25,6 +25,8 @@ npm run smoke:runtime
 | Memory | `GET /memory/status` | `200` | GRILLO/Ladybug route surface is mounted. |
 | Main chat no-key guard | `POST /ai/chat` without provider key | `401` | Missing Account/env LLM key fails cleanly. |
 | TTS no-key guard | `POST /tts/stream` without provider key | `401` | Missing Account/env TTS key fails cleanly. |
+| Voice list no-key guard | `GET /tts/voices?provider=fish-speech` without provider key | `401` | Voice Lab list route is mounted and missing Account/env TTS key fails cleanly. |
+| Voice create validation guard | `POST /tts/voices/create` with invalid body | `400` | Voice Lab create route validates before provider calls. |
 
 Remaining verification:
 
