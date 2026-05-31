@@ -105,6 +105,16 @@ export function parseLocalTransferBackup(value: string): YourWifeyLocalTransferB
   };
 }
 
+export function formatLocalTransferBackupError(action: 'export' | 'import', error: unknown) {
+  const detail =
+    error instanceof Error && error.message.trim()
+      ? error.message.trim()
+      : typeof error === 'string' && error.trim()
+        ? error.trim()
+        : 'unknown error';
+  return `Local transfer backup ${action} failed: ${detail}`;
+}
+
 export async function blobToBase64(blob: Blob): Promise<string> {
   const bytes = new Uint8Array(await blob.arrayBuffer());
   let binary = '';

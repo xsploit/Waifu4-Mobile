@@ -11,6 +11,7 @@ import {
   base64ToBlob,
   blobToBase64,
   createLocalTransferBackup,
+  formatLocalTransferBackupError,
   parseLocalTransferBackup,
   serializeLocalTransferBackup,
 } from './local-transfer-backup';
@@ -133,6 +134,15 @@ describe('local transfer backup', () => {
   it('rejects unrelated JSON files', () => {
     expect(() => parseLocalTransferBackup('{"app":"other"}')).toThrow(
       'Choose a Web Waifu 4 local transfer backup JSON file.',
+    );
+  });
+
+  it('formats import/export failures for account tab status text', () => {
+    expect(formatLocalTransferBackupError('import', new Error('bad file'))).toBe(
+      'Local transfer backup import failed: bad file',
+    );
+    expect(formatLocalTransferBackupError('export', '')).toBe(
+      'Local transfer backup export failed: unknown error',
     );
   });
 
