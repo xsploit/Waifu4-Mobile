@@ -1,9 +1,10 @@
 import WebSocket from 'ws';
 import type {
+  TwitchChatMembershipEvent,
   TwitchChatSource,
   TwitchChatSourceHandlers,
 } from './TwitchChatSource.js';
-import { parseIrcMessage, splitIrcFrames } from './ircMessage.js';
+import { parseIrcMessage, splitIrcFrames, type ParsedIrcMessage } from './ircMessage.js';
 
 export type TwitchIrcSourceOptions = {
   channel: string;
@@ -46,6 +47,31 @@ function loginFromPrefix(prefix: string | undefined) {
     return '';
   }
   return prefix.split('!')[0]?.toLowerCase() ?? '';
+}
+
+export function toTwitchChatMembershipEvent(
+  parsed: ParsedIrcMessage,
+  currentChannel: string,
+): TwitchChatMembershipEvent | null {
+  if (parsed.command !== 'JOIN' && parsed.command !== 'PART') {
+    return null;
+  }
+
+  const channel = normalizeChannel(parsed.params[0] ?? parsed.trailing ?? currentChannel);
+  const user = loginFromPrefix(parsed.prefix);
+  if (!user || channel !== normalizeChannel(currentChannel)) {
+    return null;
+  }
+
+  const timestamp = Date.now();
+  return {
+    id: `irc-${parsed.command.toLowerCase()}-${channel}-${user}-${timestamp}`,
+    type: parsed.command === 'JOIN' ? 'join' : 'part',
+    user,
+    displayName: parsed.tags['display-name'] || user,
+    channel,
+    timestamp,
+  };
 }
 
 export class TwitchIrcSource implements TwitchChatSource {
@@ -264,6 +290,12 @@ export class TwitchIrcSource implements TwitchChatSource {
           level: parsed.trailing.toLowerCase().includes('failed') ? 'error' : 'warning',
           message: `Twitch IRC notice: ${parsed.trailing}`,
         });
+        continue;
+      }
+
+      const membershipEvent = toTwitchChatMembershipEvent(parsed, this.currentChannel);
+      if (membershipEvent) {
+        this.handlers.onMembership?.(membershipEvent);
         continue;
       }
 

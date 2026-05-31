@@ -9,12 +9,22 @@ export type TwitchChatMessage = {
   isBroadcaster: boolean;
 };
 
+export type TwitchChatMembershipEvent = {
+  id: string;
+  type: 'join' | 'part';
+  user: string;
+  displayName: string;
+  channel: string;
+  timestamp: number;
+};
+
 export type TwitchChatStatus = {
   level: 'info' | 'warning' | 'error';
   message: string;
 };
 
 export type TwitchChatSourceHandlers = {
+  onMembership?(event: TwitchChatMembershipEvent): void;
   onMessage(message: TwitchChatMessage): void;
   onStatus(status: TwitchChatStatus): void;
 };

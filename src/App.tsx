@@ -6391,6 +6391,13 @@ function App() {
           return;
         }
 
+        if (parsed.type === 'twitch:membership') {
+          setTwitchMembershipStatus(
+            `${parsed.payload.displayName} ${parsed.payload.type === 'join' ? 'joined' : 'left'} #${parsed.payload.channel}.`,
+          );
+          return;
+        }
+
         if (parsed.type === 'ai:thinking') {
           const player = createStreamingSpeechPlayer(
             aiSettingsRef.current.ttsEnabled && aiSettingsRef.current.ttsAutoSpeak,

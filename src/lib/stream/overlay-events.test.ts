@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { shouldConnectOverlaySocket } from './overlay-events';
+import { parseOverlayServerEvent, shouldConnectOverlaySocket } from './overlay-events';
 
 describe('overlay socket activation', () => {
   it('listens by default so backend runtime commands can reach the active frontend', () => {
@@ -20,5 +20,32 @@ describe('overlay socket activation', () => {
     expect(shouldConnectOverlaySocket({ VITE_OVERLAY_WS_URL: 'ws://127.0.0.1:8797/ws' })).toBe(
       true,
     );
+  });
+});
+
+describe('overlay server events', () => {
+  it('accepts Twitch membership events from the backend runtime', () => {
+    expect(
+      parseOverlayServerEvent(
+        JSON.stringify({
+          type: 'twitch:membership',
+          payload: {
+            channel: 'subsect',
+            displayName: 'Viewer',
+            id: 'membership-1',
+            timestamp: 1700000000000,
+            type: 'join',
+            user: 'viewer',
+          },
+        }),
+      ),
+    ).toMatchObject({
+      payload: {
+        channel: 'subsect',
+        type: 'join',
+        user: 'viewer',
+      },
+      type: 'twitch:membership',
+    });
   });
 });

@@ -11,8 +11,18 @@ export type OverlayTwitchChatMessage = {
   isBroadcaster: boolean;
 };
 
+export type OverlayTwitchMembershipEvent = {
+  id: string;
+  type: 'join' | 'part';
+  user: string;
+  displayName: string;
+  channel: string;
+  timestamp: number;
+};
+
 export type OverlayServerEvent =
   | { type: 'chat:message'; payload: OverlayTwitchChatMessage }
+  | { type: 'twitch:membership'; payload: OverlayTwitchMembershipEvent }
   | {
       type: 'chat:batch';
       payload: {

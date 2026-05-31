@@ -178,6 +178,12 @@ export class TwitchRuntime {
     this.sourceMode = boolFromEnv(env.TWITCH_MOCK) ? 'mock' : 'irc';
     const provider = options.provider ?? new EnvChatProvider(env);
     const handlers: TwitchChatSourceHandlers = {
+      onMembership: (event) => {
+        this.emit({
+          type: 'twitch:membership',
+          payload: event,
+        });
+      },
       onMessage: (message) => {
         void this.handleMessage(message);
       },

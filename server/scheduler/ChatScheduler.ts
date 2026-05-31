@@ -1,9 +1,10 @@
 import type { ChatProvider, ChatProviderMessage } from '../ai/ChatProvider.js';
-import type { TwitchChatMessage } from '../twitch/TwitchChatSource.js';
+import type { TwitchChatMembershipEvent, TwitchChatMessage } from '../twitch/TwitchChatSource.js';
 import { mentionsBot, selectMeaningfulMessages } from './messageFilters.js';
 
 export type StreamBotEvent =
   | { type: 'chat:message'; payload: TwitchChatMessage }
+  | { type: 'twitch:membership'; payload: TwitchChatMembershipEvent }
   | {
       type: 'chat:batch';
       payload: {
