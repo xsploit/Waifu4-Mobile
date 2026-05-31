@@ -59,6 +59,12 @@ export function normalizeTwitchStreamTranscriptionModel(value: unknown) {
   return SAFE_TWITCH_TRANSCRIPTION_MODELS.get(model.toLowerCase()) ?? 'openai/whisper-large-v3';
 }
 
+export function getTwitchStreamTranscriptionProvider(model: string): 'fish-speech' | 'openrouter' {
+  return normalizeTwitchStreamTranscriptionModel(model) === 'fish-audio/asr'
+    ? 'fish-speech'
+    : 'openrouter';
+}
+
 export function formatTwitchStreamTranscriptContext(
   transcripts: TwitchStreamTranscript[],
   limit: number,

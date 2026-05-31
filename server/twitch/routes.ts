@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import { z } from 'zod';
 import {
+  getTwitchStreamTranscriptionProvider,
   normalizeTwitchStreamTranscriptionModel,
   normalizeTwitchStreamVisionDetail,
 } from '../../src/lib/twitch/stream-transcription';
@@ -82,8 +83,7 @@ export function createTwitchRouter(runtime?: TwitchRuntime) {
       const body = twitchStreamBodySchema.parse(req.body ?? {});
       const keys = readProviderKeys(req);
       const requestedModel = normalizeTwitchStreamTranscriptionModel(body.model);
-      const provider =
-        body.provider ?? (requestedModel === 'fish-audio/asr' ? 'fish-speech' : 'openrouter');
+      const provider = body.provider ?? getTwitchStreamTranscriptionProvider(requestedModel);
       const apiKey = provider === 'fish-speech' ? keys.ttsKey : keys.llmKey;
       const apiBaseUrl = provider === 'fish-speech' ? fishBaseUrl() : openRouterBaseUrl();
       const transcript = await transcribeTwitchStreamSample({

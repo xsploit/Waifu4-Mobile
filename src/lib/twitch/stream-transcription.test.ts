@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+  getTwitchStreamTranscriptionProvider,
   isLikelyVisionModel,
   normalizeTwitchStreamVisionDetail,
   normalizeTwitchStreamTranscriptionModel,
@@ -29,5 +30,11 @@ describe('stream transcription helpers', () => {
     expect(normalizeTwitchStreamVisionDetail('low')).toBe('low');
     expect(normalizeTwitchStreamVisionDetail('weird')).toBe('low');
     expect(normalizeTwitchStreamVisionDetail(undefined)).toBe('low');
+  });
+
+  it('routes Twitch stream transcription models to the required provider key lane', () => {
+    expect(getTwitchStreamTranscriptionProvider('fish-audio/asr')).toBe('fish-speech');
+    expect(getTwitchStreamTranscriptionProvider('openai/whisper-large-v3')).toBe('openrouter');
+    expect(getTwitchStreamTranscriptionProvider('bad-model')).toBe('openrouter');
   });
 });

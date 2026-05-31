@@ -200,6 +200,7 @@ import {
 } from './lib/twitch/stream-command';
 import {
   formatTwitchStreamTranscriptContext,
+  getTwitchStreamTranscriptionProvider,
   isLikelyVisionModel,
   normalizeTwitchStreamVisionDetail,
   normalizeTwitchStreamTranscriptionModel,
@@ -1224,22 +1225,27 @@ async function requestTwitchStreamTranscript(input: {
   sampleSeconds: number;
 }) {
   const model = normalizeTwitchStreamTranscriptionModel(input.model);
+  const transcriptionProvider = getTwitchStreamTranscriptionProvider(model);
   const headers = await buildBackendProviderHeaders({
-    llmProvider: input.llmProvider,
+    llmProvider:
+      transcriptionProvider === 'openrouter' ? 'openrouter-responses' : input.llmProvider,
     providerKeyVaultWorkspaceId: input.providerKeyVaultWorkspaceId,
   });
-  const fishAsrApiKey = await getBrowserRemoteTtsApiKey(
-    'fish-speech',
-    input.providerKeyVaultWorkspaceId,
-  );
-  if (fishAsrApiKey) {
-    headers['x-yourwifey-tts-provider-key'] = fishAsrApiKey;
+  if (transcriptionProvider === 'fish-speech') {
+    const fishAsrApiKey = await getBrowserRemoteTtsApiKey(
+      'fish-speech',
+      input.providerKeyVaultWorkspaceId,
+    );
+    if (fishAsrApiKey) {
+      headers['x-yourwifey-tts-provider-key'] = fishAsrApiKey;
+    }
   }
   const response = await fetch(getTwitchTranscriptionUrl(), {
     body: JSON.stringify({
       channel: input.channel,
       llmProvider: input.llmProvider,
       model,
+      provider: transcriptionProvider,
       sampleSeconds: input.sampleSeconds,
     }),
     headers,
