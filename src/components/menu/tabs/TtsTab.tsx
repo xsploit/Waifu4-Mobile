@@ -1,5 +1,12 @@
+import { useMemo, useRef, useState } from 'react';
 import type { Dispatch, SetStateAction } from 'react';
 import type { AiSettings } from '../../../lib/chat/types';
+import {
+  DEFAULT_TTS_BENCHMARK_TEXT,
+  formatTtsBenchmarkResults,
+  summarizeTtsBenchmarkResults,
+  type TtsBenchmarkResult,
+} from '../../../lib/tts/benchmark';
 import { getRemoteTtsProviderLabel, getRemoteVoiceStatus } from '../../../lib/tts/labels';
 import type { PiperVoiceProfile } from '../../../lib/tts/piper';
 import type { RemoteTtsProvider, RemoteTtsVoice } from '../../../lib/tts/remote';
@@ -11,6 +18,12 @@ type TtsTabProps = {
   onCacheVoice: () => void;
   onRefreshRemoteVoices: (provider: RemoteTtsProvider) => void;
   onRefreshVoices: () => void;
+  onRunTtsBenchmark: (
+    text: string,
+    rounds: number,
+    signal: AbortSignal,
+    onResults: (results: TtsBenchmarkResult[]) => void,
+  ) => Promise<TtsBenchmarkResult[]>;
   onSelectVoice: (voiceId: string) => void;
   onSpeakLastReply: () => void;
   onStopTts: () => void;
@@ -53,6 +66,7 @@ export function TtsTab({
   onCacheVoice,
   onRefreshRemoteVoices,
   onRefreshVoices,
+  onRunTtsBenchmark,
   onSelectVoice,
   onSpeakLastReply,
   onStopTts,
@@ -69,6 +83,12 @@ export function TtsTab({
   voicesError,
   voicesLoading,
 }: TtsTabProps) {
+  const benchmarkAbortRef = useRef<AbortController | null>(null);
+  const [benchmarkText, setBenchmarkText] = useState(DEFAULT_TTS_BENCHMARK_TEXT);
+  const [benchmarkRounds, setBenchmarkRounds] = useState(2);
+  const [benchmarkRunning, setBenchmarkRunning] = useState(false);
+  const [benchmarkStatus, setBenchmarkStatus] = useState('bench=idle');
+  const [benchmarkResults, setBenchmarkResults] = useState<TtsBenchmarkResult[]>([]);
   const selectedVoice = ttsVoices.find((voice) => voice.key === aiSettings.ttsVoice) ?? null;
   const selectedRemoteProvider: RemoteTtsProvider | null =
     aiSettings.ttsProvider === 'piper' ? null : aiSettings.ttsProvider;
@@ -110,6 +130,10 @@ export function TtsTab({
   const activeRemoteTtsMode = normalizeRemoteModeForProvider(aiSettings);
   const fishLiveBridgeActive =
     aiSettings.ttsProvider === 'fish-speech' && activeRemoteTtsMode === 'live-bridge';
+  const benchmarkSummary = useMemo(
+    () => summarizeTtsBenchmarkResults(benchmarkResults),
+    [benchmarkResults],
+  );
 
   const renderRemoteVoiceOptions = () =>
     remoteVoiceOptions.map((voice) => {
@@ -122,6 +146,44 @@ export function TtsTab({
         </option>
       );
     });
+
+  const runBenchmark = async () => {
+    const text = benchmarkText.trim();
+    if (!text || benchmarkRunning) {
+      return;
+    }
+    const rounds = Math.max(1, Math.min(10, Math.round(benchmarkRounds) || 1));
+    const controller = new AbortController();
+    benchmarkAbortRef.current = controller;
+    setBenchmarkRunning(true);
+    setBenchmarkResults([]);
+    setBenchmarkStatus(`bench=running ${rounds} round${rounds === 1 ? '' : 's'}`);
+    try {
+      const results = await onRunTtsBenchmark(text, rounds, controller.signal, setBenchmarkResults);
+      setBenchmarkResults(results);
+      setBenchmarkStatus(
+        `bench=done · ${results.filter((result) => result.ok).length}/${results.length} ok`,
+      );
+    } catch (error) {
+      setBenchmarkStatus(`bench=${error instanceof Error ? error.message : String(error)}`);
+    } finally {
+      benchmarkAbortRef.current = null;
+      setBenchmarkRunning(false);
+    }
+  };
+
+  const stopBenchmark = () => {
+    benchmarkAbortRef.current?.abort();
+    setBenchmarkStatus('bench=stopping');
+  };
+
+  const copyBenchmarkResults = async () => {
+    if (benchmarkResults.length === 0) {
+      return;
+    }
+    await navigator.clipboard.writeText(formatTtsBenchmarkResults(benchmarkText, benchmarkResults));
+    setBenchmarkStatus('bench=copied');
+  };
 
   return (
     <>
@@ -571,6 +633,71 @@ export function TtsTab({
             Stop Audio
           </button>
         </div>
+      </div>
+
+      <div className="control-group">
+        <div className="control-label">Browser Benchmark</div>
+        <textarea
+          className="textarea-tech"
+          onChange={(event) => setBenchmarkText(event.target.value)}
+          rows={2}
+          value={benchmarkText}
+        />
+        <div className="btn-row">
+          <input
+            aria-label="Benchmark rounds"
+            className="input-tech"
+            max={10}
+            min={1}
+            onChange={(event) => setBenchmarkRounds(Number(event.target.value) || 1)}
+            type="number"
+            value={benchmarkRounds}
+          />
+          <button
+            className="btn-tech secondary"
+            disabled={benchmarkRunning || !benchmarkText.trim()}
+            onClick={() => void runBenchmark()}
+            type="button"
+          >
+            {benchmarkRunning ? 'Benchmarking...' : 'Benchmark'}
+          </button>
+          {benchmarkRunning ? (
+            <button className="btn-tech secondary" onClick={stopBenchmark} type="button">
+              Stop Bench
+            </button>
+          ) : null}
+          <button
+            className="btn-tech secondary"
+            disabled={benchmarkResults.length === 0}
+            onClick={() => void copyBenchmarkResults()}
+            type="button"
+          >
+            Copy Results
+          </button>
+        </div>
+        <div className="status-copy">{benchmarkStatus}</div>
+        {benchmarkSummary.length > 0 ? (
+          <div className="status-grid">
+            {benchmarkSummary.map((row) => (
+              <div className="status-copy" key={row.label}>
+                <strong>{row.label}</strong> first={row.firstAudioMs ?? 'n/a'}ms · net=
+                {row.totalMs ?? 'n/a'}ms · play={row.playbackMs ?? 'n/a'}ms · chunks=
+                {row.chunks ?? 'n/a'} · KB={row.kb ?? 'n/a'}
+              </div>
+            ))}
+          </div>
+        ) : null}
+        {benchmarkResults.some((result) => !result.ok) ? (
+          <div className="status-grid">
+            {benchmarkResults
+              .filter((result) => !result.ok)
+              .map((result) => (
+                <div className="status-copy" key={`${result.id}-${result.round}`}>
+                  {result.label} r{result.round}: {result.error}
+                </div>
+              ))}
+          </div>
+        ) : null}
       </div>
 
       <div className="control-group">

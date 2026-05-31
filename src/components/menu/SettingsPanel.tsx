@@ -25,6 +25,7 @@ import type {
   VisualSettings,
 } from '../../lib/menu/types';
 import type { PiperVoiceProfile } from '../../lib/tts/piper';
+import type { TtsBenchmarkResult } from '../../lib/tts/benchmark';
 import type {
   CreatedRemoteTtsVoice,
   CreateRemoteTtsVoiceRequest,
@@ -91,6 +92,12 @@ type SettingsPanelProps = {
   onRefreshSavedVrmModels: () => void;
   onRefreshRemoteVoices: (provider: RemoteTtsProvider) => void;
   onRefreshVoices: () => void;
+  onRunTtsBenchmark: (
+    text: string,
+    rounds: number,
+    signal: AbortSignal,
+    onResults: (results: TtsBenchmarkResult[]) => void,
+  ) => Promise<TtsBenchmarkResult[]>;
   onApplyPersonaVoice: (personaId: string) => void;
   onCreateVoiceLabProviderVoice: (
     request: CreateRemoteTtsVoiceRequest,
@@ -215,6 +222,7 @@ export function SettingsPanel({
   onRefreshSavedVrmModels,
   onRefreshRemoteVoices,
   onRefreshVoices,
+  onRunTtsBenchmark,
   onApplyPersonaVoice,
   onCreateVoiceLabProviderVoice,
   onDeleteVoiceLabVoice,
@@ -404,6 +412,7 @@ export function SettingsPanel({
         onCacheVoice={onCacheVoice}
         onRefreshVoices={onRefreshVoices}
         onRefreshRemoteVoices={onRefreshRemoteVoices}
+        onRunTtsBenchmark={onRunTtsBenchmark}
         onSelectVoice={onSelectVoice}
         onSpeakLastReply={onSpeakLastReply}
         onStopTts={onStopTts}

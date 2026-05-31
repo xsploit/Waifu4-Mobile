@@ -168,7 +168,7 @@ import {
 import type { PiperVoiceProfile, WordBoundary } from './lib/tts/piper';
 import { getTtsProviderLabel } from './lib/tts/labels';
 import { getTtsManager, type RemotePcmPushStream } from './lib/tts/manager';
-import { createRemoteTtsVoice, fetchRemoteTtsVoices } from './lib/tts/remote';
+import { createRemoteTtsStream, createRemoteTtsVoice, fetchRemoteTtsVoices } from './lib/tts/remote';
 import type {
   CreateRemoteTtsVoiceRequest,
   CreatedRemoteTtsVoice,
@@ -177,6 +177,13 @@ import type {
   RemoteTtsRequest,
   RemoteTtsVoice,
 } from './lib/tts/remote';
+import {
+  mergeTtsBenchmarkTiming,
+  summarizeTtsBenchmarkTiming,
+  ZERO_TTS_BENCHMARK_TIMING,
+  type TtsBenchmarkResult,
+} from './lib/tts/benchmark';
+import { AudioPlayback } from './tts/AudioPlayback';
 import {
   getOverlaySocketProtocols,
   getOverlaySocketUrl,
@@ -209,6 +216,13 @@ type SafeAreaInsets = {
   right: number;
   bottom: number;
   left: number;
+};
+
+type TtsBenchmarkCandidate = {
+  id: string;
+  label: string;
+  provider: RemoteTtsProvider;
+  request: RemoteTtsRequest;
 };
 
 function getAnimationFormatFromFileName(fileName: string): AnimationFormat {
@@ -1994,6 +2008,7 @@ function App() {
   const grilloMemoryHydrationRunRef = useRef(0);
   const grilloRecentTurnsByStateKeyRef = useRef<Record<string, ChatTurn[]>>({});
   const ttsManager = useMemo(() => getTtsManager(), []);
+  const ttsBenchmarkPlaybackRef = useRef<AudioPlayback | null>(null);
 
   const setAssistantReplyLock = useCallback((locked: boolean) => {
     assistantReplyLockedRef.current = locked;
@@ -3486,9 +3501,189 @@ function App() {
 
   const handleStopTts = useCallback(() => {
     stopTtsPlayback();
+    ttsBenchmarkPlaybackRef.current?.stop();
     stopSubtitleTracking(true);
     setTtsStatus('Playback stopped.');
   }, [stopSubtitleTracking, stopTtsPlayback]);
+
+  const handleRunTtsBenchmark = useCallback(
+    async (
+      text: string,
+      rounds: number,
+      signal: AbortSignal,
+      onResults: (results: TtsBenchmarkResult[]) => void,
+    ) => {
+      const content = text.trim();
+      if (!content) {
+        return [];
+      }
+
+      stopTtsPlayback();
+      stopSubtitleTracking(true);
+      setTtsBusy(true);
+      setTtsStatus('TTS benchmark running.');
+
+      const settings = aiSettingsRef.current;
+      const fishSettings: AiSettings = {
+        ...settings,
+        ttsProvider: 'fish-speech',
+        fishSpeechFormat: 'pcm',
+        remoteTtsMode: 'full-response',
+      };
+      const inworldSettings: AiSettings = {
+        ...settings,
+        ttsProvider: 'inworld',
+        remoteTtsMode: 'full-response',
+      };
+      const candidates: TtsBenchmarkCandidate[] = [
+        {
+          id: 'fish-websocket',
+          label: 'Fish WebSocket',
+          provider: 'fish-speech',
+          request: {
+            ...createRemoteTtsRequest(content, fishSettings),
+            fishTransport: 'websocket',
+            format: 'pcm',
+          },
+        },
+        {
+          id: 'fish-timestamp-sse',
+          label: 'Fish Timestamp SSE',
+          provider: 'fish-speech',
+          request: {
+            ...createRemoteTtsRequest(content, fishSettings),
+            fishTransport: 'timestamp-sse',
+            format: 'pcm',
+          },
+        },
+        {
+          id: 'inworld-http',
+          label: 'Inworld HTTP',
+          provider: 'inworld',
+          request: {
+            ...createRemoteTtsRequest(content, inworldSettings),
+            inworldTransport: 'http',
+          },
+        },
+        {
+          id: 'inworld-websocket',
+          label: 'Inworld WebSocket',
+          provider: 'inworld',
+          request: {
+            ...createRemoteTtsRequest(content, inworldSettings),
+            inworldTransport: 'websocket',
+          },
+        },
+      ];
+      const providerKeys = new Map<RemoteTtsProvider, string | null>();
+      await Promise.all(
+        (['fish-speech', 'inworld'] as const).map(async (provider) => {
+          try {
+            providerKeys.set(
+              provider,
+              (await getBrowserRemoteTtsApiKey(provider, providerKeyVaultWorkspaceId)) ?? null,
+            );
+          } catch {
+            providerKeys.set(provider, null);
+          }
+        }),
+      );
+
+      const playback = ttsBenchmarkPlaybackRef.current ?? new AudioPlayback();
+      ttsBenchmarkPlaybackRef.current = playback;
+      const safeRounds = Math.max(1, Math.min(10, Math.round(rounds) || 1));
+      const results: TtsBenchmarkResult[] = [];
+
+      try {
+        for (let round = 1; round <= safeRounds; round += 1) {
+          for (const candidate of candidates) {
+            if (signal.aborted) {
+              throw new Error('Benchmark stopped');
+            }
+
+            playback.stop();
+            playback.reset();
+            setTtsStatus(`Benchmark ${candidate.label} · round ${round}/${safeRounds}.`);
+            const startedAt = performance.now();
+            let firstAudioMs: number | null = null;
+            let chunks = 0;
+            let bytes = 0;
+            let timing = ZERO_TTS_BENCHMARK_TIMING;
+
+            try {
+              for await (const chunk of createRemoteTtsStream(
+                candidate.request,
+                signal,
+                { providerApiKey: providerKeys.get(candidate.provider) ?? null },
+              )) {
+                if (signal.aborted) {
+                  throw new Error('Benchmark stopped');
+                }
+                if (chunk.mimeType !== 'audio/pcm') {
+                  throw new Error(`Benchmark expected audio/pcm, got ${chunk.mimeType}.`);
+                }
+                const audioBytes = new Uint8Array(await chunk.audioBlob.arrayBuffer());
+                if (firstAudioMs === null) {
+                  firstAudioMs = Math.round(performance.now() - startedAt);
+                }
+                chunks += 1;
+                bytes += audioBytes.byteLength;
+                timing = mergeTtsBenchmarkTiming(
+                  timing,
+                  summarizeTtsBenchmarkTiming(chunk.timestamps, chunk.speechTiming),
+                );
+                await playback.playPcmChunk(
+                  audioBytes,
+                  chunk.sampleRate ?? candidate.request.sampleRate ?? 44100,
+                );
+              }
+
+              const networkDoneAt = performance.now();
+              await playback.waitForIdle();
+              results.push({
+                id: candidate.id,
+                label: candidate.label,
+                round,
+                ok: true,
+                firstAudioMs,
+                totalMs: Math.round(networkDoneAt - startedAt),
+                playbackMs: Math.round(performance.now() - startedAt),
+                chunks,
+                bytes,
+                timing,
+              });
+            } catch (error) {
+              if (signal.aborted) {
+                throw new Error('Benchmark stopped');
+              }
+              results.push({
+                id: candidate.id,
+                label: candidate.label,
+                round,
+                ok: false,
+                firstAudioMs,
+                totalMs: Math.round(performance.now() - startedAt),
+                playbackMs: Math.round(performance.now() - startedAt),
+                chunks,
+                bytes,
+                timing,
+                error: error instanceof Error ? error.message : String(error),
+              });
+            }
+            onResults([...results]);
+          }
+        }
+        setTtsStatus('TTS benchmark finished.');
+        return results;
+      } finally {
+        if (signal.aborted) {
+          playback.stop();
+        }
+        setTtsBusy(false);
+      }
+    },
+    [providerKeyVaultWorkspaceId, stopSubtitleTracking, stopTtsPlayback],
+  );
 
   const playAssistantResponse = useCallback(
     async (assistantMessage: ChatMessage, shouldSpeak: boolean, label: string) => {
@@ -6737,6 +6932,7 @@ function App() {
               onRunBackendGrilloSemanticIndexing={handleRunBackendGrilloSemanticIndexing}
               onRunBackendGrilloTick={handleRunBackendGrilloTick}
               onRunMemoryAgent={handleRunMemoryAgentNow}
+              onRunTtsBenchmark={handleRunTtsBenchmark}
               onSavePersona={handleSavePersona}
               onSaveVoiceLabVoice={handleSaveVoiceLabVoice}
               onSelectVoice={handleSelectTtsVoice}
