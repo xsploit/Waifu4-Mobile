@@ -1,4 +1,4 @@
-import { Output, generateText, streamText, type ModelMessage } from 'ai';
+import { Output, generateText, stepCountIs, streamText, type ModelMessage } from 'ai';
 import { createGateway } from '@ai-sdk/gateway';
 import { createOpenRouter } from '@openrouter/ai-sdk-provider';
 import {
@@ -15,6 +15,7 @@ import {
   monotonicDelta,
 } from '../../src/brain/replyParser';
 import { createLogger } from '../../src/shared/logger';
+import { createTavilyTools } from './tavilyTools';
 
 const log = createLogger('llm');
 
@@ -28,6 +29,9 @@ export type StreamChatRequest = {
   reasoningEffort?: ReasoningEffort;
   apiKey: string;
   byokOpenAiKey?: string;
+  tavilyKey?: string;
+  toolChoiceMode?: 'auto' | 'required';
+  maxToolRounds?: number;
   signal?: AbortSignal;
 };
 
@@ -40,6 +44,9 @@ export type CompleteChatRequest = {
   reasoningEffort?: ReasoningEffort;
   apiKey: string;
   byokOpenAiKey?: string;
+  tavilyKey?: string;
+  toolChoiceMode?: 'auto' | 'required';
+  maxToolRounds?: number;
   signal?: AbortSignal;
   jsonMode?: boolean;
 };
@@ -77,9 +84,10 @@ export type StreamChatResult = {
   model: string;
 };
 
-function buildProviderOptions(
+export function buildProviderOptions(
   req: Pick<StreamChatRequest, 'provider' | 'model' | 'reasoningEffort' | 'byokOpenAiKey'>,
   structured: boolean,
+  hasTools = false,
 ): Record<string, unknown> | undefined {
   const options: Record<string, unknown> = {};
 
@@ -96,7 +104,7 @@ function buildProviderOptions(
 
   // The crown-jewel lesson: without require_parameters, OpenRouter can silently
   // route to a provider that ignores json_schema and return malformed output.
-  if (req.provider === 'openrouter-responses' && structured) {
+  if (req.provider === 'openrouter-responses' && (structured || hasTools)) {
     options.openrouter = { provider: { require_parameters: true } };
   }
 
@@ -135,7 +143,8 @@ export function toModelMessages(messages: LlmMessage[]): ModelMessage[] {
 
 export async function completeChat(req: CompleteChatRequest): Promise<CompleteChatResult> {
   const model = createModel(req);
-  const providerOptions = buildProviderOptions(req, req.jsonMode === true);
+  const tools = createTavilyTools(req.tavilyKey);
+  const providerOptions = buildProviderOptions(req, req.jsonMode === true, !!tools);
   const started = Date.now();
 
   log.info('completion start', {
@@ -153,6 +162,9 @@ export async function completeChat(req: CompleteChatRequest): Promise<CompleteCh
     temperature: req.temperature,
     maxOutputTokens: req.maxTokens,
     output: req.jsonMode ? jsonTextOutput : undefined,
+    tools,
+    toolChoice: tools && req.toolChoiceMode === 'required' ? 'required' : undefined,
+    stopWhen: tools ? stepCountIs(req.maxToolRounds ?? 10) : undefined,
     providerOptions: providerOptions as never,
   });
   const text =
@@ -180,7 +192,8 @@ export async function streamChat(
 ): Promise<StreamChatResult> {
   const structured = req.replyFormat === 'structured';
   const model = createModel(req);
-  const providerOptions = buildProviderOptions(req, structured);
+  const tools = createTavilyTools(req.tavilyKey);
+  const providerOptions = buildProviderOptions(req, structured, !!tools);
   let streamError: string | null = null;
   let deltaCount = 0;
   const started = Date.now();
@@ -210,6 +223,9 @@ export async function streamChat(
     temperature: req.temperature,
     maxOutputTokens: req.maxTokens,
     output: structured ? Output.object({ schema: assistantReplySchema }) : undefined,
+    tools,
+    toolChoice: tools && req.toolChoiceMode === 'required' ? 'required' : undefined,
+    stopWhen: tools ? stepCountIs(req.maxToolRounds ?? 10) : undefined,
     providerOptions: providerOptions as never,
     onError: ({ error }) => {
       streamError = error instanceof Error ? error.message : String(error);

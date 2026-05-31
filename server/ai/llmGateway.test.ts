@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { toModelMessages } from './llmGateway';
+import { buildProviderOptions, toModelMessages } from './llmGateway';
 
 describe('LLM gateway message mapping', () => {
   it('passes Twitch stream frames as user image parts', () => {
@@ -50,5 +50,33 @@ describe('LLM gateway message mapping', () => {
       { role: 'system', content: 'Stay in character.' },
       { role: 'assistant', content: 'Sure.' },
     ]);
+  });
+});
+
+describe('LLM gateway provider options', () => {
+  it('requires OpenRouter providers that support attached tools', () => {
+    expect(
+      buildProviderOptions(
+        {
+          provider: 'openrouter-responses',
+          model: 'deepseek/deepseek-v4-flash',
+        },
+        false,
+        true,
+      ),
+    ).toEqual({ openrouter: { provider: { require_parameters: true } } });
+  });
+
+  it('does not add OpenRouter require_parameters for plain text without tools', () => {
+    expect(
+      buildProviderOptions(
+        {
+          provider: 'openrouter-responses',
+          model: 'deepseek/deepseek-v4-flash',
+        },
+        false,
+        false,
+      ),
+    ).toBeUndefined();
   });
 });

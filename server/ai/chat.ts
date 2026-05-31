@@ -12,6 +12,7 @@ import { streamFishTtsTextStream } from '../tts/FishTtsStream';
 
 const providerSchema = z.enum(['vercel-gateway', 'openrouter-responses']);
 const replyFormatSchema = z.enum(['structured', 'text']);
+const toolChoiceModeSchema = z.enum(['auto', 'required']);
 const messageImageSchema = z.object({
   imageUrl: z.string().min(1),
   mediaType: z.string().min(1).optional(),
@@ -36,6 +37,8 @@ const chatRequestInputSchema = z.object({
   reasoningEffort: z.enum(['minimal', 'low', 'medium', 'high']).optional(),
   temperature: z.number().min(0).max(2).optional(),
   maxTokens: z.number().int().positive().optional(),
+  toolChoiceMode: toolChoiceModeSchema.optional(),
+  maxToolRounds: z.number().int().min(1).max(30).optional(),
   stream: z.boolean().default(true),
   ttsBridge: z.unknown().optional(),
 });
@@ -54,6 +57,8 @@ function normalizeChatRequest(input: z.infer<typeof chatRequestInputSchema>) {
     reasoningEffort: input.reasoningEffort,
     temperature: input.temperature,
     maxTokens: input.maxTokens,
+    toolChoiceMode: input.toolChoiceMode,
+    maxToolRounds: input.maxToolRounds,
     stream: input.stream,
   };
 }
@@ -86,6 +91,7 @@ export async function handleChat(req: Request, res: Response): Promise<void> {
         ...request,
         apiKey: keys.llmKey,
         byokOpenAiKey: keys.byokOpenAiKey,
+        tavilyKey: keys.tavilyKey,
         jsonMode: request.replyFormat === 'structured',
       });
       res.json({ ok: true, text: result.text, meta: { provider: result.provider, model: result.model } });
@@ -164,6 +170,7 @@ export async function handleChat(req: Request, res: Response): Promise<void> {
         ...request,
         apiKey: keys.llmKey,
         byokOpenAiKey: keys.byokOpenAiKey,
+        tavilyKey: keys.tavilyKey,
         signal: controller.signal,
       },
       (text) => {
