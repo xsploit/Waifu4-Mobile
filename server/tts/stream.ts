@@ -1,6 +1,5 @@
 import type { Request, Response } from 'express';
 import { z } from 'zod';
-import { readProviderKeys } from '../ai/providerKeys';
 import { streamFishTimestampTts, streamFishTts } from './FishTtsStream';
 import { streamInworldTts } from './InworldTtsStream';
 import { buildSpeechTiming, createSpeechTimingAccumulator } from './SpeechTiming';
@@ -27,6 +26,20 @@ const ttsRequestSchema = z.object({
   autoMode: z.boolean().optional(),
 });
 
+function header(req: Request, name: string): string | undefined {
+  const value = req.headers[name];
+  if (typeof value === 'string') return value;
+  return Array.isArray(value) ? value[0] : undefined;
+}
+
+export function readTtsStreamProviderKey(req: Request, provider: 'fish' | 'inworld') {
+  const requestKey = header(req, 'x-yourwifey-tts-provider-key')?.trim();
+  if (requestKey) return requestKey;
+  return provider === 'inworld'
+    ? process.env.INWORLD_API_KEY
+    : process.env.FISH_AUDIO_API_KEY ?? process.env.FISHSPEECH_API_KEY;
+}
+
 /**
  * POST /tts/stream — NDJSON audio stream.
  * Lines: {type:'audio', audio:base64, format, sampleRate} ... {type:'done', stats} | {type:'error', error}.
@@ -37,9 +50,8 @@ export async function handleTtsStream(req: Request, res: Response): Promise<void
     res.status(400).json({ ok: false, error: parsed.error.message });
     return;
   }
-  const keys = readProviderKeys(req);
   const provider = parsed.data.provider ?? 'fish';
-  const ttsKey = keys.ttsKey ?? (provider === 'inworld' ? process.env.INWORLD_API_KEY : undefined);
+  const ttsKey = readTtsStreamProviderKey(req, provider);
   if (!ttsKey) {
     res.status(401).json({ ok: false, error: 'Missing TTS provider key' });
     return;
