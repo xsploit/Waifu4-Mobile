@@ -93,3 +93,13 @@ Result:
 | Voice create validation guard | `POST /tts/voices/create` with invalid body | `400` |
 
 Meaning: the rebuilt local backend surfaces still boot and fail cleanly after the chat-stream `replyMetadata` SSE contract change and the latest tab parity coverage.
+
+## 2026-05-31 Full Test Suite After Tab Parity Pass
+
+Command:
+
+```text
+npm test
+```
+
+Result: passed. Vitest reported 64 passing tests and 0 failures across the local suite after the recent TTS tab default, chat-stream emotion telemetry, Emotion Log model/affect VAD display, Twitch ASR, and provider embedding picker parity commits.
