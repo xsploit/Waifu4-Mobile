@@ -217,9 +217,53 @@ describe('SettingsPanel tab smoke', () => {
     expect(html).toContain('Direct queue:');
     expect(html).toContain('ASR:');
     expect(html).toContain('ASR model');
+    expect(html).toContain('Fish ASR');
     expect(html).toContain('OpenRouter ASR uses the Account-tab OpenRouter key');
     expect(html).toContain('Attach Twitch stream frame to vision models');
     expect(html).toContain('Captures one JPEG frame from the Twitch stream');
+  });
+
+  it('keeps provider embedding picker filtered by metadata while allowing custom IDs', () => {
+    const props = createProps('context');
+    props.aiSettings = {
+      ...props.aiSettings,
+      embeddingModel: 'custom/embed-model',
+    };
+    props.availableModels = ['provider/chat-model', 'provider/embed-model'];
+    props.availableModelMetadata = new Map([
+      [
+        'provider/chat-model',
+        {
+          id: 'provider/chat-model',
+          inputModalities: ['text'],
+          supportedParameters: ['structured_outputs'],
+          supportsStructuredOutputs: true,
+          type: 'language',
+        },
+      ],
+      [
+        'provider/embed-model',
+        {
+          id: 'provider/embed-model',
+          inputModalities: ['text'],
+          supportedParameters: [],
+          supportsStructuredOutputs: false,
+          type: 'embedding',
+        },
+      ],
+    ]);
+
+    const html = renderToStaticMarkup(<SettingsPanel {...props} />);
+    const embeddingDatalist =
+      html.match(/<datalist id="provider-embedding-model-options">.*?<\/datalist>/)?.[0] ?? '';
+
+    expect(html).toContain('Embedding source');
+    expect(html).toContain('Embedding model (provider)');
+    expect(embeddingDatalist).toContain('value="provider/embed-model"');
+    expect(embeddingDatalist).toContain('value="custom/embed-model"');
+    expect(embeddingDatalist).not.toContain('value="provider/chat-model"');
+    expect(html).toContain('Provider embedding catalog:');
+    expect(html).toContain('1 embedding model');
   });
 
   it('keeps Voice Lab provider creation and persona binding controls mounted', () => {
