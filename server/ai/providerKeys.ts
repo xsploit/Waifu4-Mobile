@@ -3,6 +3,7 @@ import type { Request } from 'express';
 export type ProviderKeys = {
   llmKey?: string;
   byokOpenAiKey?: string;
+  tavilyKey?: string;
   ttsKey?: string;
 };
 
@@ -35,6 +36,7 @@ export function readProviderKeys(req: Request): ProviderKeys {
   return {
     llmKey: header(req, 'x-yourwifey-llm-provider-key') ?? process.env.LLM_PROVIDER_KEY,
     byokOpenAiKey: header(req, 'x-yourwifey-openai-byok-key') ?? process.env.OPENAI_BYOK_KEY,
+    tavilyKey: header(req, 'x-yourwifey-tavily-provider-key') ?? process.env.TAVILY_API_KEY,
     ttsKey: header(req, 'x-yourwifey-tts-provider-key') ?? readFishTtsEnvKey(),
   };
 }

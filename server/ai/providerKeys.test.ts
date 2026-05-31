@@ -21,6 +21,22 @@ describe('provider key routing', () => {
     ).toBe('browser-fish-key');
   });
 
+  it('uses the request-scoped Tavily key before env fallback', () => {
+    vi.stubEnv('TAVILY_API_KEY', 'tavily-env-key');
+
+    expect(
+      readProviderKeys(
+        requestWithHeaders({ 'x-yourwifey-tavily-provider-key': 'browser-tavily-key' }),
+      ).tavilyKey,
+    ).toBe('browser-tavily-key');
+  });
+
+  it('falls back to the Tavily env key when the browser key is absent', () => {
+    vi.stubEnv('TAVILY_API_KEY', 'tavily-env-key');
+
+    expect(readProviderKeys(requestWithHeaders()).tavilyKey).toBe('tavily-env-key');
+  });
+
   it('accepts both Fish Speech env aliases for backend fallback compatibility', () => {
     vi.stubEnv('FISH_AUDIO_API_KEY', '');
     vi.stubEnv('FISH_SPEECH_API_KEY', 'fish-speech-env-key');
