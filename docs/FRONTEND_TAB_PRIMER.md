@@ -324,10 +324,13 @@ Piper:
 
 ## Current Known Verification Items
 
+Runtime log: [`docs/RUNTIME_VERIFICATION_LOG.md`](./RUNTIME_VERIFICATION_LOG.md).
+
 1. Background/OBS overlay: decide whether overlay mode should hide local UI, show only avatar/subtitles, or keep controls available.
-2. Voice Lab: test Fish and Inworld voice listing/cloning with real Account-tab keys.
-3. Twitch stream ASR/frame: manually verify the helper endpoints against a real live channel and selected provider key.
-4. Packaged desktop: rebuild/package/launch once the web flow is stable enough to checkpoint.
+2. AI: test main assistant Tavily tools with a real Account-tab Tavily key.
+3. Voice Lab: test Fish and Inworld voice listing/cloning with real Account-tab keys.
+4. Twitch stream ASR/frame: manually verify the helper endpoints against a real live channel and selected provider key.
+5. Packaged desktop: rebuild/package/launch once the web flow is stable enough to checkpoint.
 
 ## Current Non-Goals
 
