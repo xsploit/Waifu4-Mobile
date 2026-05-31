@@ -12,6 +12,7 @@ export type RemoteTtsRequest = {
   streamingMode?: RemoteTtsMode;
   voiceId?: string;
   modelId?: string;
+  fishTransport?: 'websocket' | 'timestamp-sse';
   latency?: FishSpeechLatency;
   conditionOnPreviousChunks?: boolean;
   chunkLength?: number;
@@ -19,6 +20,7 @@ export type RemoteTtsRequest = {
   maxBufferChars?: number;
   softBufferChars?: number;
   chunkingStrategy?: 'app' | 'python-safe' | 'eager';
+  inworldTransport?: 'http' | 'websocket';
   deliveryMode?: InworldDeliveryMode;
   bufferCharThreshold?: number;
 };
@@ -178,7 +180,7 @@ export function createRemoteTtsProxyRequest(request: RemoteTtsRequest): RemoteTt
       text: request.text,
       voiceId: request.voiceId,
       inworldModelId: request.modelId,
-      inworldTransport: 'http',
+      inworldTransport: request.inworldTransport ?? 'http',
       deliveryMode: request.deliveryMode,
       bufferCharThreshold: request.bufferCharThreshold,
     };
@@ -189,7 +191,7 @@ export function createRemoteTtsProxyRequest(request: RemoteTtsRequest): RemoteTt
     text: request.text,
     voiceId: request.voiceId,
     backend: normalizeFishBackend(request.modelId),
-    fishTransport: 'websocket',
+    fishTransport: request.fishTransport ?? 'websocket',
     format: 'pcm',
     sampleRate: 44100,
     latency: request.latency,

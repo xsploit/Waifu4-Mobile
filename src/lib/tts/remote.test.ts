@@ -14,6 +14,7 @@ describe('remote TTS proxy compatibility', () => {
         streamingMode: 'live-bridge',
         voiceId: 'voice-1',
         modelId: 's2',
+        fishTransport: 'websocket',
         latency: 'balanced',
         conditionOnPreviousChunks: true,
         chunkLength: 160,
@@ -32,6 +33,27 @@ describe('remote TTS proxy compatibility', () => {
     });
   });
 
+  it('maps Fish timestamp SSE onto the backend HTTP timestamp stream schema', () => {
+    expect(
+      createRemoteTtsProxyRequest({
+        provider: 'fish-speech',
+        text: 'hello',
+        streamingMode: 'full-response',
+        voiceId: 'voice-1',
+        modelId: 's2',
+        fishTransport: 'timestamp-sse',
+      }),
+    ).toMatchObject({
+      provider: 'fish',
+      text: 'hello',
+      voiceId: 'voice-1',
+      backend: 's2-pro',
+      fishTransport: 'timestamp-sse',
+      format: 'pcm',
+      sampleRate: 44100,
+    });
+  });
+
   it('maps copied Inworld frontend requests onto the rebuilt backend stream schema', () => {
     expect(
       createRemoteTtsProxyRequest({
@@ -40,6 +62,7 @@ describe('remote TTS proxy compatibility', () => {
         streamingMode: 'full-response',
         voiceId: 'Ashley',
         modelId: 'inworld-tts-2',
+        inworldTransport: 'websocket',
         deliveryMode: 'BALANCED',
         bufferCharThreshold: 90,
       }),
@@ -48,7 +71,7 @@ describe('remote TTS proxy compatibility', () => {
       text: 'hello',
       voiceId: 'Ashley',
       inworldModelId: 'inworld-tts-2',
-      inworldTransport: 'http',
+      inworldTransport: 'websocket',
       deliveryMode: 'BALANCED',
       bufferCharThreshold: 90,
     });

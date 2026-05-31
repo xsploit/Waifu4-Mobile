@@ -659,19 +659,34 @@ function getActiveTtsLabel(settings: AiSettings, piperVoice?: PiperVoiceProfile 
     : getTtsProviderLabel(settings.ttsProvider);
 }
 
+function canUseFishLiveBridge(settings: AiSettings) {
+  return (
+    settings.ttsProvider === 'fish-speech' &&
+    settings.fishSpeechTransport === 'websocket' &&
+    settings.remoteTtsMode === 'live-bridge'
+  );
+}
+
+function getEffectiveRemoteTtsMode(settings: AiSettings) {
+  return canUseFishLiveBridge(settings) || settings.remoteTtsMode !== 'live-bridge'
+    ? settings.remoteTtsMode
+    : 'full-response';
+}
+
 function shouldChunkTtsRequests(settings: AiSettings) {
-  return settings.ttsProvider === 'piper' || settings.remoteTtsMode === 'sentence-chunks';
+  return settings.ttsProvider === 'piper' || getEffectiveRemoteTtsMode(settings) === 'sentence-chunks';
 }
 
 function createRemoteTtsRequest(text: string, settings: AiSettings): RemoteTtsRequest {
+  const streamingMode = getEffectiveRemoteTtsMode(settings);
   if (settings.ttsProvider === 'inworld') {
     return {
       provider: 'inworld',
       text,
-      streamingMode:
-        settings.remoteTtsMode === 'live-bridge' ? 'full-response' : settings.remoteTtsMode,
+      streamingMode,
       voiceId: settings.inworldVoiceId.trim() || undefined,
       modelId: settings.inworldModelId.trim() || undefined,
+      inworldTransport: settings.inworldTransport,
       deliveryMode: settings.inworldDeliveryMode,
       bufferCharThreshold: settings.inworldBufferCharThreshold,
     };
@@ -680,9 +695,10 @@ function createRemoteTtsRequest(text: string, settings: AiSettings): RemoteTtsRe
   return {
     provider: 'fish-speech',
     text,
-    streamingMode: settings.remoteTtsMode,
+    streamingMode,
     voiceId: settings.fishSpeechVoiceId.trim() || undefined,
     modelId: settings.fishSpeechModel.trim() || undefined,
+    fishTransport: settings.fishSpeechTransport,
     latency: settings.fishSpeechLatency,
     conditionOnPreviousChunks: settings.fishSpeechConditionOnPreviousChunks,
     chunkLength: settings.fishSpeechChunkLength,
@@ -2767,8 +2783,7 @@ function App() {
       const canSpeak = shouldSpeak && (ttsProvider !== 'piper' || Boolean(voice));
       const liveBridgeTts =
         canSpeak &&
-        ttsProvider === 'fish-speech' &&
-        ttsRuntimeSettings.remoteTtsMode === 'live-bridge';
+        canUseFishLiveBridge(ttsRuntimeSettings);
       const metadataFilter = createAssistantReplyStreamFilter();
       let fullText = '';
       let displayText = '';
@@ -5648,8 +5663,7 @@ function App() {
       const ttsBridge =
         settings.ttsEnabled &&
         settings.ttsAutoSpeak &&
-        settings.ttsProvider === 'fish-speech' &&
-        settings.remoteTtsMode === 'live-bridge'
+        canUseFishLiveBridge(settings)
           ? createRemoteTtsRequest('', settings)
           : undefined;
       const chatAbortController = new AbortController();

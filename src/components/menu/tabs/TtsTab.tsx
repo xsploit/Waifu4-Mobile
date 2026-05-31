@@ -38,8 +38,12 @@ function updateAiSettings(
   }));
 }
 
+function isFishLiveBridgeAvailable(settings: AiSettings) {
+  return settings.ttsProvider === 'fish-speech' && settings.fishSpeechTransport === 'websocket';
+}
+
 function normalizeRemoteModeForProvider(settings: AiSettings) {
-  return settings.ttsProvider === 'inworld' && settings.remoteTtsMode === 'live-bridge'
+  return settings.remoteTtsMode === 'live-bridge' && !isFishLiveBridgeAvailable(settings)
     ? 'full-response'
     : settings.remoteTtsMode;
 }
@@ -102,6 +106,7 @@ export function TtsTab({
         selectedVoiceListed: selectedRemoteVoice !== null,
       })
     : '';
+  const fishLiveBridgeAvailable = isFishLiveBridgeAvailable(aiSettings);
 
   const renderRemoteVoiceOptions = () =>
     remoteVoiceOptions.map((voice) => {
@@ -186,7 +191,7 @@ export function TtsTab({
             }
             value={normalizeRemoteModeForProvider(aiSettings)}
           >
-            {aiSettings.ttsProvider === 'fish-speech' ? (
+            {fishLiveBridgeAvailable ? (
               <option value="live-bridge">Fish Speech Live Bridge</option>
             ) : null}
             <option value="full-response">Stable Stream</option>
@@ -301,6 +306,24 @@ export function TtsTab({
           <div className="status-copy">{remoteVoiceStatus}</div>
           <select
             className="select-tech"
+            onChange={(event) => {
+              const fishSpeechTransport = event.target
+                .value as AiSettings['fishSpeechTransport'];
+              updateAiSettings(setAiSettings, {
+                fishSpeechTransport,
+                ...(fishSpeechTransport === 'timestamp-sse' &&
+                aiSettings.remoteTtsMode === 'live-bridge'
+                  ? { remoteTtsMode: 'full-response' as const }
+                  : {}),
+              });
+            }}
+            value={aiSettings.fishSpeechTransport}
+          >
+            <option value="websocket">WebSocket realtime</option>
+            <option value="timestamp-sse">Timestamp SSE (HTTP)</option>
+          </select>
+          <select
+            className="select-tech"
             onChange={(event) =>
               updateAiSettings(setAiSettings, { fishSpeechModel: event.target.value })
             }
@@ -385,6 +408,18 @@ export function TtsTab({
             </button>
           </div>
           <div className="status-copy">{remoteVoiceStatus}</div>
+          <select
+            className="select-tech"
+            onChange={(event) =>
+              updateAiSettings(setAiSettings, {
+                inworldTransport: event.target.value as AiSettings['inworldTransport'],
+              })
+            }
+            value={aiSettings.inworldTransport}
+          >
+            <option value="http">HTTP stream</option>
+            <option value="websocket">WebSocket stream</option>
+          </select>
           <input
             autoComplete="off"
             className="input-tech"

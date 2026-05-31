@@ -371,6 +371,10 @@ function normalizeAiSettings(value: unknown): AiSettings {
     source.fishSpeechLatency === 'balanced' || source.fishSpeechLatency === 'normal'
       ? source.fishSpeechLatency
       : defaults.fishSpeechLatency;
+  const fishSpeechTransport =
+    source.fishSpeechTransport === 'websocket' || source.fishSpeechTransport === 'timestamp-sse'
+      ? source.fishSpeechTransport
+      : defaults.fishSpeechTransport;
   const fishSpeechVoiceScope =
     source.fishSpeechVoiceScope === 'mine' || source.fishSpeechVoiceScope === 'public'
       ? source.fishSpeechVoiceScope
@@ -401,6 +405,10 @@ function normalizeAiSettings(value: unknown): AiSettings {
         : source.inworldDeliveryMode === 'LOW_LATENCY'
           ? 'STABLE'
           : defaults.inworldDeliveryMode;
+  const inworldTransport =
+    source.inworldTransport === 'http' || source.inworldTransport === 'websocket'
+      ? source.inworldTransport
+      : defaults.inworldTransport;
   const remoteTtsMode =
     source.remoteTtsMode === 'live-bridge' ||
     source.remoteTtsMode === 'full-response' ||
@@ -441,6 +449,7 @@ function normalizeAiSettings(value: unknown): AiSettings {
     fishSpeechVoiceScope,
     fishSpeechModel,
     fishSpeechLatency,
+    fishSpeechTransport,
     fishSpeechConditionOnPreviousChunks:
       typeof source.fishSpeechConditionOnPreviousChunks === 'boolean'
         ? source.fishSpeechConditionOnPreviousChunks
@@ -448,6 +457,7 @@ function normalizeAiSettings(value: unknown): AiSettings {
     fishSpeechChunkLength,
     inworldVoiceId: String(source.inworldVoiceId ?? defaults.inworldVoiceId),
     inworldModelId: String(source.inworldModelId ?? defaults.inworldModelId),
+    inworldTransport,
     inworldDeliveryMode,
     inworldBufferCharThreshold,
     ttsPlaybackRate: playbackRate,
