@@ -49,6 +49,7 @@ EXCLUDE not part of this rebuild path
 | POML dynamic prompt renderer | DONE | Old vendored `pomljs` renderer copied into the backend, template reads are cached, and `/ai/poml/render` is exposed behind the `/api` proxy for the direct frontend. Provider/model prompt caching is a later optimization. |
 | Fish live bridge frontend seam | DONE | `/ai/chat` now accepts the copied frontend `ttsBridge` shape, pushes visible LLM deltas into one Fish realtime text stream, and emits SSE audio chunks back to the direct frontend. |
 | Embedding lane controls | DONE | Memory settings expose local Transformers-first/provider/auto modes, provider embedding fallback, and provider-metadata-filtered embedding model picking while still allowing a typed custom model ID. |
+| Twitch command/overlay/scheduler foundation | COPIED | Old server command parser/router, overlay socket, chat scheduler/message filters, mock Twitch source, and tests are copied into `server/*` and patched for the rebuild imports. Runtime lifecycle wiring is still next. |
 
 ### Old Code Audit Snapshot
 
@@ -62,10 +63,10 @@ EXCLUDE not part of this rebuild path
 | `src/lib/twitch` direct IRC/transcription helpers | 4 | Active copy | Direct IRC and stream transcription helpers copied; backend endpoints still needed. |
 | `src/lib/vrm` loader/animation/sequencer/custom library | 9 | Active copy/adapt | Loader/custom library/postprocessing/animation/sequencer copied; active `VrmStage` copied/adapted and mounted. Expression blend still needs REBUILD. |
 | `server/src/twitch` IRC/transcriber | 5 | Partial active copy | IRC parser/source and stream transcriber copied; transcription/frame routes wired; full IRC runtime lifecycle still needs integration. |
-| `server/src/commands` command parser/router | 3 | Missing | COPY/ADAPT after Twitch/overlay event shape exists. |
-| `server/src/overlay` socket/events | 2 | Missing | COPY/ADAPT for browser source/OBS behavior. |
-| `server/src/scheduler` queue/scheduler/filtering | 3 | Missing | COPY/ADAPT for Twitch AI behavior. |
-| `server/src/mock` mock Twitch source | 1 | Missing | COPY/ADAPT for tests and local dry runs. |
+| `server/src/commands` command parser/router | 3 | COPIED | Parser/router copied to `server/commands`; runtime wiring still needed. |
+| `server/src/overlay` socket/events | 2 | COPIED | Overlay socket copied to `server/overlay`; attach to backend HTTP server next. |
+| `server/src/scheduler` queue/scheduler/filtering | 3 | COPIED | Chat scheduler and message filters copied to `server/scheduler`; adapt to the new chat provider next. |
+| `server/src/mock` mock Twitch source | 1 | COPIED | Mock Twitch source copied to `server/mock`; use for scheduler/local dry-run tests next. |
 | `server/src/marlin` | present in old repo | Not part of current target | EXCLUDE. |
 
 ### Feature Parity Roadmap
