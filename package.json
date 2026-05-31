@@ -11,6 +11,7 @@
     "server": "tsx server/index.ts",
     "build": "tsc --noEmit && vite build",
     "bench:tts": "tsx scripts/bench-tts.ts",
+    "smoke:runtime": "tsx scripts/smoke-runtime.ts",
     "typecheck": "tsc --noEmit --pretty",
     "test": "vitest run",
     "test:watch": "vitest"

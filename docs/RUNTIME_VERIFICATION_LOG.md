@@ -12,6 +12,12 @@ PORT=8798 TWITCH_BACKEND_RUNTIME_ENABLED=false npm run server
 
 Checked with the server running on `127.0.0.1:8798`, then stopped in the same command.
 
+Reusable command:
+
+```text
+npm run smoke:runtime
+```
+
 | Surface | Route | Result | Meaning |
 | --- | --- | --- | --- |
 | Health | `GET /health` | `200` | Backend boots and responds. |
@@ -26,4 +32,3 @@ Remaining verification:
 - Voice Lab Fish/Inworld voice list/create with real Account-tab keys.
 - Twitch stream ASR/frame helpers against a real channel/provider key.
 - Packaged desktop launch after the web flow is stable enough.
-
