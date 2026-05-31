@@ -150,7 +150,7 @@ export function EmotionTelemetryTab({
                       face {event.requestedExpression} -{' '}
                       {event.resolvedExpressionNames.length
                         ? event.resolvedExpressionNames.join(' / ')
-                      : 'none'}
+                        : 'none'}
                     </span>
                     <span className="anim-tags">
                       model V {event.metadataValence.toFixed(2)} / A{' '}

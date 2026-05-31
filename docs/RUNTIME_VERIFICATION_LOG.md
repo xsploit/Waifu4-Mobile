@@ -62,7 +62,7 @@ Command:
 npm run build
 ```
 
-Result: passed. TypeScript compiled and Vite produced the production `dist/` bundle after the Fish-default TTS tab, chat-stream emotion telemetry, model/affect VAD display, Twitch ASR, and provider embedding picker parity checks. Vite still reports expected large copied-frontend/ML chunk warnings, but no build error.
+Result: passed. TypeScript compiled and Vite produced the production `dist/` bundle after the Fish-default TTS tab, chat-stream emotion telemetry, Emotion Log VAD display, Twitch ASR, and provider embedding picker parity checks. Vite still reports expected large copied-frontend/ML chunk warnings, but no build error.
 
 Remaining verification:
 
@@ -102,4 +102,14 @@ Command:
 npm test
 ```
 
-Result: passed. Vitest reported 64 passing tests and 0 failures across the local suite after the recent TTS tab default, chat-stream emotion telemetry, Emotion Log model/affect VAD display, Twitch ASR, and provider embedding picker parity commits.
+Result: passed. Vitest reported 64 passing tests and 0 failures across the local suite after the recent TTS tab default, chat-stream emotion telemetry, Emotion Log VAD display, Twitch ASR, and provider embedding picker parity commits.
+
+## 2026-05-31 Emotion Telemetry Packaged-Reference Shape
+
+Reference:
+
+```text
+C:\Users\SUBSECT\Documents\GitHub\WebWaifu4\release\win-unpacked\resources\app.asar
+```
+
+Result: inspected the packaged ASAR bundle and confirmed the intended Emotion Telemetry menu shape shows emotion/expression/animation summaries plus per-row `face ...` and `affect ... V/A/D` lines. Raw `metadataValence`/`metadataArousal`/`metadataDominance` are present in persisted event normalization. The rebuild keeps those packaged fields and adds explicit `Model VAD` / `Affect VAD` debug cards plus per-row `model V/A/D` so the raw model JSON and smoothed affect state can be compared while retaining the rebuilt `/ai/chat` `replyMetadata` stream contract underneath.
