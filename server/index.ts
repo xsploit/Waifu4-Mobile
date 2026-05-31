@@ -1,6 +1,7 @@
 import express from 'express';
 import { buildHealth, SERVICE_NAME } from './health';
 import { handleChat } from './ai/chat';
+import { handleEmbeddings } from './ai/embeddings';
 import { handleModels } from './ai/models';
 import { renderYourWifeyPomlResponse } from './ai/PomlRenderer';
 import { handleTtsStream } from './tts/stream';
@@ -31,6 +32,11 @@ app.get('/ai/models', (req, res) => {
 // POST /ai/chat — SSE reply stream (delta / done / error).
 app.post('/ai/chat', (req, res) => {
   void handleChat(req, res);
+});
+
+// POST /ai/embeddings — provider fallback for semantic-memory embeddings.
+app.post('/ai/embeddings', (req, res) => {
+  void handleEmbeddings(req, res);
 });
 
 // POST /ai/poml/render — cached local POML template renderer for the copied frontend.
