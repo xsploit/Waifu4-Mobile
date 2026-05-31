@@ -44,7 +44,7 @@ Verified against the active `SettingsPanel` tab registry and each mounted tab co
 | Animation | `AnimTab` | `LIVE` | Mounted with sequencer state, animation import, and manual play callbacks. Weighted chance is intentionally not restored. |
 | Emotion Log | `EmotionTelemetryTab` | `LIVE` | Mounted with assistant emotion events and live VRM telemetry snapshot. |
 | Character | `CharacterTab` | `LIVE` | Mounted with persona save/delete/activate callbacks; persona scoping is owned by `App.tsx`. |
-| Voice Lab | `VoiceLabTab` | `LIVE / VERIFY` | Mounted with saved voices, persona bindings, current voice binding, and provider voice creation callback. Fish/Inworld live listing/cloning still needs real Account-tab key verification. |
+| Voice Lab | `VoiceLabTab` | `LIVE / VERIFY` | Mounted with saved voices, persona bindings, current voice binding, provider voice catalog refresh/use, and provider voice creation callback. Fish/Inworld live listing/cloning still needs real Account-tab key verification. |
 | AI | `AiTab` | `LIVE / VERIFY` | Mounted with model list, metadata map, health refresh, `aiSettings`, and main-chat Tavily tool controls; metadata tags drive chat picker/capability display. Real Tavily-key runtime verification remains. |
 | Twitch | `TwitchTab` | `LIVE / PRIMARY` | Mounted with frontend direct IRC status, channel switch, queue/status, stream ASR, and frame/vision settings. Backend Twitch runtime remains optional/fallback. |
 | Memory | `ContextTab` | `LIVE` | Mounted with chat reset, GRILLO/Ladybug controls, memory debug, and provider-metadata-filtered embedding controls. |
@@ -196,6 +196,7 @@ State/seams:
   - header: `x-yourwifey-tts-provider-key`
   - backend: `/tts/voices/create`
 - Provider voice listing uses `/tts/voices`.
+- Provider voice catalog refresh/use is available in Voice Lab and reuses the same remote voice state as the TTS tab.
 
 Verification item:
 

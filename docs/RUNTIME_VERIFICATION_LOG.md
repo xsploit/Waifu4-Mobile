@@ -113,3 +113,15 @@ C:\Users\SUBSECT\Documents\GitHub\WebWaifu4\release\win-unpacked\resources\app.a
 ```
 
 Result: inspected the packaged ASAR bundle and confirmed the intended Emotion Telemetry menu shape shows emotion/expression/animation summaries plus per-row `face ...` and `affect ... V/A/D` lines. Raw `metadataValence`/`metadataArousal`/`metadataDominance` are present in persisted event normalization. The rebuild keeps those packaged fields and adds explicit `Model VAD` / `Affect VAD` debug cards plus per-row `model V/A/D` so the raw model JSON and smoothed affect state can be compared while retaining the rebuilt `/ai/chat` `replyMetadata` stream contract underneath.
+
+## 2026-05-31 Voice Lab Provider Catalog Wiring
+
+Command:
+
+```text
+npm test -- src/components/menu/SettingsPanel.test.tsx
+npm run typecheck
+npm run build
+```
+
+Result: passed. Voice Lab now receives the same remote provider voice catalog state and refresh callbacks used by the TTS tab. The tab can fetch Fish/Inworld voices, display loaded provider voices, and copy a provider voice id/name/provider into the voice draft without changing the backend TTS streaming path.

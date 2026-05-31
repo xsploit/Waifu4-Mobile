@@ -11,6 +11,8 @@ import type { PiperVoiceProfile } from '../../../lib/tts/piper';
 import type {
   CreatedRemoteTtsVoice,
   CreateRemoteTtsVoiceRequest,
+  RemoteTtsProvider,
+  RemoteTtsVoice,
 } from '../../../lib/tts/remote';
 
 type VoiceLabTabProps = {
@@ -19,10 +21,14 @@ type VoiceLabTabProps = {
   onApplyPersonaVoice: (personaId: string) => void;
   onDeleteVoice: (voiceId: string) => void;
   onCreateProviderVoice: (request: CreateRemoteTtsVoiceRequest) => Promise<CreatedRemoteTtsVoice>;
+  onRefreshRemoteVoices: (provider: RemoteTtsProvider) => void;
   onSaveVoice: (voice: VoiceLabVoice) => void;
   onUseCurrentVoiceAsPersonaDefault: (personaId: string) => void;
   personaVoiceBindings: Record<string, PersonaVoiceBinding>;
   personas: PersonaProfile[];
+  remoteTtsVoices: RemoteTtsVoice[];
+  remoteVoicesError: string | null;
+  remoteVoicesLoading: boolean;
   ttsVoices: PiperVoiceProfile[];
   voiceLabVoices: VoiceLabVoice[];
 };
@@ -99,10 +105,14 @@ export function VoiceLabTab({
   onApplyPersonaVoice,
   onCreateProviderVoice,
   onDeleteVoice,
+  onRefreshRemoteVoices,
   onSaveVoice,
   onUseCurrentVoiceAsPersonaDefault,
   personaVoiceBindings,
   personas,
+  remoteTtsVoices,
+  remoteVoicesError,
+  remoteVoicesLoading,
   ttsVoices,
   voiceLabVoices,
 }: VoiceLabTabProps) {
@@ -193,6 +203,20 @@ export function VoiceLabTab({
       speakingStyle: voice.speakingStyle,
       stability: voice.stability,
     });
+  };
+
+  const handleUseProviderVoice = (voice: RemoteTtsVoice) => {
+    updateDraft({
+      description: voice.description ?? draft.description,
+      modelId:
+        draft.modelId ||
+        (voice.provider === 'fish-speech' ? 's2' : 'inworld-tts-2'),
+      name: draft.name || voice.name,
+      provider: voice.provider,
+      providerVoiceId: voice.id,
+    });
+    setTags(voice.tags?.join(', ') ?? tags);
+    setLanguage(voice.languages?.[0] ?? language);
   };
 
   const buildVoiceFromDraft = (
@@ -526,6 +550,52 @@ export function VoiceLabTab({
           Saving a ready voice with a provider id also updates the selected persona defaults.
           Fish Speech and Inworld can create provider voices from the uploaded sample, or you can paste an existing provider id.
         </div>
+      </div>
+
+      <div className="control-group">
+        <div className="control-label">Provider Voice Catalog</div>
+        <div className="btn-row">
+          <button
+            className="btn-tech secondary"
+            disabled={remoteVoicesLoading}
+            onClick={() => onRefreshRemoteVoices('fish-speech')}
+            type="button"
+          >
+            {remoteVoicesLoading ? 'Fetching...' : 'Fetch Fish Voices'}
+          </button>
+          <button
+            className="btn-tech secondary"
+            disabled={remoteVoicesLoading}
+            onClick={() => onRefreshRemoteVoices('inworld')}
+            type="button"
+          >
+            {remoteVoicesLoading ? 'Fetching...' : 'Fetch Inworld Voices'}
+          </button>
+        </div>
+        {remoteVoicesError ? <div className="status-copy">{remoteVoicesError}</div> : null}
+        {remoteTtsVoices.length === 0 ? (
+          <div className="status-copy">No provider voices loaded.</div>
+        ) : (
+          remoteTtsVoices.map((voice) => (
+            <div className="memory-entry" key={`${voice.provider}-${voice.id}`}>
+              <div className="memory-entry-header">
+                <strong>{voice.name || voice.id}</strong>
+                <span>{providerLabel(voice.provider)}</span>
+              </div>
+              <div className="status-copy">{voice.id}</div>
+              <div className="status-copy">{voice.description || 'No description.'}</div>
+              <div className="btn-row">
+                <button
+                  className="btn-tech secondary"
+                  onClick={() => handleUseProviderVoice(voice)}
+                  type="button"
+                >
+                  Use In Voice Draft
+                </button>
+              </div>
+            </div>
+          ))
+        )}
       </div>
 
       <div className="control-group">

@@ -104,6 +104,10 @@ function createProps(activeTab: SettingsTabId): SettingsPanelProps {
     personaVoiceBindings: createDefaultPersonaVoiceBindings(),
     personas,
     relationshipMemory: createDefaultRelationshipMemory(),
+    remoteTtsVoiceCatalog: {
+      'fish-speech': [],
+      inworld: [],
+    },
     remoteTtsVoices: [],
     remoteVoicesError: null,
     remoteVoicesLoading: false,
@@ -266,12 +270,37 @@ describe('SettingsPanel tab smoke', () => {
     expect(html).toContain('1 embedding model');
   });
 
-  it('keeps Voice Lab provider creation and persona binding controls mounted', () => {
-    const html = renderToStaticMarkup(<SettingsPanel {...createProps('voice-lab')} />);
+  it('keeps Voice Lab provider creation, catalog, and persona binding controls mounted', () => {
+    const props = createProps('voice-lab');
+    props.remoteTtsVoices = [
+      {
+        description: 'Saved provider voice',
+        id: 'fish-voice-1',
+        name: 'Fish Catalog Voice',
+        provider: 'fish-speech',
+      },
+    ];
+    props.remoteTtsVoiceCatalog = {
+      'fish-speech': props.remoteTtsVoices,
+      inworld: [
+        {
+          description: 'Inworld provider voice',
+          id: 'inworld-voice-1',
+          name: 'Inworld Catalog Voice',
+          provider: 'inworld',
+        },
+      ],
+    };
+    const html = renderToStaticMarkup(<SettingsPanel {...props} />);
 
     expect(html).toContain('Persona Voice Defaults');
     expect(html).toContain('Fish Speech zero-shot / custom voice');
     expect(html).toContain('Inworld custom voice');
+    expect(html).toContain('Provider Voice Catalog');
+    expect(html).toContain('Fetch Fish Voices');
+    expect(html).toContain('Fish Catalog Voice');
+    expect(html).toContain('Inworld Catalog Voice');
+    expect(html).toContain('Use In Voice Draft');
     expect(html).toContain('Provider voice id after creation');
     expect(html).toContain('Fish Speech and Inworld can create provider voices');
     expect(html).toContain('Save Current As Default');

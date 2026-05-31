@@ -150,6 +150,7 @@ type SettingsPanelProps = {
   ttsCached: boolean;
   ttsStatus: string;
   ttsVoices: PiperVoiceProfile[];
+  remoteTtsVoiceCatalog: Record<RemoteTtsProvider, RemoteTtsVoice[]>;
   remoteTtsVoices: RemoteTtsVoice[];
   remoteVoicesError: string | null;
   remoteVoicesLoading: boolean;
@@ -274,6 +275,7 @@ export function SettingsPanel({
   ttsCached,
   ttsStatus,
   ttsVoices,
+  remoteTtsVoiceCatalog,
   remoteTtsVoices,
   remoteVoicesError,
   remoteVoicesLoading,
@@ -335,10 +337,17 @@ export function SettingsPanel({
         onApplyPersonaVoice={onApplyPersonaVoice}
         onCreateProviderVoice={onCreateVoiceLabProviderVoice}
         onDeleteVoice={onDeleteVoiceLabVoice}
+        onRefreshRemoteVoices={onRefreshRemoteVoices}
         onSaveVoice={onSaveVoiceLabVoice}
         onUseCurrentVoiceAsPersonaDefault={onUseCurrentVoiceAsPersonaDefault}
         personaVoiceBindings={personaVoiceBindings}
         personas={personas}
+        remoteTtsVoices={[
+          ...remoteTtsVoiceCatalog['fish-speech'],
+          ...remoteTtsVoiceCatalog.inworld,
+        ]}
+        remoteVoicesError={remoteVoicesError}
+        remoteVoicesLoading={remoteVoicesLoading}
         ttsVoices={ttsVoices}
         voiceLabVoices={voiceLabVoices}
       />
