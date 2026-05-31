@@ -32,6 +32,7 @@ import type {
   RemoteTtsVoice,
 } from '../../lib/tts/remote';
 import { DEFAULT_PERSONA } from '../../lib/chat/defaults';
+import type { ProviderModelInfo } from '../../brain/modelCapability';
 import type { GrilloMemoryState } from '../../lib/chat/grillo-memory';
 import type {
   LadybugGrilloRuntimeStatus,
@@ -57,6 +58,7 @@ type SettingsPanelProps = {
   aiProxyHealth: AiProxyHealth | null;
   aiProxyHealthError: string | null;
   aiSettings: AiSettings;
+  availableModelMetadata: ReadonlyMap<string, ProviderModelInfo>;
   availableModels: string[];
   batchPending: number;
   botMentionTag: string;
@@ -180,6 +182,7 @@ export function SettingsPanel({
   aiProxyHealth,
   aiProxyHealthError,
   aiSettings,
+  availableModelMetadata,
   availableModels,
   batchPending,
   botMentionTag,
@@ -330,6 +333,7 @@ export function SettingsPanel({
       <AiTab
         activePersonaName={activePersona?.name ?? DEFAULT_PERSONA.name}
         aiSettings={aiSettings}
+        availableModelMetadata={availableModelMetadata}
         availableModels={availableModels}
         aiProxyHealth={aiProxyHealth}
         aiProxyHealthError={aiProxyHealthError}

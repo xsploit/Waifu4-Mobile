@@ -31,8 +31,20 @@ export async function fetchModels(
     }
     throw new Error(message);
   }
-  const body = (await res.json()) as { models?: ProviderModelInfo[] };
-  return body.models ?? [];
+  const body = (await res.json()) as {
+    modelMetadata?: ProviderModelInfo[];
+    models?: Array<ProviderModelInfo | string>;
+  };
+  if (body.modelMetadata) {
+    return body.modelMetadata;
+  }
+  return (body.models ?? []).filter(
+    (model): model is ProviderModelInfo =>
+      typeof model !== 'string' &&
+      typeof model.id === 'string' &&
+      Array.isArray(model.supportedParameters) &&
+      typeof model.supportsStructuredOutputs === 'boolean',
+  );
 }
 
 export type LlmChatRequest = {

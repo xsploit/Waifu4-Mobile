@@ -1,4 +1,5 @@
 import type { Dispatch, SetStateAction } from 'react';
+import type { ProviderModelInfo } from '../../../brain/modelCapability';
 import type { AiProxyHealth, AiSettings } from '../../../lib/chat/types';
 import {
   applyLlmProviderSwitchDefaults,
@@ -12,6 +13,7 @@ type AiTabProps = {
   aiProxyHealth: AiProxyHealth | null;
   aiProxyHealthError: string | null;
   aiSettings: AiSettings;
+  availableModelMetadata: ReadonlyMap<string, ProviderModelInfo>;
   availableModels: string[];
   modelsError: string | null;
   modelsLoading: boolean;
@@ -40,11 +42,67 @@ function describeProviderState(providerState: AiProxyHealth['providerState']) {
     : 'The backend reports provider transport state after refresh.';
 }
 
+function formatModelCount(value?: number) {
+  if (!value || !Number.isFinite(value)) {
+    return null;
+  }
+  if (value >= 1_000_000) {
+    return `${Number((value / 1_000_000).toFixed(1))}M`;
+  }
+  if (value >= 1_000) {
+    return `${Number((value / 1_000).toFixed(0))}K`;
+  }
+  return String(value);
+}
+
+function getModelCapabilityTags(model: ProviderModelInfo | undefined) {
+  if (!model) {
+    return [];
+  }
+  const tags = new Set(model.tags ?? []);
+  const params = new Set(model.supportedParameters);
+  const capabilityTags: string[] = [];
+
+  if (model.supportsStructuredOutputs) {
+    capabilityTags.push('json');
+  }
+  if (tags.has('vision') || tags.has('image') || tags.has('image-input')) {
+    capabilityTags.push('vision');
+  }
+  if (tags.has('file') || tags.has('file-input')) {
+    capabilityTags.push('files');
+  }
+  if (tags.has('video')) {
+    capabilityTags.push('video');
+  }
+  if (tags.has('reasoning') || params.has('reasoning') || params.has('include_reasoning')) {
+    capabilityTags.push('reasoning');
+  }
+  if (tags.has('tool-use') || params.has('tools') || params.has('tool_choice')) {
+    capabilityTags.push('tools');
+  }
+  if (model.type && model.type !== 'language') {
+    capabilityTags.push(model.type);
+  }
+  const contextWindow = formatModelCount(model.contextWindow);
+  if (contextWindow) {
+    capabilityTags.push(`${contextWindow} ctx`);
+  }
+
+  return capabilityTags;
+}
+
+function formatModelOption(modelId: string, metadata: ReadonlyMap<string, ProviderModelInfo>) {
+  const tags = getModelCapabilityTags(metadata.get(modelId));
+  return tags.length ? `${modelId} [${tags.join(', ')}]` : modelId;
+}
+
 export function AiTab({
   activePersonaName,
   aiProxyHealth,
   aiProxyHealthError,
   aiSettings,
+  availableModelMetadata,
   availableModels,
   modelsError,
   modelsLoading,
@@ -97,8 +155,8 @@ export function AiTab({
           {modelOptions.length > 0 ? (
             <optgroup label="Provider API models">
               {modelOptions.map((model) => (
-                <option key={model} value={model}>
-                  {model}
+                <option key={model} title={formatModelOption(model, availableModelMetadata)} value={model}>
+                  {formatModelOption(model, availableModelMetadata)}
                 </option>
               ))}
             </optgroup>
@@ -107,6 +165,15 @@ export function AiTab({
             <option value="">Refresh models from provider</option>
           ) : null}
         </select>
+        {availableModelMetadata.has(aiSettings.model) ? (
+          <div className="status-copy">
+            Capabilities:{' '}
+            <strong>
+              {getModelCapabilityTags(availableModelMetadata.get(aiSettings.model)).join(', ') ||
+                'metadata loaded'}
+            </strong>
+          </div>
+        ) : null}
         <div className="field-hint">
           Models are loaded directly from the selected aggregator API through the backend. Image,
           video, embedding, OpenAI o1, and OpenAI pro models are hidden from chat model pickers.

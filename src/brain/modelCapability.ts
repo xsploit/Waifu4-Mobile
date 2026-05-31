@@ -6,9 +6,14 @@ import type { GatewayId, ReplyFormat } from './BrainTypes';
  * supportsStructuredOutputs and then ignoring it).
  */
 export type ProviderModelInfo = {
+  contextWindow?: number;
   id: string;
+  maxTokens?: number;
+  name?: string;
   supportedParameters: string[];
   supportsStructuredOutputs: boolean;
+  tags?: string[];
+  type?: string;
 };
 
 const STRUCTURED_PARAM = 'structured_outputs';
@@ -34,9 +39,15 @@ export function parseOpenRouterModels(payload: unknown): ProviderModelInfo[] {
       continue;
     }
     const e = entry as {
+      architecture?: {
+        input_modalities?: unknown;
+        output_modalities?: unknown;
+      };
+      context_length?: unknown;
       id?: unknown;
+      name?: unknown;
       supported_parameters?: unknown;
-      top_provider?: { supported_parameters?: unknown };
+      top_provider?: { max_completion_tokens?: unknown; supported_parameters?: unknown };
     };
     if (typeof e.id !== 'string') {
       continue;
@@ -45,10 +56,60 @@ export function parseOpenRouterModels(payload: unknown): ProviderModelInfo[] {
       ...asStringArray(e.supported_parameters),
       ...asStringArray(e.top_provider?.supported_parameters),
     ]);
+    const inputModalities = asStringArray(e.architecture?.input_modalities);
     models.push({
+      ...(typeof e.context_length === 'number' ? { contextWindow: e.context_length } : {}),
       id: e.id,
+      ...(typeof e.top_provider?.max_completion_tokens === 'number'
+        ? { maxTokens: e.top_provider.max_completion_tokens }
+        : {}),
+      ...(typeof e.name === 'string' ? { name: e.name } : {}),
       supportedParameters: [...params],
       supportsStructuredOutputs: params.has(STRUCTURED_PARAM),
+      tags: inputModalities,
+    });
+  }
+  return models;
+}
+
+/** Parse Vercel AI Gateway's OpenAI-compatible /v1/models payload. */
+export function parseVercelGatewayModels(payload: unknown): ProviderModelInfo[] {
+  const data =
+    payload && typeof payload === 'object' && Array.isArray((payload as { data?: unknown }).data)
+      ? ((payload as { data: unknown[] }).data)
+      : [];
+
+  const models: ProviderModelInfo[] = [];
+  for (const entry of data) {
+    if (!entry || typeof entry !== 'object') {
+      continue;
+    }
+    const e = entry as {
+      context_window?: unknown;
+      id?: unknown;
+      max_tokens?: unknown;
+      name?: unknown;
+      supported_parameters?: unknown;
+      tags?: unknown;
+      type?: unknown;
+    };
+    if (typeof e.id !== 'string') {
+      continue;
+    }
+    const type = typeof e.type === 'string' ? e.type : undefined;
+    const supportedParameters = asStringArray(e.supported_parameters);
+    models.push({
+      ...(typeof e.context_window === 'number' ? { contextWindow: e.context_window } : {}),
+      id: e.id,
+      ...(typeof e.max_tokens === 'number' ? { maxTokens: e.max_tokens } : {}),
+      ...(typeof e.name === 'string' ? { name: e.name } : {}),
+      supportedParameters,
+      // Gateway documents structured outputs at the API layer, but its basic
+      // model list does not expose a per-model flag. Preserve the current
+      // Gateway policy for language models until endpoint metadata is richer.
+      supportsStructuredOutputs: type === 'language',
+      tags: asStringArray(e.tags),
+      ...(type ? { type } : {}),
     });
   }
   return models;

@@ -86,6 +86,7 @@ import {
   type AssistantReplyParseResult,
 } from './lib/chat/reply-metadata';
 import { getAffectExpressionBoost, getMetadataVad, updateAffectState } from './lib/chat/affect-bridge';
+import { selectReplyFormat, type ProviderModelInfo } from './brain/modelCapability';
 import {
   buildChatTurnMemoryMessage,
   chatTurnToChatMessage,
@@ -436,16 +437,12 @@ type AppEmbeddingResponse = {
 type AppModelsResponse = {
   error?: string;
   modelMetadata?: AppModelMetadata[];
-  models?: string[];
+  models?: Array<string | AppModelMetadata>;
   ok?: boolean;
   provider?: string;
 };
 
-type AppModelMetadata = {
-  id: string;
-  supportedParameters: string[];
-  supportsStructuredOutputs: boolean;
-};
+type AppModelMetadata = ProviderModelInfo;
 
 type StreamingSpeechPlayer = {
   cancel?: () => void;
@@ -526,15 +523,28 @@ function getProviderModelPool(
   );
 }
 
-function shouldUseStructuredAssistantReplyFormat(
-  llmProvider: AiSettings['llmProvider'],
-  model: string,
-  modelMetadata: ReadonlyMap<string, AppModelMetadata>,
-) {
-  if (llmProvider !== 'openrouter-responses') {
-    return true;
+function getModelIdsFromResponse(data: AppModelsResponse) {
+  return (data.models ?? [])
+    .map((model) => (typeof model === 'string' ? model : model.id))
+    .filter((model) => model.trim().length > 0);
+}
+
+function getModelMetadataFromResponse(data: AppModelsResponse) {
+  const fromMetadata = data.modelMetadata ?? [];
+  if (fromMetadata.length > 0) {
+    return fromMetadata;
   }
-  return modelMetadata.get(model)?.supportsStructuredOutputs === true;
+  return (data.models ?? []).filter(
+    (model): model is AppModelMetadata =>
+      typeof model !== 'string' &&
+      typeof model.id === 'string' &&
+      Array.isArray(model.supportedParameters) &&
+      typeof model.supportsStructuredOutputs === 'boolean',
+  );
+}
+
+function isChatModelMetadata(model: AppModelMetadata) {
+  return !model.type || model.type === 'language';
 }
 
 function createChatMessage(role: ChatMessage['role'], content: string): ChatMessage {
@@ -2534,10 +2544,13 @@ function App() {
       if (!data.ok) {
         throw new Error(data.error || 'Provider model list failed.');
       }
-      const providerModels = mergeModels(data.models ?? []);
-      const providerModelMetadata = new Map(
-        (data.modelMetadata ?? []).map((model) => [model.id, model] as const),
+      const modelMetadata = getModelMetadataFromResponse(data);
+      const providerModels = mergeModels(
+        modelMetadata.length > 0
+          ? modelMetadata.filter(isChatModelMetadata).map((model) => model.id)
+          : getModelIdsFromResponse(data),
       );
+      const providerModelMetadata = new Map(modelMetadata.map((model) => [model.id, model] as const));
       setAvailableModels(providerModels);
       setAvailableModelMetadata(providerModelMetadata);
       setAiSettings((current) =>
@@ -5631,11 +5644,11 @@ function App() {
           ? DEFAULT_OPENROUTER_MODEL
           : DEFAULT_AI_GATEWAY_MODEL,
       );
-      const assistantResponseFormat = shouldUseStructuredAssistantReplyFormat(
+      const replyFormat = selectReplyFormat(
         settings.llmProvider,
-        selectedModel,
-        availableModelMetadataRef.current,
-      )
+        availableModelMetadataRef.current.get(selectedModel) ?? null,
+      );
+      const assistantResponseFormat = replyFormat === 'structured'
         ? ASSISTANT_REPLY_JSON_FORMAT
         : undefined;
       const targetMessage = job.messages[0];
@@ -6681,6 +6694,7 @@ function App() {
               aiProxyHealth={aiProxyHealth}
               aiProxyHealthError={aiProxyHealthError}
               aiSettings={aiSettings}
+              availableModelMetadata={availableModelMetadata}
               availableModels={availableModels}
               batchPending={twitchBatchRef.current.length}
               botMentionTag={activePersonaMentionTag}
