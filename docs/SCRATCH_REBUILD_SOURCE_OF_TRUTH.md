@@ -78,6 +78,24 @@ EXCLUDE not part of this rebuild path
 | `server/src/mock` mock Twitch source | 1 | Active optional backend copy | Mock Twitch source copied to `server/mock`; runtime mock-message endpoint drives local scheduler/command/overlay tests. |
 | `server/src/marlin` | present in old repo | Not part of current target | EXCLUDE. |
 
+### Active Frontend Tab Hook Audit
+
+This audit is the working answer to "what is each tab, and is it hooked up?" It tracks the active copied frontend shell, not the earlier prototype modules.
+
+| Tab | Purpose | Hook status | Notes / remaining work |
+| --- | --- | --- | --- |
+| Account | Browser-local provider keys and local transfer backup import/export. | DONE | Uses provider key vault and local backup worker. Import/export is wired to active app state, provider secrets, saved VRMs, personas, scoped chat histories, and relationship memory. |
+| VRM | Bundled/custom VRM loading plus saved VRM library and camera/scene controls. | DONE | Bundled load, file save/load, saved-model delete/refresh, and visual settings are wired through active `App.tsx` and `VrmStage`. |
+| Background | Persona/custom/chroma/transparent backgrounds plus desktop/OBS window controls. | ACTIVE / VERIFY | Scene settings and Electron bridge calls are wired. OBS overlay launch/click-through controls exist, but `overlayPageActive` remains hardcoded off and no overlay-only CSS exists yet; do not invent hidden-overlay behavior without a product decision. |
+| Anim | Animation playlist, grouping, import, manual play, sequencer play/loop/shuffle/speed/duration. | DONE | Active sequencer defaults to non-repeating shuffle. Old weighted chance behavior is intentionally removed. Future TODO: evaluate talk-safe clips after core parity is stable. |
+| Emotion Telemetry | Recent assistant emotion/VAD plus live VRM mouth/expression telemetry. | DONE | Displays final mouth weights and non-mouth expression weights so mouth ownership can be inspected. |
+| Character | Persona CRUD and active persona switching. | DONE | Active persona, scoped chat history, relationship memory, voice bindings, and avatar bindings are handled in the app shell/storage paths. |
+| AI | LLM provider/model/settings, capability metadata, health, generation knobs, tools/reasoning controls. | DONE | Uses rebuilt backend contracts and model metadata; this is LLM-adjacent, so changes here must stay compatibility/metadata focused unless explicitly approved. |
+| Twitch | Frontend direct IRC, queue settings, mention/ambient behavior, chat overlay toggle, stream ASR and vision controls. | ACTIVE / PRIMARY | Frontend direct IRC is the primary Twitch path because it avoids Twitch API keys. Backend Twitch runtime is optional/fallback plumbing only. Queue settings, channel switching, membership status, transcription, and frame/vision controls are wired through the active frontend/backend helper endpoints. |
+| Context | Chat/context reset, GRILLO/Ladybug status, memory worker controls, embedding model controls, prompt/debug views. | DONE | GRILLO/Ladybug is non-blocking around chat: failures degrade to empty context or failed background writes, not broken replies/TTS/mouth. |
+| Voice Lab | Persona voice binding and provider voice creation/saved voice management. | ACTIVE / VERIFY | UI is wired to active voice bindings and remote provider voice creation callbacks. Provider-specific creation support still depends on backend/provider capability and should be tested per provider. |
+| TTS | Provider/voice settings, Fish/Inworld transports, micro-parameters, benchmark, speak/stop/test/cache controls. | DONE | Active browser playback uses copied manager/remote seam. Fish/Inworld benchmark is the authority for cutout/latency behavior. Piper remains parked/back-burner. |
+
 ### Feature Parity Roadmap
 
 1. **Promote the old visual frontend shell**
