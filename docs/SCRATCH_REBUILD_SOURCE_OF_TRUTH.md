@@ -43,6 +43,7 @@ EXCLUDE not part of this rebuild path
 | Legacy visual frontend | COPIED | `legacy-frontend/src/components` contains old component/tabs surface, not yet promoted as active app. |
 | Settings/storage compatibility foundation | COPIED | Active `src/lib` now has old menu/chat/product/twitch/VRM sequencer types, defaults, backup parsing, key vault, queue helpers, and focused tests. Piper is represented by a parked compatibility module, not the full browser worker. |
 | Twitch backend transcription/frame foundation | COPIED | Old IRC parser/source and stream transcriber copied; `/twitch/transcribe-sample` and `/twitch/capture-frame` are wired to current backend key headers/env. |
+| VRM loader/model/animation foundation | COPIED | Old `loadVrm`, custom VRM library, postprocessing, animation retargeting, sequencer, manifests, and tests are active. Old lipsync weights remain excluded from this slice. |
 
 ### Old Code Audit Snapshot
 
@@ -54,7 +55,7 @@ EXCLUDE not part of this rebuild path
 | `src/lib/product` backup/key vault/account | 9 | Active copy | Backup/key vault/account files copied; wire into active UI next. |
 | `src/lib/tts` manager/Piper/remote | 8 | Parked shim only | New TTS exists, old manager not active; Piper worker still PARKED. |
 | `src/lib/twitch` direct IRC/transcription helpers | 4 | Active copy | Direct IRC and stream transcription helpers copied; backend endpoints still needed. |
-| `src/lib/vrm` loader/animation/sequencer/custom library | 9 | Partial active copy | Sequencer/manifests copied; loader/custom library/stage still need COPY/ADAPT; expression blend still REBUILD. |
+| `src/lib/vrm` loader/animation/sequencer/custom library | 9 | Partial active copy | Loader/custom library/postprocessing/animation/sequencer copied; active `VrmStage` and expression blend still need COPY/ADAPT or REBUILD. |
 | `server/src/twitch` IRC/transcriber | 5 | Partial active copy | IRC parser/source and stream transcriber copied; transcription/frame routes wired; full IRC runtime lifecycle still needs integration. |
 | `server/src/commands` command parser/router | 3 | Missing | COPY/ADAPT after Twitch/overlay event shape exists. |
 | `server/src/overlay` socket/events | 2 | Missing | COPY/ADAPT for browser source/OBS behavior. |
