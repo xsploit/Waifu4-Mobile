@@ -233,6 +233,45 @@ describe('SettingsPanel tab smoke', () => {
     expect(html).toContain('Save Current As Default');
   });
 
+  it('shows model and affect VAD in emotion telemetry events', () => {
+    const props = createProps('emotion-telemetry');
+    props.emotionTelemetryEvents = [
+      {
+        affectArousal: 0.44,
+        affectDominance: 0.12,
+        affectLabel: 'warm',
+        affectValence: 0.66,
+        animationAccepted: true,
+        animationId: 'wave',
+        animationIndex: 0,
+        animationName: 'Wave',
+        animationReason: 'requested',
+        appliedIntensity: 0.7,
+        createdAt: 1710000000000,
+        emotion: 'happy',
+        expressionAccepted: true,
+        expressionReason: 'applied',
+        id: 'emotion-test',
+        metadataArousal: 0.3,
+        metadataDominance: 0.1,
+        metadataValence: 0.8,
+        requestedDurationMs: 1400,
+        requestedExpression: 'happy',
+        requestedIntensity: 0.6,
+        resolvedExpressionNames: ['happy'],
+      },
+    ];
+
+    const html = renderToStaticMarkup(<SettingsPanel {...props} />);
+
+    expect(html).toContain('Model VAD');
+    expect(html).toContain('V 0.80 / A 0.30 / D 0.10');
+    expect(html).toContain('Affect VAD');
+    expect(html).toContain('V 0.66 / A 0.44 / D 0.12');
+    expect(html).toContain('model V 0.80 / A 0.30 / D 0.10');
+    expect(html).toContain('affect warm V 0.66 / A 0.44 / D 0.12');
+  });
+
   it('keeps Fish TTS provider transports, benchmark, and timing controls mounted by default', () => {
     const html = renderToStaticMarkup(<SettingsPanel {...createProps('tts')} />);
 

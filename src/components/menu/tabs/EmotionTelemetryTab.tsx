@@ -49,6 +49,7 @@ export function EmotionTelemetryTab({
     recentTelemetryEvents.map((event) => event.animationName ?? 'none'),
     'none',
   );
+  const latestTelemetryEvent = recentTelemetryEvents[0];
 
   return (
     <section className="anim-group emotion-telemetry">
@@ -110,6 +111,33 @@ export function EmotionTelemetryTab({
                 <em>{telemetryAnimationSummary.unique} unique</em>
               </div>
             </div>
+            {latestTelemetryEvent ? (
+              <div className="emotion-telemetry-summary">
+                <div>
+                  <span>Model VAD</span>
+                  <strong>
+                    V {formatWeight(latestTelemetryEvent.metadataValence)} / A{' '}
+                    {formatWeight(latestTelemetryEvent.metadataArousal)} / D{' '}
+                    {formatWeight(latestTelemetryEvent.metadataDominance)}
+                  </strong>
+                  <em>raw reply metadata</em>
+                </div>
+                <div>
+                  <span>Affect VAD</span>
+                  <strong>
+                    V {formatWeight(latestTelemetryEvent.affectValence)} / A{' '}
+                    {formatWeight(latestTelemetryEvent.affectArousal)} / D{' '}
+                    {formatWeight(latestTelemetryEvent.affectDominance)}
+                  </strong>
+                  <em>{latestTelemetryEvent.affectLabel}</em>
+                </div>
+                <div>
+                  <span>Requested Face</span>
+                  <strong>{latestTelemetryEvent.requestedExpression}</strong>
+                  <em>peak {formatWeight(latestTelemetryEvent.requestedIntensity)}</em>
+                </div>
+              </div>
+            ) : null}
             {recentTelemetryEvents.map((event) => (
               <div className="row anim-row" key={event.id}>
                 <div className="anim-row-main">
@@ -122,7 +150,11 @@ export function EmotionTelemetryTab({
                       face {event.requestedExpression} -{' '}
                       {event.resolvedExpressionNames.length
                         ? event.resolvedExpressionNames.join(' / ')
-                        : 'none'}
+                      : 'none'}
+                    </span>
+                    <span className="anim-tags">
+                      model V {event.metadataValence.toFixed(2)} / A{' '}
+                      {event.metadataArousal.toFixed(2)} / D {event.metadataDominance.toFixed(2)}
                     </span>
                     <span className="anim-tags">
                       affect {event.affectLabel} V {event.affectValence.toFixed(2)} / A{' '}
