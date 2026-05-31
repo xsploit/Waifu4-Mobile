@@ -78,6 +78,48 @@ function getConfiguredOverlaySocketUrl() {
 export const OVERLAY_SOCKET_PROTOCOL = 'yourwifey.overlay';
 const OVERLAY_SESSION_TOKEN_KEY = 'yourwifey.overlay.token';
 
+type OverlaySocketEnv = Partial<
+  Record<
+    | 'VITE_STREAM_BOT_WS_ENABLED'
+    | 'VITE_OVERLAY_WS_ENABLED'
+    | 'VITE_OVERLAY_WS_URL'
+    | 'VITE_BOT_WS_URL',
+    string | boolean | undefined
+  >
+>;
+
+function readBooleanFlag(value: string | boolean | undefined) {
+  if (typeof value === 'boolean') {
+    return value;
+  }
+  const normalized = value?.trim().toLowerCase();
+  if (!normalized) {
+    return null;
+  }
+  if (['1', 'true', 'yes', 'on', 'enabled'].includes(normalized)) {
+    return true;
+  }
+  if (['0', 'false', 'no', 'off', 'disabled'].includes(normalized)) {
+    return false;
+  }
+  return null;
+}
+
+export function shouldConnectOverlaySocket(env: OverlaySocketEnv = import.meta.env as OverlaySocketEnv) {
+  const streamFlag = readBooleanFlag(env.VITE_STREAM_BOT_WS_ENABLED);
+  const overlayFlag = readBooleanFlag(env.VITE_OVERLAY_WS_ENABLED);
+  if (streamFlag === false || overlayFlag === false) {
+    return false;
+  }
+  if (streamFlag === true || overlayFlag === true) {
+    return true;
+  }
+  if (String(env.VITE_OVERLAY_WS_URL ?? env.VITE_BOT_WS_URL ?? '').trim()) {
+    return true;
+  }
+  return true;
+}
+
 export function getOverlaySocketToken() {
   const configured = (import.meta.env['VITE_OVERLAY_WS_TOKEN'] || '').trim();
   if (configured) {

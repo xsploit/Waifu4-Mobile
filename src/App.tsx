@@ -188,6 +188,7 @@ import {
   getOverlaySocketProtocols,
   getOverlaySocketUrl,
   parseOverlayServerEvent,
+  shouldConnectOverlaySocket,
   type OverlayServerEvent,
 } from './lib/stream/overlay-events';
 import { DirectTwitchIrcClient, type DirectTwitchChatMessage } from './lib/twitch/direct-irc';
@@ -387,9 +388,7 @@ const AI_CHAT_STREAM_IDLE_TIMEOUT_MS = 90000;
 const OVERLAY_RECONNECT_MS = 3000;
 const DIRECT_TWITCH_CHANNEL = (import.meta.env['VITE_TWITCH_CHANNEL'] || 'subsect').trim();
 const DIRECT_TWITCH_CHAT_ENABLED = import.meta.env['VITE_DIRECT_TWITCH_CHAT'] !== 'false';
-const STREAM_BOT_WS_ENABLED =
-  import.meta.env['VITE_STREAM_BOT_WS_ENABLED'] === 'true' ||
-  import.meta.env['VITE_OVERLAY_WS_ENABLED'] === 'true';
+const STREAM_BOT_WS_ENABLED = shouldConnectOverlaySocket();
 const DIRECT_COMMAND_PREFIXES = ['!ww4', '!webwaifu', '!yw', '!yourwifey', '!waifu'];
 const AI_PROXY_URL = (import.meta.env['VITE_AI_PROXY_URL'] || '').trim();
 const AUTO_RESUME_BROWSER_AUDIO = import.meta.env['VITE_AUTO_RESUME_AUDIO'] === 'true';
