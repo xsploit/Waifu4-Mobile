@@ -230,6 +230,7 @@ State/seams:
 - Backend helper endpoints:
   - `/twitch/transcribe-sample`
   - `/twitch/capture-frame`
+- ASR model selection is constrained to supported OpenRouter transcription models plus Fish ASR. OpenRouter ASR uses the Account-tab OpenRouter key; Fish ASR uses the Account-tab Fish key.
 
 Important rule:
 

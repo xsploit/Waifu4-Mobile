@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import type { Dispatch, SetStateAction } from 'react';
 import type { TwitchSettings } from '../../../lib/chat/types';
+import { TWITCH_STREAM_TRANSCRIPTION_MODEL_OPTIONS } from '../../../lib/twitch/stream-transcription';
 import { Slider } from '../ui/Slider';
 import { Toggle } from '../ui/Toggle';
 
@@ -355,22 +356,26 @@ export function TwitchTab({
           />
         </div>
         <label className="setting-row">
-          <span>OpenRouter STT model</span>
-          <input
+          <span>ASR model</span>
+          <select
             className="input-tech compact-input"
             onChange={(event) =>
               updateTwitchSettings(setTwitchSettings, {
-                streamTranscriptionModel: event.target.value.trim() || 'openai/whisper-large-v3',
+                streamTranscriptionModel: event.target.value,
               })
             }
-            spellCheck={false}
-            type="text"
             value={twitchSettings.streamTranscriptionModel}
-          />
+          >
+            {TWITCH_STREAM_TRANSCRIPTION_MODEL_OPTIONS.map((model) => (
+              <option key={model.value} value={model.value}>
+                {model.label}
+              </option>
+            ))}
+          </select>
         </label>
         <div className="field-hint">
-          OpenRouter uses this model through /audio/transcriptions. Vercel Gateway falls back to
-          Fish Speech ASR when a Fish key is saved.
+          OpenRouter ASR uses the Account-tab OpenRouter key. Fish ASR uses the Account-tab Fish
+          key.
         </div>
         <NumberField
           label="Sample seconds"
@@ -400,8 +405,8 @@ export function TwitchTab({
           value={twitchSettings.streamTranscriptionContextLimit}
         />
         <div className="field-hint">
-          Uses the browser-local OpenAI key through the backend. The server also needs ffmpeg plus
-          yt-dlp or streamlink. Transcript snippets are ambient stream context, not chat messages.
+          The backend still needs ffmpeg plus yt-dlp or streamlink. Transcript snippets are ambient
+          stream context, not chat messages.
         </div>
         <div className="status-copy">{streamTranscriptionStatus}</div>
       </div>

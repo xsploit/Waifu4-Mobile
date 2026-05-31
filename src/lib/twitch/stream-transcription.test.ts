@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+  TWITCH_STREAM_TRANSCRIPTION_MODEL_OPTIONS,
   getTwitchStreamTranscriptionProvider,
   isLikelyVisionModel,
   normalizeTwitchStreamVisionDetail,
@@ -36,5 +37,14 @@ describe('stream transcription helpers', () => {
     expect(getTwitchStreamTranscriptionProvider('fish-audio/asr')).toBe('fish-speech');
     expect(getTwitchStreamTranscriptionProvider('openai/whisper-large-v3')).toBe('openrouter');
     expect(getTwitchStreamTranscriptionProvider('bad-model')).toBe('openrouter');
+  });
+
+  it('exposes only models the Twitch ASR normalizer accepts', () => {
+    const values = TWITCH_STREAM_TRANSCRIPTION_MODEL_OPTIONS.map((option) => option.value);
+
+    expect(values).toContain('fish-audio/asr');
+    values.forEach((value) => {
+      expect(normalizeTwitchStreamTranscriptionModel(value)).toBe(value);
+    });
   });
 });
