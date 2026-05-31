@@ -222,6 +222,13 @@ State/seams:
 Current gap:
 
 - Tool settings (`toolChoiceMode`, `maxToolRounds`) and the Account-tab Tavily key surface are present, but main assistant `/ai/chat` does not yet execute AI SDK tools. Current live tool execution is GRILLO/Ladybug memory-worker tooling only. Restoring main assistant web/tool calls is LLM-adjacent and needs a deliberate implementation slice.
+- Adaptation map for that slice:
+  - Keep the existing browser header path: Account Tavily key -> `x-yourwifey-tavily-provider-key`.
+  - Extend backend `readProviderKeys` to read the Tavily request key/env fallback.
+  - Reuse the copied `src/lib/grillo/chat-tools.ts` Tavily tool definitions or extract their shared schema/execute helpers; do not duplicate a second Tavily schema by hand.
+  - Add AI SDK `tools`, `toolChoice`, and bounded `maxSteps`/round handling in `server/ai/llmGateway.ts` for main chat only.
+  - For OpenRouter, set `require_parameters=true` when tools are attached, same as structured-output special parameters.
+  - Keep memory-scope tool behavior separate; GRILLO/Ladybug worker tools are not the main assistant tool lane.
 
 Constraint:
 
