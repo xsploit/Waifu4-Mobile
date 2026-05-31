@@ -59,6 +59,7 @@ describe('TtsManager remote PCM scheduling', () => {
           value: 1,
         },
       }),
+      destination: {},
       state: 'running',
     };
     const manager = new TtsManager();

@@ -98,6 +98,24 @@ export class TtsManager {
     this.audioSource = null;
   }
 
+  private disconnectAnalyserOutput() {
+    if (!this.audioAnalyser || !this.masterGain || !this.analyserConnected) {
+      return;
+    }
+
+    try {
+      this.audioAnalyser.disconnect(this.masterGain);
+    } catch {
+      // ignore
+    }
+    try {
+      this.masterGain.disconnect();
+    } catch {
+      // ignore
+    }
+    this.analyserConnected = false;
+  }
+
   private clearPlaybackState() {
     this.isPlaying = false;
     this.wordBoundaries = [];
@@ -459,6 +477,7 @@ export class TtsManager {
 
   private beginRemotePcmStream(text: string) {
     this.teardownCurrentAudio();
+    this.disconnectAnalyserOutput();
     this.wordBoundaries = [];
     this.currentPhonemes = null;
     this.wordBoundaryStartTime = null;
@@ -497,15 +516,13 @@ export class TtsManager {
     }
 
     const source = this.audioContext.createBufferSource();
-    const frameGain = this.audioContext.createGain();
     source.buffer = audioBuffer;
     source.playbackRate.value = this.playbackRate;
-    source.connect(frameGain);
-    frameGain.connect(this.audioAnalyser);
+    source.connect(this.audioContext.destination);
+    source.connect(this.audioAnalyser);
     if (this.lipsyncNode) {
-      frameGain.connect(this.lipsyncNode);
+      source.connect(this.lipsyncNode);
     }
-    this.ensureAnalyserConnected();
 
     const duration = audioBuffer.duration / Math.max(0.01, this.playbackRate);
     const { startAt, endAt } = getRemotePcmChunkSchedule(
@@ -513,24 +530,15 @@ export class TtsManager {
       this.streamPlaybackEndTime,
       duration,
     );
-    frameGain.gain.cancelScheduledValues(startAt);
-    frameGain.gain.setValueAtTime(1, startAt);
     this.streamPlaybackEndTime = endAt;
     this.currentStreamSources.add(source);
-    this.currentStreamGains.add(frameGain);
     this.streamScheduledChunkCount += 1;
 
     const ended = new Promise<void>((resolve) => {
       source.onended = () => {
         this.currentStreamSources.delete(source);
-        this.currentStreamGains.delete(frameGain);
         try {
           source.disconnect();
-        } catch {
-          // ignore
-        }
-        try {
-          frameGain.disconnect();
         } catch {
           // ignore
         }
