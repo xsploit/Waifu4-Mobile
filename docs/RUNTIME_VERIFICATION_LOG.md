@@ -53,3 +53,20 @@ Remaining verification:
 - Voice Lab Fish/Inworld voice list/create with real Account-tab keys.
 - Twitch stream ASR/frame helpers against a real channel/provider key.
 - Packaged desktop launch after the web flow is stable enough.
+
+## 2026-05-31 Production Web Build After Tab Parity Pass
+
+Command:
+
+```text
+npm run build
+```
+
+Result: passed. TypeScript compiled and Vite produced the production `dist/` bundle after the Fish-default TTS tab, chat-stream emotion telemetry, model/affect VAD display, Twitch ASR, and provider embedding picker parity checks. Vite still reports expected large copied-frontend/ML chunk warnings, but no build error.
+
+Remaining verification:
+
+- Main assistant Tavily tools with a real Account-tab Tavily key.
+- Voice Lab Fish/Inworld voice list/create with real Account-tab keys.
+- Twitch stream ASR/frame helpers against a real channel/provider key.
+- Packaged desktop launch after the web flow is stable enough.
