@@ -49,7 +49,7 @@ EXCLUDE not part of this rebuild path
 | POML dynamic prompt renderer | DONE | Old vendored `pomljs` renderer copied into the backend, template reads are cached, and `/ai/poml/render` is exposed behind the `/api` proxy for the direct frontend. Provider/model prompt caching is a later optimization. |
 | Fish live bridge frontend seam | DONE | `/ai/chat` now accepts the copied frontend `ttsBridge` shape, pushes visible LLM deltas into one Fish realtime text stream, and emits SSE audio chunks back to the direct frontend. |
 | Embedding lane controls | DONE | Memory settings expose local Transformers-first/provider/auto modes, provider embedding fallback, and provider-metadata-filtered embedding model picking while still allowing a typed custom model ID. |
-| Twitch command/overlay/scheduler foundation | COPIED | Old server command parser/router, overlay socket, chat scheduler/message filters, mock Twitch source, and tests are copied into `server/*` and patched for the rebuild imports. Runtime lifecycle wiring is still next. |
+| Twitch command/overlay/scheduler foundation | ADAPT | Old server command parser/router, overlay socket, chat scheduler/message filters, mock Twitch source, and tests are copied into `server/*` and patched for the rebuild imports. Overlay socket is attached to the backend `/ws`; command/scheduler runtime wiring is still next. |
 
 ### Old Code Audit Snapshot
 
@@ -64,7 +64,7 @@ EXCLUDE not part of this rebuild path
 | `src/lib/vrm` loader/animation/sequencer/custom library | 9 | Active copy/adapt | Loader/custom library/postprocessing/animation/sequencer copied; active `VrmStage` copied/adapted and mounted. Expression blend still needs REBUILD. |
 | `server/src/twitch` IRC/transcriber | 5 | Partial active copy | IRC parser/source and stream transcriber copied; transcription/frame routes wired; full IRC runtime lifecycle still needs integration. |
 | `server/src/commands` command parser/router | 3 | COPIED | Parser/router copied to `server/commands`; runtime wiring still needed. |
-| `server/src/overlay` socket/events | 2 | COPIED | Overlay socket copied to `server/overlay`; attach to backend HTTP server next. |
+| `server/src/overlay` socket/events | 2 | Partial active copy | Overlay socket copied to `server/overlay` and attached to backend `/ws`; command/scheduler broadcasts still need runtime wiring. |
 | `server/src/scheduler` queue/scheduler/filtering | 3 | COPIED | Chat scheduler and message filters copied to `server/scheduler`; adapt to the new chat provider next. |
 | `server/src/mock` mock Twitch source | 1 | COPIED | Mock Twitch source copied to `server/mock`; use for scheduler/local dry-run tests next. |
 | `server/src/marlin` | present in old repo | Not part of current target | EXCLUDE. |
@@ -82,7 +82,7 @@ EXCLUDE not part of this rebuild path
 
 4. **Rebuild animation/emotion safely**
    Keep old user-facing animation controls, presets, telemetry, and sequencer concepts. Do not blindly copy the old expression weight behavior. Build a new expression mixer with priority rules: mouth visemes win for `aa/ih/ou/ee/oh`; emotion/animation expressions can blend around them; debug panels must show final mouth and expression weights.
-   Near-term TODO: use the three copied talk-safe clips (`Sachi Casual Talk`, `Sachi Talk 1`, `Sachi Talk 2`) as the first TTS talk-animation pool, then add more clips only after auditioning them.
+   Future TODO: after the Twitch/GRILLO/front-end parity pieces are stable, evaluate the three copied talk-safe clips (`Sachi Casual Talk`, `Sachi Talk 1`, `Sachi Talk 2`) as a possible TTS talk-animation pool.
 
 5. **Restore Twitch live input stack**
    Copy/adapt server IRC parser/source, direct frontend IRC helper, mock Twitch source, Twitch AI queue, command parser/router, scheduler, and overlay event socket. Twitch includes whispers/message modes where supported by the old stack.

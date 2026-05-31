@@ -1,7 +1,11 @@
 import { createHmac } from 'node:crypto';
+import { createServer, type Server } from 'node:http';
+import type { AddressInfo } from 'node:net';
+import { WebSocket } from 'ws';
 import { describe, expect, it } from 'vitest';
 import {
   authorizeOverlaySocketRequest,
+  OverlaySocket,
   readOverlaySocketSigningSecret,
   readOverlaySocketToken,
 } from './OverlaySocket.js';
@@ -85,6 +89,40 @@ describe('OverlaySocket auth', () => {
   });
 });
 
+describe('OverlaySocket runtime', () => {
+  it('accepts localhost overlay clients and forwards client events', async () => {
+    const httpServer = createServer((_req, res) => {
+      res.statusCode = 404;
+      res.end();
+    });
+    const clientEvents: string[] = [];
+    const overlaySocket = new OverlaySocket(
+      httpServer,
+      (event) => clientEvents.push(event.type),
+      { env: {} },
+    );
+    let client: WebSocket | null = null;
+
+    try {
+      await listen(httpServer);
+      const { port } = httpServer.address() as AddressInfo;
+      client = new WebSocket(`ws://127.0.0.1:${port}/ws`, ['yourwifey.overlay'], {
+        headers: { Origin: 'http://localhost:5173' },
+      });
+
+      await waitForOpen(client);
+      expect(overlaySocket.clientCount).toBe(1);
+
+      client.send(JSON.stringify({ type: 'overlay:ready', payload: { page: 'app' } }));
+      await waitFor(() => clientEvents.includes('overlay:ready'));
+    } finally {
+      client?.close();
+      overlaySocket.close();
+      await closeServer(httpServer);
+    }
+  });
+});
+
 function issueSocketToken(secret: string) {
   const payload = Buffer.from(
     JSON.stringify({
@@ -102,4 +140,43 @@ function request(url: string, headers: Record<string, string>) {
     headers,
     url,
   };
+}
+
+function listen(server: Server) {
+  return new Promise<void>((resolve) => {
+    server.listen(0, '127.0.0.1', resolve);
+  });
+}
+
+function closeServer(server: Server) {
+  return new Promise<void>((resolve, reject) => {
+    if (!server.listening) {
+      resolve();
+      return;
+    }
+    server.close((error) => {
+      if (error) {
+        reject(error);
+        return;
+      }
+      resolve();
+    });
+  });
+}
+
+function waitForOpen(socket: WebSocket) {
+  return new Promise<void>((resolve, reject) => {
+    socket.once('open', resolve);
+    socket.once('error', reject);
+  });
+}
+
+async function waitFor(predicate: () => boolean) {
+  for (let attempt = 0; attempt < 20; attempt += 1) {
+    if (predicate()) {
+      return;
+    }
+    await new Promise((resolve) => setTimeout(resolve, 10));
+  }
+  throw new Error('Timed out waiting for overlay socket event.');
 }
