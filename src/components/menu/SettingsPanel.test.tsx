@@ -158,4 +158,111 @@ describe('SettingsPanel tab smoke', () => {
     expect(html).toContain('settings-panel open');
     expect(html).toContain(marker);
   });
+
+  it('keeps AI model metadata, tool, cache, and transport controls mounted', () => {
+    const props = createProps('ai');
+    props.aiSettings = {
+      ...props.aiSettings,
+      llmProvider: 'openrouter-responses',
+      model: 'provider/chat-vision-tools',
+    };
+    props.availableModels = ['provider/chat-vision-tools'];
+    props.availableModelMetadata = new Map([
+      [
+        'provider/chat-vision-tools',
+        {
+          contextWindow: 128000,
+          id: 'provider/chat-vision-tools',
+          inputModalities: ['text', 'image'],
+          supportedParameters: ['structured_outputs', 'tools', 'tool_choice'],
+          supportsImplicitCaching: true,
+          supportsStructuredOutputs: true,
+          tags: ['vision', 'cache'],
+          type: 'language',
+        },
+      ],
+    ]);
+    props.aiProxyHealth = {
+      aiProvider: 'openrouter-responses',
+      providerState: {
+        cachedTokens: 42,
+        promptCacheKey: 'cache-key',
+        toolNames: ['tavily_search'],
+        toolsAvailable: true,
+        toolsSource: 'account',
+      },
+    };
+
+    const html = renderToStaticMarkup(<SettingsPanel {...props} />);
+
+    expect(html).toContain('Capabilities:');
+    expect(html).toContain('json, vision, tools, cache, 128K ctx');
+    expect(html).toContain('Tool Calls: Auto');
+    expect(html).toContain('Max tool rounds');
+    expect(html).toContain('Prompt cache:');
+    expect(html).toContain('tavily_search');
+  });
+
+  it('keeps Twitch direct IRC, ASR, queue, and stream vision controls mounted', () => {
+    const props = createProps('twitch');
+    props.twitchSettings = {
+      ...props.twitchSettings,
+      streamTranscriptionEnabled: true,
+      streamVisionContextEnabled: true,
+    };
+
+    const html = renderToStaticMarkup(<SettingsPanel {...props} />);
+
+    expect(html).toContain('Twitch Connection');
+    expect(html).toContain('Direct queue:');
+    expect(html).toContain('ASR:');
+    expect(html).toContain('ASR model');
+    expect(html).toContain('OpenRouter ASR uses the Account-tab OpenRouter key');
+    expect(html).toContain('Attach Twitch stream frame to vision models');
+    expect(html).toContain('Captures one JPEG frame from the Twitch stream');
+  });
+
+  it('keeps Voice Lab provider creation and persona binding controls mounted', () => {
+    const html = renderToStaticMarkup(<SettingsPanel {...createProps('voice-lab')} />);
+
+    expect(html).toContain('Persona Voice Defaults');
+    expect(html).toContain('Fish Speech zero-shot / custom voice');
+    expect(html).toContain('Inworld custom voice');
+    expect(html).toContain('Provider voice id after creation');
+    expect(html).toContain('Fish Speech and Inworld can create provider voices');
+    expect(html).toContain('Save Current As Default');
+  });
+
+  it('keeps Fish TTS provider transports, benchmark, and timing controls mounted by default', () => {
+    const html = renderToStaticMarkup(<SettingsPanel {...createProps('tts')} />);
+
+    expect(html).toContain('Speech Output');
+    expect(html).toContain('Fish Speech Live Bridge');
+    expect(html).toContain('Fish Speech Live');
+    expect(html).toContain('WebSocket realtime');
+    expect(html).toContain('Timestamp SSE (HTTP)');
+    expect(html).toContain('Condition Previous Chunks');
+    expect(html).toContain('Fish Chunk');
+    expect(html).toContain('Benchmark');
+    expect(html).toContain('Copy Results');
+  });
+
+  it('keeps Inworld TTS provider transports, timestamps, and buffer controls mounted when selected', () => {
+    const props = createProps('tts');
+    props.aiSettings = {
+      ...props.aiSettings,
+      ttsProvider: 'inworld',
+    };
+    const html = renderToStaticMarkup(<SettingsPanel {...props} />);
+
+    expect(html).toContain('Inworld Stream');
+    expect(html).toContain('HTTP stream');
+    expect(html).toContain('WebSocket stream');
+    expect(html).toContain('Word timestamps');
+    expect(html).toContain('Character timestamps');
+    expect(html).toContain('Timestamp sync');
+    expect(html).toContain('Buffer');
+    expect(html).toContain('Max Buffer Delay');
+    expect(html).toContain('Auto Mode');
+  });
 });
