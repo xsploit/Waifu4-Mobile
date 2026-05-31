@@ -420,13 +420,8 @@ export function TtsTab({
             }
             value={aiSettings.fishSpeechModel}
           >
-            <option value="s2">s2</option>
-            <option value="s2-mini">s2-mini</option>
+            <option value="s2">s2-pro</option>
             <option value="s1">s1</option>
-            <option value="s1-mini">s1-mini</option>
-            <option value="speech-1.6">speech-1.6</option>
-            <option value="speech-1.5">speech-1.5</option>
-            <option value="agent-x0">agent-x0</option>
           </select>
           <select
             className="select-tech"

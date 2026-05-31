@@ -390,12 +390,14 @@ function normalizeAiSettings(value: unknown): AiSettings {
     source.fishSpeechVoiceScope === 'mine' || source.fishSpeechVoiceScope === 'public'
       ? source.fishSpeechVoiceScope
       : defaults.fishSpeechVoiceScope;
+  const fishSpeechModelRaw =
+    typeof source.fishSpeechModel === 'string' ? source.fishSpeechModel.trim().toLowerCase() : '';
   const fishSpeechModel =
-    typeof source.fishSpeechModel === 'string' && source.fishSpeechModel.trim()
-      ? source.fishSpeechModel.trim() === 's2-pro'
+    fishSpeechModelRaw === 's1'
+      ? 's1'
+      : fishSpeechModelRaw === 's2' || fishSpeechModelRaw === 's2-pro'
         ? 's2'
-        : source.fishSpeechModel.trim()
-      : defaults.fishSpeechModel;
+        : defaults.fishSpeechModel;
   const fishSpeechChunkLength =
     typeof source.fishSpeechChunkLength === 'number' &&
     Number.isFinite(source.fishSpeechChunkLength)

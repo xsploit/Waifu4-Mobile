@@ -1291,6 +1291,8 @@ fishSpeechConditionOnPreviousChunks: true
 fishSpeechChunkLength: 160
 ```
 
+`fishSpeechModel: s2` is the frontend/storage value. The rebuilt Fish TTS proxy maps it to the Fish API `s2-pro` backend. Stale copied model ids normalize back to `s2`.
+
 Current runtime env/config knobs:
 
 ```text

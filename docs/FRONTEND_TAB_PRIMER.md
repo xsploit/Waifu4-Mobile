@@ -268,7 +268,7 @@ Status: `LIVE`.
 Purpose:
 
 - Provider selection: Piper, Fish, Inworld.
-- Fish transport/settings: WebSocket, timestamp SSE, format, sample rate, latency, chunk length, previous-chunk conditioning.
+- Fish transport/settings: WebSocket, timestamp SSE, format, sample rate, latency, chunk length, previous-chunk conditioning. Active model choice is `s2` in saved UI state, mapped to Fish API `s2-pro`.
 - Inworld transport/settings: HTTP/WebSocket, timestamps, delivery mode, buffer controls, auto mode.
 - Remote voice list/manual voice id.
 - Browser benchmark mode.

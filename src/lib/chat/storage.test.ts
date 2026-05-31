@@ -407,6 +407,34 @@ describe('chat settings persistence', () => {
     expect(loaded.twitchSettings.streamTranscriptionModel).toBe('openai/whisper-large-v3');
   });
 
+  it('normalizes stale Fish model ids to the active Fish TTS model choice', async () => {
+    window.localStorage.setItem(
+      STORAGE_KEYS.aiSettings,
+      JSON.stringify({
+        ...createDefaultAiSettings(),
+        fishSpeechModel: 'speech-1.6',
+      }),
+    );
+
+    const loaded = await loadPersistedChatState();
+
+    expect(loaded.aiSettings.fishSpeechModel).toBe('s2');
+  });
+
+  it('keeps legacy Fish s2-pro saves compatible with the frontend s2 value', async () => {
+    window.localStorage.setItem(
+      STORAGE_KEYS.aiSettings,
+      JSON.stringify({
+        ...createDefaultAiSettings(),
+        fishSpeechModel: 's2-pro',
+      }),
+    );
+
+    const loaded = await loadPersistedChatState();
+
+    expect(loaded.aiSettings.fishSpeechModel).toBe('s2');
+  });
+
   it('normalizes malformed save input before writing persistence entries', async () => {
     await expect(
       savePersistedChatState({
