@@ -10,6 +10,7 @@ import {
   type VRMAnimation,
 } from '@pixiv/three-vrm-animation';
 import type { AnimationEntry, AnimationFormat } from '../menu/types';
+import { isProtectedExpressionName, isProtectedExpressionTrackName } from './expression-priority';
 
 type VrmExpressionManager = NonNullable<VRM['expressionManager']>;
 
@@ -494,8 +495,11 @@ function isProceduralGazeTrackName(trackName: string) {
   return PROCEDURAL_GAZE_TRACK_MARKERS.some((marker) => normalized.includes(marker));
 }
 
-function stripProceduralGazeTracks(clip: THREE.AnimationClip) {
-  const tracks = clip.tracks.filter((track) => !isProceduralGazeTrackName(track.name));
+function stripProtectedExpressionTracks(clip: THREE.AnimationClip) {
+  const tracks = clip.tracks.filter(
+    (track) =>
+      !isProceduralGazeTrackName(track.name) && !isProtectedExpressionTrackName(track.name),
+  );
   return tracks.length === clip.tracks.length
     ? clip
     : new THREE.AnimationClip(clip.name || 'vrmAnimation', clip.duration, tracks);
@@ -534,7 +538,10 @@ function createGltfExpressionTracks(
     }
 
     const expressionName = resolveExpressionName(expressionManager, candidates);
-    if (expressionName && isProceduralGazeTrackName(expressionName)) {
+    if (
+      expressionName &&
+      (isProceduralGazeTrackName(expressionName) || isProtectedExpressionName(expressionName))
+    ) {
       continue;
     }
 
@@ -643,7 +650,7 @@ function ensureLookAtQuaternionProxy(vrm: VRM) {
 
 function createVrmClip(vrmAnimation: VRMAnimation, vrm: VRM) {
   ensureLookAtQuaternionProxy(vrm);
-  return stripProceduralGazeTracks(createVRMAnimationClip(vrmAnimation, vrm));
+  return stripProtectedExpressionTracks(createVRMAnimationClip(vrmAnimation, vrm));
 }
 
 function animationLoadError(error: unknown, url: string, expected: string) {
@@ -849,7 +856,7 @@ async function loadVrmAnimationClipUncached(
       clip = await loadMixamoAnimation(entry.url, vrm);
       break;
   }
-  return clip ? stripProceduralGazeTracks(clip) : null;
+  return clip ? stripProtectedExpressionTracks(clip) : null;
 }
 
 export function retargetClip(clip: THREE.AnimationClip, vrm: VRM): THREE.AnimationClip | null {
