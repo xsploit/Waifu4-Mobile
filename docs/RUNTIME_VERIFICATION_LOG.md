@@ -29,6 +29,14 @@ npm run smoke:runtime
 | Voice list no-key guard | `GET /tts/voices?provider=fish-speech` without provider key | `401` | Voice Lab list route is mounted and missing Account/env TTS key fails cleanly. |
 | Voice create validation guard | `POST /tts/voices/create` with invalid body | `400` | Voice Lab create route validates before provider calls. |
 
+Rerun after remote PCM playback scheduling and VRM scale reload fixes:
+
+```text
+npm run smoke:runtime
+```
+
+Result: all surfaces above returned the expected statuses.
+
 Remaining verification:
 
 - Main assistant Tavily tools with a real Account-tab Tavily key.
