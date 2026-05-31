@@ -9,8 +9,18 @@ export type DirectTwitchChatMessage = {
   isBroadcaster: boolean;
 };
 
+export type DirectTwitchMembershipEvent = {
+  id: string;
+  type: 'join' | 'part';
+  user: string;
+  displayName: string;
+  channel: string;
+  timestamp: number;
+};
+
 export type DirectTwitchIrcHandlers = {
   onMessage: (message: DirectTwitchChatMessage) => void;
+  onMembership?: (event: DirectTwitchMembershipEvent) => void;
   onStatus: (message: string, level?: 'info' | 'warning' | 'error') => void;
 };
 
@@ -198,7 +208,7 @@ export class DirectTwitchIrcClient {
       );
       this.sendRaw('PASS SCHMOOPIIE');
       this.sendRaw(`NICK ${this.nick}`);
-      this.sendRaw('CAP REQ :twitch.tv/tags twitch.tv/commands');
+      this.sendRaw('CAP REQ :twitch.tv/membership twitch.tv/tags twitch.tv/commands');
       this.sendRaw(`JOIN #${this.currentChannel}`);
     });
 
@@ -263,6 +273,22 @@ export class DirectTwitchIrcClient {
 
       if (parsed.command === 'NOTICE' && parsed.trailing) {
         this.handlers.onStatus(`Twitch IRC notice: ${parsed.trailing}`, 'warning');
+        continue;
+      }
+
+      if (parsed.command === 'JOIN' || parsed.command === 'PART') {
+        const user = loginFromPrefix(parsed.prefix);
+        const channel = normalizeChannel(parsed.params[0] ?? parsed.trailing ?? this.currentChannel);
+        if (user && channel === this.currentChannel) {
+          this.handlers.onMembership?.({
+            id: `direct-irc-${parsed.command.toLowerCase()}-${channel}-${user}-${Date.now()}`,
+            type: parsed.command === 'JOIN' ? 'join' : 'part',
+            user,
+            displayName: parsed.tags['display-name'] || user,
+            channel,
+            timestamp: Date.now(),
+          });
+        }
         continue;
       }
 

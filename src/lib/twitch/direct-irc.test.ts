@@ -1,5 +1,9 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { DirectTwitchIrcClient, type DirectTwitchChatMessage } from './direct-irc';
+import {
+  DirectTwitchIrcClient,
+  type DirectTwitchChatMessage,
+  type DirectTwitchMembershipEvent,
+} from './direct-irc';
 
 type Listener = (event?: { data?: string }) => void;
 
@@ -75,7 +79,9 @@ describe('DirectTwitchIrcClient socket lifecycle', () => {
     expect(sockets[0]?.url).toBe('wss://irc-ws.chat.twitch.tv:443');
     expect(sockets[0]?.sent[0]).toBe('PASS SCHMOOPIIE\r\n');
     expect(sockets[0]?.sent[1]).toMatch(/^NICK justinfan\d+\r\n$/);
-    expect(sockets[0]?.sent).toContain('CAP REQ :twitch.tv/tags twitch.tv/commands\r\n');
+    expect(sockets[0]?.sent).toContain(
+      'CAP REQ :twitch.tv/membership twitch.tv/tags twitch.tv/commands\r\n',
+    );
     expect(sockets[0]?.sent).toContain('JOIN #subsect\r\n');
   });
 
@@ -117,6 +123,39 @@ describe('DirectTwitchIrcClient socket lifecycle', () => {
         timestamp: 1700000000000,
         user: 'subsect',
       },
+    ]);
+  });
+
+  it('exposes Twitch IRC membership join and part events without routing them as chat', () => {
+    const messages: DirectTwitchChatMessage[] = [];
+    const memberships: DirectTwitchMembershipEvent[] = [];
+    const client = new DirectTwitchIrcClient('subsect', {
+      onMembership: (event) => memberships.push(event),
+      onMessage: (message) => messages.push(message),
+      onStatus: vi.fn(),
+    });
+
+    client.start();
+    sockets[0]?.emit('open');
+    sockets[0]?.emit('message', {
+      data:
+        ':viewer!viewer@viewer.tmi.twitch.tv JOIN #subsect\r\n:viewer!viewer@viewer.tmi.twitch.tv PART #subsect\r\n',
+    });
+
+    expect(messages).toEqual([]);
+    expect(memberships).toEqual([
+      expect.objectContaining({
+        channel: 'subsect',
+        displayName: 'viewer',
+        type: 'join',
+        user: 'viewer',
+      }),
+      expect.objectContaining({
+        channel: 'subsect',
+        displayName: 'viewer',
+        type: 'part',
+        user: 'viewer',
+      }),
     ]);
   });
 
