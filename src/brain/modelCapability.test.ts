@@ -1,5 +1,11 @@
 import { describe, expect, it } from 'vitest';
-import { parseOpenRouterModels, parseVercelGatewayModels, selectReplyFormat } from './modelCapability';
+import {
+  isChatModel,
+  parseOpenRouterModels,
+  parseVercelGatewayModels,
+  selectReplyFormat,
+  supportsImageInput,
+} from './modelCapability';
 
 const SAMPLE = {
   data: [
@@ -118,5 +124,48 @@ describe('selectReplyFormat', () => {
   it('vercel-gateway: structured by default regardless of info', () => {
     expect(selectReplyFormat('vercel-gateway')).toBe('structured');
     expect(selectReplyFormat('vercel-gateway', null)).toBe('structured');
+  });
+});
+
+describe('model capability helpers', () => {
+  it('detects chat models from provider type metadata', () => {
+    expect(isChatModel({ id: 'x', supportedParameters: [], supportsStructuredOutputs: true })).toBe(
+      true,
+    );
+    expect(
+      isChatModel({
+        id: 'x',
+        supportedParameters: [],
+        supportsStructuredOutputs: true,
+        type: 'language',
+      }),
+    ).toBe(true);
+    expect(
+      isChatModel({
+        id: 'x',
+        supportedParameters: [],
+        supportsStructuredOutputs: false,
+        type: 'embedding',
+      }),
+    ).toBe(false);
+  });
+
+  it('detects image input from provider modality tags', () => {
+    expect(
+      supportsImageInput({
+        id: 'x',
+        supportedParameters: [],
+        supportsStructuredOutputs: true,
+        tags: ['text', 'image'],
+      }),
+    ).toBe(true);
+    expect(
+      supportsImageInput({
+        id: 'y',
+        supportedParameters: [],
+        supportsStructuredOutputs: true,
+        tags: ['text'],
+      }),
+    ).toBe(false);
   });
 });

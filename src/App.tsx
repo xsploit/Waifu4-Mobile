@@ -86,7 +86,12 @@ import {
   type AssistantReplyParseResult,
 } from './lib/chat/reply-metadata';
 import { getAffectExpressionBoost, getMetadataVad, updateAffectState } from './lib/chat/affect-bridge';
-import { selectReplyFormat, type ProviderModelInfo } from './brain/modelCapability';
+import {
+  isChatModel,
+  selectReplyFormat,
+  supportsImageInput,
+  type ProviderModelInfo,
+} from './brain/modelCapability';
 import {
   buildChatTurnMemoryMessage,
   chatTurnToChatMessage,
@@ -541,10 +546,6 @@ function getModelMetadataFromResponse(data: AppModelsResponse) {
       Array.isArray(model.supportedParameters) &&
       typeof model.supportsStructuredOutputs === 'boolean',
   );
-}
-
-function isChatModelMetadata(model: AppModelMetadata) {
-  return !model.type || model.type === 'language';
 }
 
 function createChatMessage(role: ChatMessage['role'], content: string): ChatMessage {
@@ -1264,19 +1265,25 @@ function getFreshTwitchStreamFrameForPrompt({
   llmProvider,
   maxAgeSeconds,
   model,
+  modelMetadata,
   visionEnabled,
 }: {
   frame: TwitchStreamFrame | null;
   llmProvider: AiSettings['llmProvider'];
   maxAgeSeconds: number;
   model: string;
+  modelMetadata?: AppModelMetadata | null;
   visionEnabled: boolean;
 }) {
+  const modelAcceptsImage =
+    modelMetadata !== undefined && modelMetadata !== null
+      ? supportsImageInput(modelMetadata)
+      : isLikelyVisionModel(llmProvider, model);
   if (
     !visionEnabled ||
     !frame ||
     isPremiumCostModelId(model) ||
-    !isLikelyVisionModel(llmProvider, model)
+    !modelAcceptsImage
   ) {
     return null;
   }
@@ -2547,7 +2554,7 @@ function App() {
       const modelMetadata = getModelMetadataFromResponse(data);
       const providerModels = mergeModels(
         modelMetadata.length > 0
-          ? modelMetadata.filter(isChatModelMetadata).map((model) => model.id)
+          ? modelMetadata.filter(isChatModel).map((model) => model.id)
           : getModelIdsFromResponse(data),
       );
       const providerModelMetadata = new Map(modelMetadata.map((model) => [model.id, model] as const));
@@ -5761,6 +5768,7 @@ function App() {
           llmProvider: settings.llmProvider,
           maxAgeSeconds: currentTwitchSettings.streamVisionMaxAgeSeconds,
           model: selectedModel,
+          modelMetadata: availableModelMetadataRef.current.get(selectedModel) ?? null,
           visionEnabled: currentTwitchSettings.streamVisionContextEnabled,
         });
         const promptMessages = attachStreamVisionFrame(

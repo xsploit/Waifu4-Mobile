@@ -17,6 +17,7 @@ export type ProviderModelInfo = {
 };
 
 const STRUCTURED_PARAM = 'structured_outputs';
+const IMAGE_INPUT_TAGS = new Set(['image', 'image-input', 'vision']);
 
 function asStringArray(value: unknown): string[] {
   return Array.isArray(value) ? value.filter((v): v is string => typeof v === 'string') : [];
@@ -130,4 +131,12 @@ export function selectReplyFormat(
   }
   // vercel-gateway — TODO: replace with real gateway capability metadata.
   return 'structured';
+}
+
+export function isChatModel(info?: ProviderModelInfo | null) {
+  return !info?.type || info.type === 'language';
+}
+
+export function supportsImageInput(info?: ProviderModelInfo | null) {
+  return (info?.tags ?? []).some((tag) => IMAGE_INPUT_TAGS.has(tag));
 }
