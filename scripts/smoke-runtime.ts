@@ -16,6 +16,13 @@ const checks: Check[] = [
   { name: 'twitch runtime', path: '/twitch/runtime/status', expectedStatus: 200 },
   { name: 'memory status', path: '/memory/status', expectedStatus: 200 },
   {
+    name: 'poml render',
+    method: 'POST',
+    path: '/ai/poml/render',
+    expectedStatus: 200,
+    body: { variables: { persona_context: 'You are Hikari.' } },
+  },
+  {
     name: 'main chat no-key guard',
     method: 'POST',
     path: '/ai/chat',
