@@ -12,6 +12,11 @@ import { streamFishTtsTextStream } from '../tts/FishTtsStream';
 
 const providerSchema = z.enum(['vercel-gateway', 'openrouter-responses']);
 const replyFormatSchema = z.enum(['structured', 'text']);
+const messageImageSchema = z.object({
+  imageUrl: z.string().min(1),
+  mediaType: z.string().min(1).optional(),
+  detail: z.enum(['auto', 'high', 'low']).optional(),
+});
 
 const chatRequestInputSchema = z.object({
   provider: providerSchema.optional(),
@@ -22,6 +27,7 @@ const chatRequestInputSchema = z.object({
       z.object({
         role: z.enum(['system', 'user', 'assistant']),
         content: z.string(),
+        images: z.array(messageImageSchema).optional(),
       }),
     )
     .min(1),

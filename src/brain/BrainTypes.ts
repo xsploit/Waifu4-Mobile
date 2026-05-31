@@ -45,9 +45,16 @@ export function coerceMetadata(value: unknown): ReplyMetadata | null {
 
 export type LlmMessageRole = 'system' | 'user' | 'assistant';
 
+export type LlmImageInput = {
+  imageUrl: string;
+  mediaType?: string;
+  detail?: 'auto' | 'high' | 'low';
+};
+
 export type LlmMessage = {
   role: LlmMessageRole;
   content: string;
+  images?: LlmImageInput[];
 };
 
 export type GatewayId = 'vercel-gateway' | 'openrouter-responses';

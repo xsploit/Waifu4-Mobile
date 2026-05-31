@@ -114,8 +114,23 @@ function createModel(req: Pick<StreamChatRequest, 'provider' | 'model' | 'apiKey
   return createGateway({ apiKey: req.apiKey })(req.model);
 }
 
-function toModelMessages(messages: LlmMessage[]): ModelMessage[] {
-  return messages.map((m) => ({ role: m.role, content: m.content }) as ModelMessage);
+export function toModelMessages(messages: LlmMessage[]): ModelMessage[] {
+  return messages.map((m) => {
+    if (m.role !== 'user' || !m.images?.length) {
+      return { role: m.role, content: m.content } as ModelMessage;
+    }
+    return {
+      role: 'user',
+      content: [
+        { type: 'text', text: m.content },
+        ...m.images.map((image) => ({
+          type: 'image' as const,
+          image: image.imageUrl,
+          mediaType: image.mediaType,
+        })),
+      ],
+    } satisfies ModelMessage;
+  });
 }
 
 export async function completeChat(req: CompleteChatRequest): Promise<CompleteChatResult> {
