@@ -428,7 +428,7 @@ export function VoiceLabTab({
         <input
           className="input-tech"
           onChange={(event) => updateDraft({ modelId: event.target.value })}
-          placeholder="Model id, e.g. fish-speech-s2 or inworld-tts-2..."
+          placeholder="Model id, e.g. s2 or inworld-tts-2..."
           type="text"
           value={draft.modelId}
         />

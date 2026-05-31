@@ -435,6 +435,50 @@ describe('chat settings persistence', () => {
     expect(loaded.aiSettings.fishSpeechModel).toBe('s2');
   });
 
+  it('normalizes copied Fish Voice Lab model ids before persona binding apply can use them', async () => {
+    window.localStorage.setItem(
+      STORAGE_KEYS.personaVoiceBindings,
+      JSON.stringify({
+        [DEFAULT_PERSONA.id]: {
+          label: 'Legacy Fish clone',
+          modelId: 'fish-speech-s2',
+          provider: 'fish-speech',
+          updatedAt: 1778889600000,
+          voiceId: 'fish-voice-id',
+        },
+      }),
+    );
+    window.localStorage.setItem(
+      STORAGE_KEYS.voiceLabVoices,
+      JSON.stringify([
+        {
+          accent: '',
+          ageVibe: '',
+          assignedPersonaIds: [DEFAULT_PERSONA.id],
+          createdAt: 1778889500000,
+          description: '',
+          emotionalTone: '',
+          expressiveness: 0.7,
+          id: 'voice-lab-fish',
+          modelId: 'fish-speech-s2',
+          name: 'Legacy Fish clone',
+          provider: 'fish-speech',
+          providerVoiceId: 'fish-voice-id',
+          sample: null,
+          speakingStyle: '',
+          stability: 0.6,
+          status: 'ready',
+          updatedAt: 1778889600000,
+        },
+      ]),
+    );
+
+    const loaded = await loadPersistedChatState();
+
+    expect(loaded.personaVoiceBindings[DEFAULT_PERSONA.id]?.modelId).toBe('s2');
+    expect(loaded.voiceLabVoices[0]?.modelId).toBe('s2');
+  });
+
   it('normalizes malformed save input before writing persistence entries', async () => {
     await expect(
       savePersistedChatState({

@@ -127,6 +127,27 @@ function normalizeVoiceCreationProvider(value: unknown): VoiceCreationProvider |
   return value === 'inworld' || value === 'fish-speech' ? value : null;
 }
 
+function normalizeProviderVoiceModelId(
+  provider: PersonaVoiceProvider | VoiceCreationProvider,
+  value: unknown,
+) {
+  const modelId = typeof value === 'string' ? value.trim() : '';
+  if (!modelId) {
+    return '';
+  }
+  if (provider === 'fish-speech') {
+    const normalized = modelId.toLowerCase();
+    if (normalized === 's2' || normalized === 's2-pro' || normalized === 'fish-speech-s2') {
+      return 's2';
+    }
+    if (normalized === 's1' || normalized === 'fish-speech-s1') {
+      return 's1';
+    }
+    return '';
+  }
+  return modelId.slice(0, 160);
+}
+
 function normalizePersonaVoiceBinding(value: unknown): PersonaVoiceBinding | null {
   if (!value || typeof value !== 'object') {
     return null;
@@ -145,10 +166,7 @@ function normalizePersonaVoiceBinding(value: unknown): PersonaVoiceBinding | nul
         ? source.customVoiceId.trim()
         : undefined,
     label: String(source.label ?? voiceId).slice(0, 120),
-    modelId:
-      typeof source.modelId === 'string' && source.modelId.trim()
-        ? source.modelId.trim().slice(0, 120)
-        : undefined,
+    modelId: normalizeProviderVoiceModelId(provider, source.modelId) || undefined,
     provider,
     updatedAt:
       typeof source.updatedAt === 'number' && Number.isFinite(source.updatedAt)
@@ -239,7 +257,7 @@ function normalizeVoiceLabVoice(value: unknown): VoiceLabVoice | null {
         ? Math.max(0, Math.min(1, source.expressiveness))
         : 0.65,
     id: id.slice(0, 160),
-    modelId: String(source.modelId ?? '').slice(0, 160),
+    modelId: normalizeProviderVoiceModelId(provider, source.modelId),
     name: name.slice(0, 160),
     provider,
     providerVoiceId: String(source.providerVoiceId ?? '').slice(0, 240),
