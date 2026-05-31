@@ -35,6 +35,7 @@ export type InworldStreamStats = {
   bytes: number;
   totalMs: number;
   transport: InworldTransport;
+  connectionReused?: boolean;
   timestampChunks: number;
   words: number;
   phonemes: number;
@@ -59,6 +60,121 @@ type InworldWireMessage = {
   result?: InworldWireResult;
   error?: { code?: number; message?: string; details?: unknown[] };
 };
+
+type InworldContextHandler = {
+  onMessage(message: InworldWireMessage): void;
+  onSocketClosed(): void;
+  onSocketError(err: Error): void;
+};
+
+class SharedInworldWebSocket {
+  private ws: WebSocket | null = null;
+  private openPromise: Promise<{ reused: boolean }> | null = null;
+  private handlers = new Map<string, InworldContextHandler>();
+
+  constructor(private readonly apiKey: string) {}
+
+  async ensureOpen(): Promise<{ reused: boolean }> {
+    if (this.ws?.readyState === WebSocket.OPEN) {
+      return { reused: true };
+    }
+    if (this.openPromise) {
+      await this.openPromise;
+      return { reused: true };
+    }
+
+    const ws = new WebSocket('wss://api.inworld.ai/tts/v1/voice:streamBidirectional', {
+      headers: { Authorization: basicAuthHeader(this.apiKey) },
+    });
+    this.ws = ws;
+    this.openPromise = new Promise((resolve, reject) => {
+      const cleanup = () => {
+        ws.off('open', onOpen);
+        ws.off('error', onOpenError);
+      };
+      const onOpen = () => {
+        cleanup();
+        this.openPromise = null;
+        resolve({ reused: false });
+      };
+      const onOpenError = (err: Error) => {
+        cleanup();
+        this.openPromise = null;
+        this.ws = null;
+        reject(err);
+      };
+      ws.once('open', onOpen);
+      ws.once('error', onOpenError);
+    });
+
+    ws.on('message', (data) => this.routeMessage(data));
+    ws.on('error', (err) => this.failAll(err instanceof Error ? err : new Error(String(err))));
+    ws.on('close', () => {
+      if (this.ws === ws) {
+        this.ws = null;
+      }
+      for (const handler of this.handlers.values()) {
+        handler.onSocketClosed();
+      }
+      this.handlers.clear();
+    });
+
+    return await this.openPromise;
+  }
+
+  register(contextId: string, handler: InworldContextHandler): void {
+    this.handlers.set(contextId, handler);
+  }
+
+  unregister(contextId: string): void {
+    this.handlers.delete(contextId);
+  }
+
+  send(value: unknown): void {
+    if (this.ws?.readyState !== WebSocket.OPEN) {
+      throw new Error('Inworld WebSocket is not open');
+    }
+    this.ws.send(JSON.stringify(value));
+  }
+
+  private routeMessage(data: WebSocket.RawData): void {
+    let message: InworldWireMessage;
+    try {
+      const text = typeof data === 'string' ? data : data.toString('utf8');
+      message = JSON.parse(text) as InworldWireMessage;
+    } catch {
+      return;
+    }
+    const contextId = message.result?.contextId;
+    if (!contextId) {
+      if (message.error) {
+        this.failAll(new Error(message.error.message || 'Inworld WebSocket error'));
+      }
+      return;
+    }
+    this.handlers.get(contextId)?.onMessage(message);
+  }
+
+  private failAll(err: Error): void {
+    for (const handler of this.handlers.values()) {
+      handler.onSocketError(err);
+    }
+    this.handlers.clear();
+  }
+}
+
+const inworldSockets = new Map<string, SharedInworldWebSocket>();
+
+function getSharedInworldSocket(apiKey: string): SharedInworldWebSocket {
+  const key = normalizeApiKey(apiKey);
+  const existing = inworldSockets.get(key);
+  if (existing) {
+    return existing;
+  }
+  const socket = new SharedInworldWebSocket(key);
+  inworldSockets.set(key, socket);
+  return socket;
+}
 
 function normalizeApiKey(apiKey: string): string {
   return apiKey.trim().replace(/^Basic\s+/i, '');
@@ -209,6 +325,8 @@ async function streamInworldWebSocketTts(
   const started = Date.now();
   const sampleRate = req.sampleRate ?? 48000;
   const contextId = `ctx-${randomUUID()}`;
+  const connection = getSharedInworldSocket(req.apiKey);
+  const { reused: connectionReused } = await connection.ensureOpen();
   let firstAudioAt: number | null = null;
   let chunks = 0;
   let bytes = 0;
@@ -220,16 +338,13 @@ async function streamInworldWebSocketTts(
   let settled = false;
 
   return await new Promise<InworldStreamStats>((resolve, reject) => {
-    const ws = new WebSocket('wss://api.inworld.ai/tts/v1/voice:streamBidirectional', {
-      headers: { Authorization: basicAuthHeader(req.apiKey) },
-    });
-
     const finishStats = (): InworldStreamStats => ({
       firstAudioMs: firstAudioAt === null ? null : firstAudioAt - started,
       chunks,
       bytes,
       totalMs: Date.now() - started,
       transport: 'websocket',
+      connectionReused,
       timestampChunks,
       words,
       phonemes,
@@ -237,6 +352,7 @@ async function streamInworldWebSocketTts(
     });
 
     const cleanup = () => {
+      connection.unregister(contextId);
       req.signal?.removeEventListener('abort', onAbort);
     };
 
@@ -247,49 +363,22 @@ async function streamInworldWebSocketTts(
       settled = true;
       cleanup();
       try {
-        ws.close();
+        connection.send({ close_context: {}, contextId });
       } catch {
-        /* already closing */
+        /* socket may already be closing */
       }
       reject(err instanceof Error ? err : new Error(String(err)));
     };
 
     const sendJson = (value: unknown) => {
-      ws.send(JSON.stringify(value));
+      connection.send(value);
     };
 
     const onAbort = () => fail(new Error('TTS stream aborted'));
     req.signal?.addEventListener('abort', onAbort, { once: true });
 
-    ws.on('open', () => {
-      sendJson({
-        create: {
-          voiceId: req.voiceId || 'Ashley',
-          modelId: req.modelId || 'inworld-tts-2',
-          audioConfig: {
-            audioEncoding: 'PCM',
-            sampleRateHertz: sampleRate,
-          },
-          bufferCharThreshold: req.bufferCharThreshold ?? 120,
-          maxBufferDelayMs: req.maxBufferDelayMs,
-          autoMode: req.autoMode ?? true,
-          timestampType: req.timestampType === 'NONE' ? undefined : (req.timestampType ?? 'WORD'),
-          timestampTransportStrategy: req.timestampTransportStrategy ?? 'SYNC',
-          deliveryMode: req.deliveryMode,
-        },
-        contextId,
-      });
-    });
-
-    ws.on('message', (data) => {
-      let message: InworldWireMessage;
-      try {
-        const text = typeof data === 'string' ? data : data.toString('utf8');
-        message = JSON.parse(text) as InworldWireMessage;
-      } catch {
-        return;
-      }
-
+    const handler: InworldContextHandler = {
+      onMessage(message) {
       if (message.error) {
         fail(new Error(message.error.message || `Inworld WebSocket error ${message.error.code ?? ''}`.trim()));
         return;
@@ -345,23 +434,43 @@ async function streamInworldWebSocketTts(
         cleanup();
         const stats = finishStats();
         log.info('tts done', { ...stats, backend: 'inworld', model: req.modelId || 'inworld-tts-2' });
-        ws.close();
         resolve(stats);
       }
-    });
+      },
+      onSocketClosed() {
+        cleanup();
+        if (settled) {
+          return;
+        }
+        settled = true;
+        if (chunks > 0) {
+          resolve(finishStats());
+        } else {
+          reject(new Error('Inworld WebSocket closed before audio arrived'));
+        }
+      },
+      onSocketError(err) {
+        fail(err);
+      },
+    };
 
-    ws.on('error', (err) => fail(err));
-    ws.on('close', () => {
-      cleanup();
-      if (settled) {
-        return;
-      }
-      settled = true;
-      if (chunks > 0) {
-        resolve(finishStats());
-      } else {
-        reject(new Error('Inworld WebSocket closed before audio arrived'));
-      }
+    connection.register(contextId, handler);
+    sendJson({
+      create: {
+        voiceId: req.voiceId || 'Ashley',
+        modelId: req.modelId || 'inworld-tts-2',
+        audioConfig: {
+          audioEncoding: 'PCM',
+          sampleRateHertz: sampleRate,
+        },
+        bufferCharThreshold: req.bufferCharThreshold ?? 120,
+        maxBufferDelayMs: req.maxBufferDelayMs,
+        autoMode: req.autoMode ?? true,
+        timestampType: req.timestampType === 'NONE' ? undefined : (req.timestampType ?? 'WORD'),
+        timestampTransportStrategy: req.timestampTransportStrategy ?? 'SYNC',
+        deliveryMode: req.deliveryMode,
+      },
+      contextId,
     });
   });
 }

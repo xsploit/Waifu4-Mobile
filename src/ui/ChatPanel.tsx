@@ -67,6 +67,7 @@ type BenchmarkResult = {
   chunks: number;
   bytes: number;
   timing: TimingTotals;
+  connectionReused?: boolean;
   error?: string;
 };
 
@@ -536,6 +537,7 @@ export function ChatPanel() {
           let doneStats: BenchmarkResult['firstAudioMs'] = null;
           let chunks = 0;
           let bytes = 0;
+          let connectionReused: boolean | undefined;
           try {
             for await (const ev of streamTts(
               {
@@ -567,6 +569,7 @@ export function ChatPanel() {
                 doneStats = ev.stats.firstAudioMs;
                 chunks = ev.stats.chunks;
                 bytes = ev.stats.bytes;
+                connectionReused = ev.stats.connectionReused;
                 if (timing.timestampChunks === 0 && ev.stats.timestampChunks !== undefined) {
                   timing = {
                     timestampChunks: ev.stats.timestampChunks,
@@ -592,6 +595,7 @@ export function ChatPanel() {
               chunks,
               bytes,
               timing,
+              connectionReused,
             };
             results.push(result);
             setBenchmarkResults([...results]);
@@ -650,6 +654,7 @@ export function ChatPanel() {
         kb: avg(rows.map((row) => Math.round(row.bytes / 1024))),
         words: avg(rows.map((row) => row.timing.words)),
         phones: avg(rows.map((row) => row.timing.phonemes)),
+        reused: rows.filter((row) => row.connectionReused).length,
       };
     });
   };
@@ -657,11 +662,11 @@ export function ChatPanel() {
   const copyBenchmarkResults = async () => {
     const summary = benchmarkSummary();
     const table = [
-      '| voice | rounds | first ms | net ms | play ms | chunks | KB | words | phones |',
-      '| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |',
+      '| voice | rounds | first ms | net ms | play ms | chunks | KB | words | phones | reused |',
+      '| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |',
       ...summary.map(
         (row) =>
-          `| ${row.label} | ${row.rounds} | ${row.firstAudioMs ?? 'n/a'} | ${row.totalMs ?? 'n/a'} | ${row.playbackMs ?? 'n/a'} | ${row.chunks ?? 'n/a'} | ${row.kb ?? 'n/a'} | ${row.words ?? 'n/a'} | ${row.phones ?? 'n/a'} |`,
+          `| ${row.label} | ${row.rounds} | ${row.firstAudioMs ?? 'n/a'} | ${row.totalMs ?? 'n/a'} | ${row.playbackMs ?? 'n/a'} | ${row.chunks ?? 'n/a'} | ${row.kb ?? 'n/a'} | ${row.words ?? 'n/a'} | ${row.phones ?? 'n/a'} | ${row.reused} |`,
       ),
     ].join('\n');
     const payload = [
@@ -919,7 +924,7 @@ export function ChatPanel() {
                 key={row.label}
                 style={{
                   display: 'grid',
-                  gridTemplateColumns: 'minmax(120px, 1fr) repeat(5, minmax(54px, auto))',
+                  gridTemplateColumns: 'minmax(120px, 1fr) repeat(6, minmax(54px, auto))',
                   gap: 8,
                   alignItems: 'center',
                 }}
@@ -930,6 +935,7 @@ export function ChatPanel() {
                 <span>play={row.playbackMs ?? 'n/a'}ms</span>
                 <span>chunks={row.chunks ?? 'n/a'}</span>
                 <span>KB={row.kb ?? 'n/a'}</span>
+                <span>reused={row.reused}</span>
               </div>
             ))}
           </div>

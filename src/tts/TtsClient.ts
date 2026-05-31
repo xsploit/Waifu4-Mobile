@@ -71,6 +71,7 @@ export type TtsStreamEvent =
         bytes: number;
         totalMs: number;
         transport?: string;
+        connectionReused?: boolean;
         timestampChunks?: number;
         words?: number;
         phonemes?: number;
@@ -146,6 +147,7 @@ function toTtsEvent(ev: WireTtsEvent): TtsStreamEvent | null {
         bytes: typeof stats.bytes === 'number' ? stats.bytes : 0,
         totalMs: typeof stats.totalMs === 'number' ? stats.totalMs : 0,
         transport: typeof stats.transport === 'string' ? stats.transport : undefined,
+        connectionReused: typeof stats.connectionReused === 'boolean' ? stats.connectionReused : undefined,
         timestampChunks: typeof stats.timestampChunks === 'number' ? stats.timestampChunks : undefined,
         words: typeof stats.words === 'number' ? stats.words : undefined,
         phonemes: typeof stats.phonemes === 'number' ? stats.phonemes : undefined,
