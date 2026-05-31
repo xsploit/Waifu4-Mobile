@@ -136,10 +136,15 @@ export function ContextTab({
     .filter(isEmbeddingModel)
     .map((model) => model.id)
     .sort((left, right) => left.localeCompare(right));
+  const currentEmbeddingModel = aiSettings.embeddingModel.trim();
+  const currentEmbeddingModelMetadata = availableModelMetadata.get(currentEmbeddingModel);
+  const shouldKeepCurrentEmbeddingModel =
+    currentEmbeddingModel &&
+    (!currentEmbeddingModelMetadata || isEmbeddingModel(currentEmbeddingModelMetadata));
   const providerEmbeddingPickerOptions = Array.from(
     new Set([
       ...providerEmbeddingModelIds,
-      aiSettings.embeddingModel.trim(),
+      ...(shouldKeepCurrentEmbeddingModel ? [currentEmbeddingModel] : []),
       DEFAULT_OPENROUTER_EMBEDDING_MODEL,
     ]),
   ).filter(Boolean);

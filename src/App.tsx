@@ -87,6 +87,7 @@ import {
 } from './lib/chat/reply-metadata';
 import { getAffectExpressionBoost, getMetadataVad, updateAffectState } from './lib/chat/affect-bridge';
 import {
+  isEmbeddingModel,
   isChatModel,
   selectReplyFormat,
   supportsImageInput,
@@ -527,7 +528,33 @@ function pickAvailableModel(
   return safeAvailableModels[0]?.trim() ?? normalizedFallback;
 }
 
-function sanitizeAiModels(current: AiSettings, availableModels: readonly string[]) {
+function pickProviderEmbeddingModel(
+  currentEmbeddingModel: string,
+  modelMetadata: ReadonlyMap<string, ProviderModelInfo>,
+) {
+  const currentModel = currentEmbeddingModel.trim();
+  if (!currentModel) {
+    return DEFAULT_OPENROUTER_EMBEDDING_MODEL;
+  }
+  const currentMetadata = modelMetadata.get(currentModel);
+  if (!currentMetadata) {
+    return currentModel;
+  }
+  if (isEmbeddingModel(currentMetadata)) {
+    return currentModel;
+  }
+  const firstProviderEmbedding = Array.from(modelMetadata.values())
+    .filter(isEmbeddingModel)
+    .map((model) => model.id)
+    .sort((left, right) => left.localeCompare(right))[0];
+  return firstProviderEmbedding ?? DEFAULT_OPENROUTER_EMBEDDING_MODEL;
+}
+
+function sanitizeAiModels(
+  current: AiSettings,
+  availableModels: readonly string[],
+  modelMetadata: ReadonlyMap<string, ProviderModelInfo> = new Map(),
+) {
   const providerModels = getProviderModelPool(current.llmProvider, availableModels);
   const providerDefaults = getAiProviderSwitchDefaults(current.llmProvider);
   const nextModel = pickAvailableModel(current.model, providerModels, providerDefaults.model);
@@ -539,6 +566,7 @@ function sanitizeAiModels(current: AiSettings, availableModels: readonly string[
 
   return {
     ...current,
+    embeddingModel: pickProviderEmbeddingModel(current.embeddingModel, modelMetadata),
     model: nextModel,
     memoryAgentModel: nextMemoryAgentModel,
   };
@@ -2574,7 +2602,9 @@ function App() {
       setAvailableModels(providerModels);
       setAvailableModelMetadata(providerModelMetadata);
       setAiSettings((current) =>
-        current.llmProvider === llmProvider ? sanitizeAiModels(current, providerModels) : current,
+        current.llmProvider === llmProvider
+          ? sanitizeAiModels(current, providerModels, providerModelMetadata)
+          : current,
       );
     } catch (error) {
       const message = getAiErrorMessage(error, 'models');
