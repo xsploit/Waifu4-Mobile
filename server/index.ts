@@ -5,6 +5,7 @@ import { handleModels } from './ai/models';
 import { handleTtsStream } from './tts/stream';
 import { handleLocalBackupSettings } from './localBackup';
 import { createMemoryRouter } from './memory/routes';
+import { createTwitchRouter } from './twitch/routes';
 
 const PORT = Number(process.env.PORT ?? 8797);
 
@@ -37,6 +38,7 @@ app.post('/tts/stream', (req, res) => {
 });
 
 app.use('/memory', createMemoryRouter());
+app.use('/twitch', createTwitchRouter());
 
 app.listen(PORT, '127.0.0.1', () => {
   console.log(`[INFO] (${SERVICE_NAME}) listening on http://127.0.0.1:${PORT}`);
