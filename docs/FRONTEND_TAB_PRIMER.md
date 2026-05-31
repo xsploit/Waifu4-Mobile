@@ -2,6 +2,8 @@
 
 Purpose: keep the copied frontend understandable while the rebuild reaches feature parity. This file tracks what each active settings tab does, where its state lives, what callbacks/API seams it uses, and whether the surface is live, partial, parked, or verification-only.
 
+Default rule: controls copied from the old settings tabs are presumed intentional product surface. Trace them before removing or replacing them; patch API/data seams first.
+
 Status terms:
 
 - `LIVE`: hooked to active app state and used by the current frontend.
@@ -216,8 +218,9 @@ Purpose:
 - Mention/ambient queue settings.
 - Batch thresholds and wait timing.
 - Chat overlay toggle.
-- Stream audio transcription settings.
+- Stream audio transcription settings, including Whisper/ASR model selection.
 - Stream frame/vision context settings.
+- Future/backlog local speech-to-text chat mode is separate from Twitch stream transcription.
 
 State/seams:
 
@@ -232,6 +235,7 @@ Important rule:
 
 - Frontend IRC exists specifically to avoid requiring Twitch API keys.
 - Backend Twitch runtime is optional/fallback plumbing and should not be treated as the main Twitch product path.
+- Current copied old-code evidence does not include Twitch private-whisper intake. Do not add a token/API-key whisper path unless the product decision changes.
 
 ## Memory / Context
 

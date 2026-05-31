@@ -15,8 +15,9 @@ Current override:
 - Copy folders/files directly where the old code is mostly UI shape, assets, schema, settings, or proven backend plumbing.
 - Rebuild/adapt where the old implementation was known fragile: animation weights/expression blending, mouth ownership, live audio scheduling, and main chat/provider complexity.
 - **Marlin is excluded** from this rebuild map unless explicitly reintroduced later.
-- **Twitch is required**, and it means the whole live input stack: IRC chat, whispers/message modes, stream audio transcription, video frame capture/vision context, queueing, commands, overlay events, and scheduler behavior.
+- **Twitch is required**, and it means the whole live input stack: IRC chat/message modes, Whisper/ASR stream audio transcription, video frame capture/vision context, queueing, commands, overlay events, and scheduler behavior. Current old-code evidence does not show Twitch private-whisper intake; do not invent that without a new product decision.
 - Piper browser TTS is currently optional/parked. Preserve the feature surface/settings if cheap, but do not block core parity on Piper unless the decision changes.
+- Settings tab controls are presumed intentional old-product surface unless current code evidence proves they are dead or harmful. Do not delete settings just because a control looks niche; trace and adapt it first.
 - Current architecture note: the active direct frontend intentionally uses the copied `src/App.tsx`, `src/lib/chat/*`, `src/lib/tts/manager`, and `src/lib/vrm/*` surfaces while they are adapted to the rebuilt backend contracts. The earlier prototype clients in `src/llm/LlmClient.ts`, `src/tts/TtsClient.ts`, `src/tts/SpeechBuffer.ts`, and `src/brain/replyParser.ts` are not the active app path yet; either migrate to them deliberately or retire them after parity is stable.
 
 Status legend:
@@ -114,7 +115,7 @@ Detailed tab/control primer: [`docs/FRONTEND_TAB_PRIMER.md`](./FRONTEND_TAB_PRIM
    Future TODO: after the Twitch/GRILLO/front-end parity pieces are stable, evaluate the three copied talk-safe clips (`Sachi Casual Talk`, `Sachi Talk 1`, `Sachi Talk 2`) as a possible TTS talk-animation pool.
 
 5. **Restore Twitch live input stack**
-   Copy/adapt server IRC parser/source, direct frontend IRC helper, mock Twitch source, Twitch AI queue, command parser/router, scheduler, and overlay event socket. Twitch includes whispers/message modes where supported by the old stack.
+   Copy/adapt server IRC parser/source, direct frontend IRC helper, mock Twitch source, Twitch AI queue, command parser/router, scheduler, and overlay event socket. Twitch includes public chat/message modes from the old stack. "Whisper" in the current copied feature set refers to Whisper/ASR stream transcription models, not Twitch private whispers.
 
 6. **Restore Twitch stream transcription and video frame input**
    Copy/adapt `TwitchStreamTranscriber.ts` and `src/lib/twitch/stream-transcription.ts`. Restore:
@@ -122,6 +123,7 @@ Detailed tab/control primer: [`docs/FRONTEND_TAB_PRIMER.md`](./FRONTEND_TAB_PRIM
    - `POST /twitch/capture-frame`
    - transcript snippets as ambient stream context
    - captured JPEG frame as optional vision context
+   Current ASR options are OpenRouter transcription models, Fish ASR, and future provider lanes if AI SDK or gateway transcription support proves usable. Historical browser-side Whisper/Web ASR was slower and remains reference/backlog, not the current hot path.
 
 7. **Extend the new brain contract for vision context**
    Current rebuild messages are text-only. Add image support to the new `LlmMessage` contract and map images through `llmGateway` for providers/models that support vision. Captured Twitch frames should be optional context, not a direct chat message unless the user asks for that behavior.
@@ -138,6 +140,9 @@ Detailed tab/control primer: [`docs/FRONTEND_TAB_PRIMER.md`](./FRONTEND_TAB_PRIM
 11. **Park or reintroduce Piper deliberately**
       Keep old Piper assets/settings visible only if it helps compatibility. Reintroduce browser Piper only after Fish/Inworld/avatar parity is stable, or drop it if the product no longer needs offline/browser TTS.
       Back-burner TODO: if Piper returns, test it through the same playback-state and talk-animation hooks instead of creating a Piper-only avatar path.
+
+12. **Backlog: user speech-to-text chat mode**
+      Add a user voice-input mode so the local user can talk naturally to the AI. Evaluate provider ASR, Fish ASR, and browser-side Whisper/Web ASR; keep it behind explicit controls so it does not affect current text chat, TTS, or Twitch transcription latency.
 
 ### Copy Policy Going Forward
 
