@@ -1,5 +1,6 @@
 import type { Request, Response } from 'express';
 import { z } from 'zod';
+import { readFishTtsEnvKey } from '../ai/providerKeys';
 import { streamFishTimestampTts, streamFishTts } from './FishTtsStream';
 import { streamInworldTts } from './InworldTtsStream';
 import { buildSpeechTiming, createSpeechTimingAccumulator } from './SpeechTiming';
@@ -37,7 +38,7 @@ export function readTtsStreamProviderKey(req: Request, provider: 'fish' | 'inwor
   if (requestKey) return requestKey;
   return provider === 'inworld'
     ? process.env.INWORLD_API_KEY
-    : process.env.FISH_AUDIO_API_KEY ?? process.env.FISHSPEECH_API_KEY;
+    : readFishTtsEnvKey();
 }
 
 /**

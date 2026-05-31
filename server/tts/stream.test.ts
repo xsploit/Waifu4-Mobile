@@ -27,6 +27,7 @@ describe('TTS stream provider key routing', () => {
 
   it('keeps Fish and Inworld env fallbacks provider-specific', () => {
     vi.stubEnv('FISH_AUDIO_API_KEY', 'fish-env-key');
+    vi.stubEnv('FISH_SPEECH_API_KEY', '');
     vi.stubEnv('FISHSPEECH_API_KEY', '');
     vi.stubEnv('INWORLD_API_KEY', 'inworld-env-key');
 
@@ -36,6 +37,7 @@ describe('TTS stream provider key routing', () => {
 
   it('does not use a Fish env key for Inworld streams', () => {
     vi.stubEnv('FISH_AUDIO_API_KEY', 'fish-env-key');
+    vi.stubEnv('FISH_SPEECH_API_KEY', '');
     vi.stubEnv('FISHSPEECH_API_KEY', '');
     vi.stubEnv('INWORLD_API_KEY', '');
 

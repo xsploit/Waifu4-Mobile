@@ -59,6 +59,7 @@ describe('TTS voice routes', () => {
 
   it('returns a keyed error instead of a dead route when listing voices without credentials', async () => {
     vi.stubEnv('FISH_AUDIO_API_KEY', '');
+    vi.stubEnv('FISH_SPEECH_API_KEY', '');
     vi.stubEnv('FISHSPEECH_API_KEY', '');
     vi.stubEnv('INWORLD_API_KEY', '');
     const res = createMockResponse();
@@ -93,6 +94,7 @@ describe('TTS voice routes', () => {
 
   it('uses the Inworld env key for Inworld voice listing instead of a Fish fallback key', async () => {
     vi.stubEnv('FISH_AUDIO_API_KEY', 'fish-env-key');
+    vi.stubEnv('FISH_SPEECH_API_KEY', '');
     vi.stubEnv('FISHSPEECH_API_KEY', '');
     vi.stubEnv('INWORLD_API_KEY', 'inworld-env-key');
     inworldClient.listVoices.mockResolvedValueOnce([

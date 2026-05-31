@@ -8,6 +8,7 @@ import type {
   RemoteTtsProvider,
   RemoteTtsVoice,
 } from '../../src/lib/tts/remote';
+import { readFishTtsEnvKey } from '../ai/providerKeys';
 
 const voiceListSchema = z.object({
   provider: z.enum(['fish-speech', 'inworld']).optional(),
@@ -68,7 +69,7 @@ function readTtsKey(req: Request, provider: RemoteTtsProvider) {
   if (requestKey) return requestKey;
   return provider === 'inworld'
     ? process.env.INWORLD_API_KEY
-    : process.env.FISH_AUDIO_API_KEY ?? process.env.FISHSPEECH_API_KEY;
+    : readFishTtsEnvKey();
 }
 
 function mapFishVoice(voice: ModelEntity): RemoteTtsVoice {
