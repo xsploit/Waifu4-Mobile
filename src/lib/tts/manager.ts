@@ -268,14 +268,12 @@ export class TtsManager {
           () => undefined,
           () => undefined,
         );
-        const ended = scheduled.then(async (scheduledChunk) => {
+        return scheduled.then((scheduledChunk) => {
           if (!scheduledChunk) {
             return;
           }
           playbackTail = scheduledChunk.ended.catch(() => {});
-          await scheduledChunk.ended;
         });
-        return ended;
       },
       close: async () => {
         await scheduleTail.catch(() => {});

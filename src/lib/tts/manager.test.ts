@@ -1,5 +1,15 @@
 import { describe, expect, it } from 'vitest';
 import { getRemotePcmChunkSchedule } from './manager';
+import { TtsManager } from './manager';
+
+function createPcm16Blob(samples: number[]) {
+  const bytes = new Uint8Array(samples.length * 2);
+  const view = new DataView(bytes.buffer);
+  samples.forEach((sample, index) => {
+    view.setInt16(index * 2, sample, true);
+  });
+  return new Blob([bytes], { type: 'audio/pcm' });
+}
 
 describe('TtsManager remote PCM scheduling', () => {
   it('uses the same non-overlapping playhead math as the browser benchmark playback', () => {
@@ -11,5 +21,62 @@ describe('TtsManager remote PCM scheduling', () => {
     expect(second).toEqual({ startAt: 11, endAt: 12 });
     expect(third).toEqual({ startAt: 12.5, endAt: 13 });
   });
-});
 
+  it('resolves live push after scheduling instead of waiting for playback to end', async () => {
+    Object.assign(globalThis, {
+      window: {
+        setTimeout: (callback: () => void) => {
+          callback();
+          return 1;
+        },
+      },
+    });
+    let sourceOnEnded: (() => void) | null = null;
+    const source = {
+      buffer: null,
+      connect: () => {},
+      disconnect: () => {},
+      onended: null as (() => void) | null,
+      playbackRate: { value: 1 },
+      start: () => {
+        sourceOnEnded = source.onended;
+      },
+      stop: () => {},
+    };
+    const context = {
+      currentTime: 10,
+      createBuffer: (_channels: number, length: number, sampleRate: number) => ({
+        duration: length / sampleRate,
+        getChannelData: () => new Float32Array(length),
+      }),
+      createBufferSource: () => source,
+      createGain: () => ({
+        connect: () => {},
+        disconnect: () => {},
+        gain: {
+          cancelScheduledValues: () => {},
+          setValueAtTime: () => {},
+          value: 1,
+        },
+      }),
+      state: 'running',
+    };
+    const manager = new TtsManager();
+    Object.assign(manager, {
+      audioAnalyser: { connect: () => {} },
+      audioContext: context,
+      masterGain: { connect: () => {}, gain: { value: 1 } },
+    });
+
+    const stream = manager.startRemotePcmPushStream('hello');
+    await expect(
+      stream.push({
+        audioBlob: createPcm16Blob([100, 200, 300, 400]),
+        mimeType: 'audio/pcm',
+        sampleRate: 4,
+      }),
+    ).resolves.toBeUndefined();
+
+    expect(sourceOnEnded).toBeTypeOf('function');
+  });
+});
