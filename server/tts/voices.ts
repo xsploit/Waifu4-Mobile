@@ -2,7 +2,6 @@ import type { Request, Response } from 'express';
 import { InworldTTS, type VoiceInfo } from '@inworld/tts';
 import { FishAudioClient, type ModelEntity } from 'fish-audio';
 import { z } from 'zod';
-import { readProviderKeys } from '../ai/providerKeys';
 import type {
   CreatedRemoteTtsVoice,
   FishSpeechVoiceScope,
@@ -58,14 +57,18 @@ function inworldBaseUrl() {
   return process.env.INWORLD_TTS_BASE_URL?.replace(/\/+$/, '');
 }
 
+function header(req: Request, name: string): string | undefined {
+  const value = req.headers[name];
+  if (typeof value === 'string') return value;
+  return Array.isArray(value) ? value[0] : undefined;
+}
+
 function readTtsKey(req: Request, provider: RemoteTtsProvider) {
-  const keys = readProviderKeys(req);
-  return (
-    keys.ttsKey ??
-    (provider === 'inworld'
-      ? process.env.INWORLD_API_KEY
-      : process.env.FISH_AUDIO_API_KEY ?? process.env.FISHSPEECH_API_KEY)
-  );
+  const requestKey = header(req, 'x-yourwifey-tts-provider-key')?.trim();
+  if (requestKey) return requestKey;
+  return provider === 'inworld'
+    ? process.env.INWORLD_API_KEY
+    : process.env.FISH_AUDIO_API_KEY ?? process.env.FISHSPEECH_API_KEY;
 }
 
 function mapFishVoice(voice: ModelEntity): RemoteTtsVoice {
