@@ -37,6 +37,16 @@ npm run smoke:runtime
 
 Result: all surfaces above returned the expected statuses.
 
+## 2026-05-31 Production Web Build
+
+Command:
+
+```text
+npm run build
+```
+
+Result: passed. TypeScript compiled and Vite produced the production `dist/` bundle. Vite reported large chunk warnings for the current copied frontend/ML assets, but no build error.
+
 Remaining verification:
 
 - Main assistant Tavily tools with a real Account-tab Tavily key.
