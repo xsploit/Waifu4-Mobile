@@ -44,12 +44,12 @@ import type {
 } from './lib/chat/memory-debug';
 import { updateRelationshipMemory } from './lib/chat/memory';
 import {
-  buildGrilloMemoryPromptAdditionsAsync,
+  buildGrilloMemoryPromptAdditionsFailClosedAsync,
   clearGrilloMemoryStateAsync,
   createDefaultGrilloMemoryState,
   getGrilloParticipantKey,
   hydrateGrilloMemoryState,
-  recordGrilloMemoryTurnAsync,
+  recordGrilloMemoryTurnFailClosedAsync,
   type GrilloMemoryState,
 } from './lib/chat/grillo-memory';
 import {
@@ -2218,22 +2218,25 @@ function App() {
         turns.length,
       );
       syncMemoryAgentPendingCounts();
-      void recordGrilloMemoryTurnAsync({
-        assistantText: '',
-        persona: activePersonaRef.current ?? DEFAULT_PERSONA,
-        scopeKey: stateKey,
-        turns,
-      })
+      void recordGrilloMemoryTurnFailClosedAsync(
+        {
+          assistantText: '',
+          persona: activePersonaRef.current ?? DEFAULT_PERSONA,
+          scopeKey: stateKey,
+          turns,
+        },
+        (error) => {
+          console.warn('[App] Failed to record raw chat memory turns', error);
+        },
+      )
         .then((nextGrilloMemoryState) => {
           if (
+            nextGrilloMemoryState &&
             shouldExposeScopedRelationshipMemory(stateKey, activeRelationshipStateKeyRef.current)
           ) {
             setGrilloMemoryState(nextGrilloMemoryState);
           }
           void refreshMemoryBackendStatus();
-        })
-        .catch((error) => {
-          console.warn('[App] Failed to record raw chat memory turns', error);
         });
       scheduleMemoryAgentAfterChatTurnsRef.current(stateKey);
     },
@@ -5821,11 +5824,16 @@ function App() {
           settings.embeddingLocalModel,
         );
         const participantKeys = job.messages.map(getGrilloParticipantKey);
-        const grilloMemory = await buildGrilloMemoryPromptAdditionsAsync({
-          participantKeys,
-          query: userContent,
-          scopeKey: stateKey,
-        });
+        const grilloMemory = await buildGrilloMemoryPromptAdditionsFailClosedAsync(
+          {
+            participantKeys,
+            query: userContent,
+            scopeKey: stateKey,
+          },
+          (error) => {
+            console.warn('[App] Failed to load local GRILLO prompt memory', error);
+          },
+        );
         const grilloContextPacket = await loadLadybugGrilloContextPacket(stateKey, {
           participantKeys,
           query: userContent,
@@ -6024,13 +6032,18 @@ function App() {
             .catch((error) => {
               console.warn('[App] Failed to record native GRILLO turn pair', error);
             });
-          const nextGrilloMemoryState = await recordGrilloMemoryTurnAsync({
-            assistantText: assistantContent,
-            persona,
-            scopeKey: stateKey,
-            turns: job.messages,
-          });
-          if (stateKey === activeRelationshipStateKey) {
+          const nextGrilloMemoryState = await recordGrilloMemoryTurnFailClosedAsync(
+            {
+              assistantText: assistantContent,
+              persona,
+              scopeKey: stateKey,
+              turns: job.messages,
+            },
+            (error) => {
+              console.warn('[App] Failed to record local GRILLO memory turn', error);
+            },
+          );
+          if (nextGrilloMemoryState && stateKey === activeRelationshipStateKey) {
             setGrilloMemoryState(nextGrilloMemoryState);
           }
           void refreshMemoryBackendStatus();

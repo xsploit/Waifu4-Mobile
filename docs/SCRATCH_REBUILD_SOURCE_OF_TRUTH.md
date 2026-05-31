@@ -39,6 +39,7 @@ EXCLUDE not part of this rebuild path
 | TTS core | DONE | Fish realtime/current, Fish timestamp SSE, Inworld HTTP/WebSocket, benchmark mode, unified timing metadata. Copied frontend remote TTS requests map directly to the rebuilt `/tts/stream` schema and expose Fish WebSocket/timestamp-SSE plus Inworld HTTP/WebSocket transports and provider micro-parameters without backend behavior changes. The copied TTS tab now restores the browser-audible benchmark surface from the earlier simple demo. |
 | Mouth core | DONE | `wlipsync` live path works from the playback audio source; provider timing is normalized for future captions/flaps. |
 | GRILLO/Ladybug backend worker | DONE | Old services/tests copied, strict compile seams patched, routes wired under `/memory`, committed as `d8702d9`. |
+| GRILLO chat context safety | DONE | Copied frontend GRILLO context/read/write paths now fail closed: local/backend GRILLO prompt failures degrade to empty context, and post-turn GRILLO write failures do not turn a successful chat reply into an error. |
 | Source-of-truth doc | DONE | Imported into this repo and annotated by this overlay. |
 | Public assets | COPIED | `public/cdn-assets` is present in the rebuild. |
 | Direct frontend shell | DONE | Old `src/App.tsx`, `src/components`, and `src/style.css` promoted as the active frontend. Patch only backend/TTS/build seams; do not reshape the UI. |
@@ -58,8 +59,8 @@ EXCLUDE not part of this rebuild path
 | Old feature area | Old files found | Rebuild state | Next action |
 | --- | ---: | --- | --- |
 | `src/components` visual shell/tabs | 22 | Active direct copy | Preserve visual shape one-to-one; patch only proper backend/TTS/build seams. |
-| `src/lib/chat` prompts/storage/memory/queue | 46 | Active direct copy/adapt | Prompt/POML/storage/defaults/provider defaults/chat turn/Twitch queue copied; GRILLO frontend pieces still need runtime verification. |
-| `src/lib/grillo` schemas/tools/context | 48 | Active copy | Backend worker and frontend schema/context libs copied; verify non-blocking chat context integration. |
+| `src/lib/chat` prompts/storage/memory/queue | 46 | Active direct copy/adapt | Prompt/POML/storage/defaults/provider defaults/chat turn/Twitch queue copied; GRILLO frontend context/read/write paths now fail closed around chat. |
+| `src/lib/grillo` schemas/tools/context | 48 | Active copy | Backend worker and frontend schema/context libs copied; non-blocking chat context integration is fail-closed and still needs live app verification. |
 | `src/lib/product` backup/key vault/account | 9 | Active copy | Backup/key vault/account files copied; wire into active UI next. |
 | `src/lib/tts` manager/Piper/remote | 8 | Active copy/adapt | Copied manager/remote settings are the active browser playback and backend request seam; remote requests map to `/tts/stream` and the Fish live bridge. Browser benchmark helpers are active for audible provider/transport comparison. Piper worker remains PARKED. Prototype `src/tts/*` clients are not the active chat path. |
 | `src/lib/twitch` direct IRC/transcription helpers | 5 | Active copy | Direct browser IRC, stream transcription helpers, and shared frontend command parser are active. Direct IRC is the primary public chat intake and is covered for anonymous `justinfan` connect, PING/PONG, tagged `PRIVMSG` parsing, and command grammar; transcription/frame endpoints are wired through the local backend. |

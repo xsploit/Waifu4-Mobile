@@ -413,11 +413,43 @@ export function buildGrilloMemoryPromptAdditions({
   };
 }
 
+export function createEmptyGrilloMemoryPromptAdditions(): GrilloMemoryPromptAdditions {
+  return {
+    diaryThoughts: [],
+    recalledMemories: [],
+    relationshipMemory: [],
+  };
+}
+
 export async function buildGrilloMemoryPromptAdditionsAsync(
   options: BuildGrilloMemoryPromptOptions,
 ): Promise<GrilloMemoryPromptAdditions> {
   await hydrateGrilloMemoryState(options.scopeKey);
   return buildGrilloMemoryPromptAdditions(options);
+}
+
+export async function buildGrilloMemoryPromptAdditionsFailClosedAsync(
+  options: BuildGrilloMemoryPromptOptions,
+  onError?: (error: unknown) => void,
+): Promise<GrilloMemoryPromptAdditions> {
+  try {
+    return await buildGrilloMemoryPromptAdditionsAsync(options);
+  } catch (error) {
+    onError?.(error);
+    return createEmptyGrilloMemoryPromptAdditions();
+  }
+}
+
+export async function recordGrilloMemoryTurnFailClosedAsync(
+  options: RecordGrilloMemoryTurnOptions,
+  onError?: (error: unknown) => void,
+): Promise<GrilloMemoryState | null> {
+  try {
+    return await recordGrilloMemoryTurnAsync(options);
+  } catch (error) {
+    onError?.(error);
+    return null;
+  }
 }
 
 export function promoteGrilloCandidates(
