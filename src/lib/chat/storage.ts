@@ -375,6 +375,17 @@ function normalizeAiSettings(value: unknown): AiSettings {
     source.fishSpeechTransport === 'websocket' || source.fishSpeechTransport === 'timestamp-sse'
       ? source.fishSpeechTransport
       : defaults.fishSpeechTransport;
+  const fishSpeechFormat =
+    source.fishSpeechFormat === 'pcm' ||
+    source.fishSpeechFormat === 'mp3' ||
+    source.fishSpeechFormat === 'wav' ||
+    source.fishSpeechFormat === 'opus'
+      ? source.fishSpeechFormat
+      : defaults.fishSpeechFormat;
+  const fishSpeechSampleRate =
+    typeof source.fishSpeechSampleRate === 'number' && Number.isFinite(source.fishSpeechSampleRate)
+      ? Math.max(8000, Math.min(96000, Math.round(source.fishSpeechSampleRate)))
+      : defaults.fishSpeechSampleRate;
   const fishSpeechVoiceScope =
     source.fishSpeechVoiceScope === 'mine' || source.fishSpeechVoiceScope === 'public'
       ? source.fishSpeechVoiceScope
@@ -398,17 +409,36 @@ function normalizeAiSettings(value: unknown): AiSettings {
   const inworldDeliveryMode =
     source.inworldDeliveryMode === 'STABLE' ||
     source.inworldDeliveryMode === 'BALANCED' ||
-    source.inworldDeliveryMode === 'CREATIVE'
+    source.inworldDeliveryMode === 'CREATIVE' ||
+    source.inworldDeliveryMode === 'EXPRESSIVE'
       ? source.inworldDeliveryMode
-      : source.inworldDeliveryMode === 'EXPRESSIVE'
-        ? 'CREATIVE'
-        : source.inworldDeliveryMode === 'LOW_LATENCY'
+      : source.inworldDeliveryMode === 'LOW_LATENCY'
           ? 'STABLE'
           : defaults.inworldDeliveryMode;
   const inworldTransport =
     source.inworldTransport === 'http' || source.inworldTransport === 'websocket'
       ? source.inworldTransport
       : defaults.inworldTransport;
+  const inworldSampleRate =
+    typeof source.inworldSampleRate === 'number' && Number.isFinite(source.inworldSampleRate)
+      ? Math.max(8000, Math.min(96000, Math.round(source.inworldSampleRate)))
+      : defaults.inworldSampleRate;
+  const inworldTimestampType =
+    source.inworldTimestampType === 'NONE' ||
+    source.inworldTimestampType === 'WORD' ||
+    source.inworldTimestampType === 'CHARACTER'
+      ? source.inworldTimestampType
+      : defaults.inworldTimestampType;
+  const inworldTimestampTransportStrategy =
+    source.inworldTimestampTransportStrategy === 'SYNC' ||
+    source.inworldTimestampTransportStrategy === 'ASYNC'
+      ? source.inworldTimestampTransportStrategy
+      : defaults.inworldTimestampTransportStrategy;
+  const inworldMaxBufferDelayMs =
+    typeof source.inworldMaxBufferDelayMs === 'number' &&
+    Number.isFinite(source.inworldMaxBufferDelayMs)
+      ? Math.max(0, Math.min(10000, Math.round(source.inworldMaxBufferDelayMs)))
+      : defaults.inworldMaxBufferDelayMs;
   const remoteTtsMode =
     source.remoteTtsMode === 'live-bridge' ||
     source.remoteTtsMode === 'full-response' ||
@@ -450,6 +480,8 @@ function normalizeAiSettings(value: unknown): AiSettings {
     fishSpeechModel,
     fishSpeechLatency,
     fishSpeechTransport,
+    fishSpeechFormat,
+    fishSpeechSampleRate,
     fishSpeechConditionOnPreviousChunks:
       typeof source.fishSpeechConditionOnPreviousChunks === 'boolean'
         ? source.fishSpeechConditionOnPreviousChunks
@@ -458,8 +490,14 @@ function normalizeAiSettings(value: unknown): AiSettings {
     inworldVoiceId: String(source.inworldVoiceId ?? defaults.inworldVoiceId),
     inworldModelId: String(source.inworldModelId ?? defaults.inworldModelId),
     inworldTransport,
+    inworldSampleRate,
+    inworldTimestampType,
+    inworldTimestampTransportStrategy,
     inworldDeliveryMode,
     inworldBufferCharThreshold,
+    inworldMaxBufferDelayMs,
+    inworldAutoMode:
+      typeof source.inworldAutoMode === 'boolean' ? source.inworldAutoMode : defaults.inworldAutoMode,
     ttsPlaybackRate: playbackRate,
     ttsVolume,
   });

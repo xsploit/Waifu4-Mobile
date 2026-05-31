@@ -1,4 +1,5 @@
 type SliderProps = {
+  disabled?: boolean;
   label: string;
   max?: number;
   min?: number;
@@ -7,11 +8,20 @@ type SliderProps = {
   value: number;
 };
 
-export function Slider({ label, max = 1, min = 0, onInput, step = 0.1, value }: SliderProps) {
+export function Slider({
+  disabled = false,
+  label,
+  max = 1,
+  min = 0,
+  onInput,
+  step = 0.1,
+  value,
+}: SliderProps) {
   return (
     <div className="slider-row">
       <span>{label}</span>
       <input
+        disabled={disabled}
         max={max}
         min={min}
         onChange={(event) => onInput(Number(event.target.value))}

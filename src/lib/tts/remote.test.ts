@@ -15,6 +15,8 @@ describe('remote TTS proxy compatibility', () => {
         voiceId: 'voice-1',
         modelId: 's2',
         fishTransport: 'websocket',
+        format: 'pcm',
+        sampleRate: 44100,
         latency: 'balanced',
         conditionOnPreviousChunks: true,
         chunkLength: 160,
@@ -63,8 +65,13 @@ describe('remote TTS proxy compatibility', () => {
         voiceId: 'Ashley',
         modelId: 'inworld-tts-2',
         inworldTransport: 'websocket',
+        sampleRate: 48000,
+        timestampType: 'WORD',
+        timestampTransportStrategy: 'SYNC',
         deliveryMode: 'BALANCED',
         bufferCharThreshold: 90,
+        maxBufferDelayMs: 250,
+        autoMode: true,
       }),
     ).toEqual({
       provider: 'inworld',
@@ -72,8 +79,13 @@ describe('remote TTS proxy compatibility', () => {
       voiceId: 'Ashley',
       inworldModelId: 'inworld-tts-2',
       inworldTransport: 'websocket',
+      sampleRate: 48000,
+      timestampType: 'WORD',
+      timestampTransportStrategy: 'SYNC',
       deliveryMode: 'BALANCED',
       bufferCharThreshold: 90,
+      maxBufferDelayMs: 250,
+      autoMode: true,
     });
   });
 

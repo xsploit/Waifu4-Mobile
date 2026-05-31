@@ -687,8 +687,14 @@ function createRemoteTtsRequest(text: string, settings: AiSettings): RemoteTtsRe
       voiceId: settings.inworldVoiceId.trim() || undefined,
       modelId: settings.inworldModelId.trim() || undefined,
       inworldTransport: settings.inworldTransport,
+      sampleRate: settings.inworldSampleRate,
+      timestampType: settings.inworldTimestampType,
+      timestampTransportStrategy: settings.inworldTimestampTransportStrategy,
       deliveryMode: settings.inworldDeliveryMode,
       bufferCharThreshold: settings.inworldBufferCharThreshold,
+      maxBufferDelayMs:
+        settings.inworldMaxBufferDelayMs > 0 ? settings.inworldMaxBufferDelayMs : undefined,
+      autoMode: settings.inworldAutoMode,
     };
   }
 
@@ -699,6 +705,8 @@ function createRemoteTtsRequest(text: string, settings: AiSettings): RemoteTtsRe
     voiceId: settings.fishSpeechVoiceId.trim() || undefined,
     modelId: settings.fishSpeechModel.trim() || undefined,
     fishTransport: settings.fishSpeechTransport,
+    format: settings.fishSpeechFormat,
+    sampleRate: settings.fishSpeechSampleRate,
     latency: settings.fishSpeechLatency,
     conditionOnPreviousChunks: settings.fishSpeechConditionOnPreviousChunks,
     chunkLength: settings.fishSpeechChunkLength,

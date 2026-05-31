@@ -107,6 +107,9 @@ export function TtsTab({
       })
     : '';
   const fishLiveBridgeAvailable = isFishLiveBridgeAvailable(aiSettings);
+  const activeRemoteTtsMode = normalizeRemoteModeForProvider(aiSettings);
+  const fishLiveBridgeActive =
+    aiSettings.ttsProvider === 'fish-speech' && activeRemoteTtsMode === 'live-bridge';
 
   const renderRemoteVoiceOptions = () =>
     remoteVoiceOptions.map((voice) => {
@@ -189,7 +192,7 @@ export function TtsTab({
                 remoteTtsMode: event.target.value as AiSettings['remoteTtsMode'],
               })
             }
-            value={normalizeRemoteModeForProvider(aiSettings)}
+            value={activeRemoteTtsMode}
           >
             {fishLiveBridgeAvailable ? (
               <option value="live-bridge">Fish Speech Live Bridge</option>
@@ -324,6 +327,32 @@ export function TtsTab({
           </select>
           <select
             className="select-tech"
+            disabled={fishLiveBridgeActive}
+            onChange={(event) =>
+              updateAiSettings(setAiSettings, {
+                fishSpeechFormat: event.target.value as AiSettings['fishSpeechFormat'],
+              })
+            }
+            value={fishLiveBridgeActive ? 'pcm' : aiSettings.fishSpeechFormat}
+          >
+            <option value="pcm">PCM</option>
+            <option value="mp3">MP3</option>
+            <option value="wav">WAV</option>
+            <option value="opus">Opus</option>
+          </select>
+          <Slider
+            disabled={fishLiveBridgeActive}
+            label={`Fish Sample ${aiSettings.fishSpeechSampleRate} Hz`}
+            max={96000}
+            min={8000}
+            onInput={(value) =>
+              updateAiSettings(setAiSettings, { fishSpeechSampleRate: Math.round(value) })
+            }
+            step={1000}
+            value={aiSettings.fishSpeechSampleRate}
+          />
+          <select
+            className="select-tech"
             onChange={(event) =>
               updateAiSettings(setAiSettings, { fishSpeechModel: event.target.value })
             }
@@ -420,6 +449,16 @@ export function TtsTab({
             <option value="http">HTTP stream</option>
             <option value="websocket">WebSocket stream</option>
           </select>
+          <Slider
+            label={`Inworld Sample ${aiSettings.inworldSampleRate} Hz`}
+            max={96000}
+            min={8000}
+            onInput={(value) =>
+              updateAiSettings(setAiSettings, { inworldSampleRate: Math.round(value) })
+            }
+            step={1000}
+            value={aiSettings.inworldSampleRate}
+          />
           <input
             autoComplete="off"
             className="input-tech"
@@ -441,6 +480,33 @@ export function TtsTab({
             <option value="STABLE">Stable</option>
             <option value="BALANCED">Balanced</option>
             <option value="CREATIVE">Creative</option>
+            <option value="EXPRESSIVE">Expressive</option>
+          </select>
+          <select
+            className="select-tech"
+            onChange={(event) =>
+              updateAiSettings(setAiSettings, {
+                inworldTimestampType: event.target.value as AiSettings['inworldTimestampType'],
+              })
+            }
+            value={aiSettings.inworldTimestampType}
+          >
+            <option value="WORD">Word timestamps</option>
+            <option value="CHARACTER">Character timestamps</option>
+            <option value="NONE">No timestamps</option>
+          </select>
+          <select
+            className="select-tech"
+            onChange={(event) =>
+              updateAiSettings(setAiSettings, {
+                inworldTimestampTransportStrategy: event.target
+                  .value as AiSettings['inworldTimestampTransportStrategy'],
+              })
+            }
+            value={aiSettings.inworldTimestampTransportStrategy}
+          >
+            <option value="SYNC">Timestamp sync</option>
+            <option value="ASYNC">Timestamp async</option>
           </select>
           <Slider
             label={`Buffer ${aiSettings.inworldBufferCharThreshold} chars`}
@@ -454,6 +520,25 @@ export function TtsTab({
             step={10}
             value={aiSettings.inworldBufferCharThreshold}
           />
+          <Slider
+            label={`Max Buffer Delay ${aiSettings.inworldMaxBufferDelayMs} ms`}
+            max={10000}
+            min={0}
+            onInput={(value) =>
+              updateAiSettings(setAiSettings, {
+                inworldMaxBufferDelayMs: Math.round(value),
+              })
+            }
+            step={100}
+            value={aiSettings.inworldMaxBufferDelayMs}
+          />
+          <div className="toggle-row">
+            <span>Auto Mode</span>
+            <Toggle
+              checked={aiSettings.inworldAutoMode}
+              onChange={(checked) => updateAiSettings(setAiSettings, { inworldAutoMode: checked })}
+            />
+          </div>
           <div className="status-copy">{ttsStatus}</div>
         </div>
       ) : null}
