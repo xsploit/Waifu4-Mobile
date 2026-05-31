@@ -77,6 +77,18 @@ export function parseLocalTransferBackup(value: string): YourWifeyLocalTransferB
     throw new Error('Backup is missing app settings.');
   }
 
+  const providerSecrets = Array.isArray(backup.providerSecrets)
+    ? backup.providerSecrets
+        .map(normalizeProviderSecretRecord)
+        .filter((record): record is ProviderSecretRecord => Boolean(record))
+    : [];
+  const savedVrmModels = Array.isArray(backup.savedVrmModels)
+    ? backup.savedVrmModels
+        .map(normalizeSavedVrmModel)
+        .filter((model): model is LocalTransferSavedVrmModel => Boolean(model))
+    : [];
+  const state = normalizePersistedChatStateSnapshot(backup.state);
+
   return {
     app: LOCAL_TRANSFER_BACKUP_APP,
     exportedAt:
@@ -85,23 +97,19 @@ export function parseLocalTransferBackup(value: string): YourWifeyLocalTransferB
         : new Date(0).toISOString(),
     formatVersion: LOCAL_TRANSFER_BACKUP_VERSION,
     includes: {
-      chatHistory: Boolean(backup.includes?.chatHistory),
-      providerSecrets: Boolean(backup.includes?.providerSecrets),
-      relationshipMemory: Boolean(backup.includes?.relationshipMemory),
-      savedVrmModels: Boolean(backup.includes?.savedVrmModels),
+      chatHistory: backup.includes?.chatHistory ?? state.chatHistory.length > 0,
+      providerSecrets: backup.includes?.providerSecrets ?? providerSecrets.length > 0,
+      relationshipMemory:
+        backup.includes?.relationshipMemory ??
+        (state.relationshipMemory.facts.length > 0 ||
+          state.relationshipMemory.summary.trim().length > 0 ||
+          Object.keys(state.relationshipMemories).length > 0),
+      savedVrmModels: backup.includes?.savedVrmModels ?? savedVrmModels.length > 0,
     },
     kind: LOCAL_TRANSFER_BACKUP_KIND,
-    providerSecrets: Array.isArray(backup.providerSecrets)
-      ? backup.providerSecrets
-          .map(normalizeProviderSecretRecord)
-          .filter((record): record is ProviderSecretRecord => Boolean(record))
-      : [],
-    savedVrmModels: Array.isArray(backup.savedVrmModels)
-      ? backup.savedVrmModels
-          .map(normalizeSavedVrmModel)
-          .filter((model): model is LocalTransferSavedVrmModel => Boolean(model))
-      : [],
-    state: normalizePersistedChatStateSnapshot(backup.state),
+    providerSecrets,
+    savedVrmModels,
+    state,
   };
 }
 

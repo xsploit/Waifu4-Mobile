@@ -137,6 +137,66 @@ describe('local transfer backup', () => {
     );
   });
 
+  it('derives include flags for legacy backups missing the includes block', () => {
+    const backup = createLocalTransferBackup({
+      exportedAt: '2026-05-17T12:00:00.000Z',
+      providerSecrets: [
+        {
+          id: 'old:openrouter:openrouter.apiKey',
+          workspaceId: 'old',
+          provider: 'openrouter',
+          keyName: 'openrouter.apiKey',
+          mode: 'local-indexeddb',
+          redactedLabel: 'sk-or...1234',
+          createdAt: '2026-05-17T11:00:00.000Z',
+          updatedAt: '2026-05-17T11:00:00.000Z',
+          secret: 'sk-or-test-1234',
+        },
+      ],
+      savedVrmModels: [
+        {
+          id: 'custom-vrm-test',
+          name: 'Hikari Custom',
+          originalFileName: 'hikari.vrm',
+          size: 3,
+          type: 'model/vrm',
+          createdAt: 1,
+          updatedAt: 2,
+          dataBase64: 'AQID',
+        },
+      ],
+      state: {
+        ...createState(),
+        chatHistory: [
+          {
+            content: 'hello',
+            createdAt: 1,
+            id: 'msg-1',
+            role: 'user',
+          },
+        ],
+        relationshipMemory: {
+          ...createDefaultRelationshipMemory(),
+          facts: ['likes durable imports'],
+        },
+      },
+    });
+    const legacyBackup = { ...backup, app: 'yourwifey-local' };
+    delete (legacyBackup as Partial<typeof backup>).includes;
+
+    const parsed = parseLocalTransferBackup(JSON.stringify(legacyBackup));
+
+    expect(parsed.app).toBe('web-waifu-4-local');
+    expect(parsed.includes).toEqual({
+      chatHistory: true,
+      providerSecrets: true,
+      relationshipMemory: true,
+      savedVrmModels: true,
+    });
+    expect(parsed.providerSecrets[0]?.secret).toBe('sk-or-test-1234');
+    expect(parsed.savedVrmModels[0]?.id).toBe('custom-vrm-test');
+  });
+
   it('formats import/export failures for account tab status text', () => {
     expect(formatLocalTransferBackupError('import', new Error('bad file'))).toBe(
       'Local transfer backup import failed: bad file',
