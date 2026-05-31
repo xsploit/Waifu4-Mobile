@@ -41,18 +41,19 @@ EXCLUDE not part of this rebuild path
 | Source-of-truth doc | DONE | Imported into this repo and annotated by this overlay. |
 | Public assets | COPIED | `public/cdn-assets` is present in the rebuild. |
 | Legacy visual frontend | COPIED | `legacy-frontend/src/components` contains old component/tabs surface, not yet promoted as active app. |
+| Settings/storage compatibility foundation | COPIED | Active `src/lib` now has old menu/chat/product/twitch/VRM sequencer types, defaults, backup parsing, key vault, queue helpers, and focused tests. Piper is represented by a parked compatibility module, not the full browser worker. |
 
 ### Old Code Audit Snapshot
 
 | Old feature area | Old files found | Rebuild state | Next action |
 | --- | ---: | --- | --- |
 | `src/components` visual shell/tabs | 22 | COPIED in `legacy-frontend` | Promote/adapt into active `src`, preserving visual shape. |
-| `src/lib/chat` prompts/storage/memory/queue | 46 | Missing from active rebuild | ADAPT selectively around new brain contract. |
+| `src/lib/chat` prompts/storage/memory/queue | 46 | Partial active copy | Storage/defaults/provider defaults/chat turn/Twitch queue copied; prompt/memory/GRILLO frontend pieces still need ADAPT. |
 | `src/lib/grillo` schemas/tools/context | 48 | Backend worker copied; frontend/schema lib missing | ADAPT for context UI and non-blocking prompt packets. |
-| `src/lib/product` backup/key vault/account | 9 | Missing | COPY/ADAPT for backup compatibility and provider key workflows. |
-| `src/lib/tts` manager/Piper/remote | 8 | New TTS exists, old manager not active | ADAPT only needed UI/settings; Piper PARKED. |
-| `src/lib/twitch` direct IRC/transcription helpers | 4 | Missing | COPY/ADAPT. Twitch is required. |
-| `src/lib/vrm` loader/animation/sequencer/custom library | 9 | Missing | COPY loader/library; REBUILD expression blend and weights. |
+| `src/lib/product` backup/key vault/account | 9 | Active copy | Backup/key vault/account files copied; wire into active UI next. |
+| `src/lib/tts` manager/Piper/remote | 8 | Parked shim only | New TTS exists, old manager not active; Piper worker still PARKED. |
+| `src/lib/twitch` direct IRC/transcription helpers | 4 | Active copy | Direct IRC and stream transcription helpers copied; backend endpoints still needed. |
+| `src/lib/vrm` loader/animation/sequencer/custom library | 9 | Partial active copy | Sequencer/manifests copied; loader/custom library/stage still need COPY/ADAPT; expression blend still REBUILD. |
 | `server/src/twitch` IRC/transcriber | 5 | Only base `TwitchChatSource` type copied | COPY/ADAPT IRC, parser, stream transcriber, tests. |
 | `server/src/commands` command parser/router | 3 | Missing | COPY/ADAPT after Twitch/overlay event shape exists. |
 | `server/src/overlay` socket/events | 2 | Missing | COPY/ADAPT for browser source/OBS behavior. |

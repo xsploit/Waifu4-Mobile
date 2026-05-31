@@ -1,0 +1,467 @@
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import {
+  DEFAULT_PERSONA,
+  DEFAULT_OPENROUTER_MODEL,
+  STORAGE_KEYS,
+  createDefaultAiSettings,
+  createDefaultPersonaVoiceBindings,
+  createDefaultPersonas,
+  createDefaultRelationshipMemory,
+  createDefaultUiState,
+  createDefaultTwitchSettings,
+} from './defaults';
+import { loadPersistedChatState, savePersistedChatState } from './storage';
+import { createDefaultSequencerSettings, createDefaultVisualSettings } from '../menu/defaults';
+import type { PersistedChatState } from './types';
+
+function createStorage() {
+  const values = new Map<string, string>();
+  return {
+    clear: () => values.clear(),
+    getItem: (key: string) => values.get(key) ?? null,
+    removeItem: (key: string) => values.delete(key),
+    setItem: (key: string, value: string) => values.set(key, value),
+  };
+}
+
+describe('chat settings persistence', () => {
+  beforeEach(() => {
+    vi.stubGlobal('window', {
+      localStorage: createStorage(),
+    });
+  });
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it('round-trips the current operator settings surface', async () => {
+    const personas = createDefaultPersonas();
+    const aiSettings = {
+      ...createDefaultAiSettings(),
+      aiTransportMode: 'http-stream',
+      fishSpeechChunkLength: 220,
+      fishSpeechConditionOnPreviousChunks: false,
+      fishSpeechLatency: 'normal',
+      fishSpeechModel: 's2',
+      fishSpeechVoiceId: 'fish-voice',
+      fishSpeechVoiceScope: 'mine',
+      inworldBufferCharThreshold: 140,
+      inworldDeliveryMode: 'CREATIVE',
+      inworldModelId: 'inworld-tts-2',
+      inworldVoiceId: 'inworld-voice',
+      llmProvider: 'openrouter-responses',
+      maxToolRounds: 18,
+      maxTokens: 420,
+      memoryAgentIntervalMessages: 7,
+      memoryAgentModel: DEFAULT_OPENROUTER_MODEL,
+      model: DEFAULT_OPENROUTER_MODEL,
+      openAiStateMode: 'stateless',
+      replyLength: 'yap',
+      remoteTtsMode: 'sentence-chunks',
+      temperature: 1.1,
+      toolChoiceMode: 'auto',
+      ttsAutoSpeak: false,
+      ttsEnabled: true,
+      ttsExpressionTagsEnabled: true,
+      ttsPlaybackRate: 1.15,
+      ttsProvider: 'fish-speech',
+      ttsSimulatedStreaming: false,
+      ttsVoice: 'custom-voice',
+      ttsVolume: 1.4,
+    } satisfies PersistedChatState['aiSettings'];
+    const sequencerSettings = {
+      ...createDefaultSequencerSettings(),
+      currentIndex: 2,
+      duration: 7,
+      loop: false,
+      playing: false,
+      shuffle: true,
+      speed: 1.4,
+    };
+    const visualSettings = {
+      ...createDefaultVisualSettings(),
+      ambientLight: 0.7,
+      armClipGuard: false,
+      armClipGuardStrength: 0.25,
+      armClipTorsoRadius: 0.31,
+      autoBlink: false,
+      autoGaze: false,
+      blinkIntensity: 0.55,
+      blinkInterval: 6.5,
+      cameraFov: 41,
+      cameraOffsetX: 0.4,
+      cameraOffsetY: -0.2,
+      cameraOffsetZ: 0.9,
+      cameraRigMode: 'custom',
+      cameraTargetOffsetX: -0.15,
+      cameraTargetOffsetY: 0.2,
+      cameraTargetOffsetZ: -0.35,
+      cameraVerticalOffset: 0.18,
+      cameraViewMode: 'full-body',
+      colorCorr: true,
+      colorPowB: 1.75,
+      colorPowG: 1.35,
+      colorPowR: 1.2,
+      crossfadeDuration: 1.7,
+      fillLight: 0.8,
+      gazeAudienceYOffset: -0.08,
+      gazeEyeMotion: 0.7,
+      gazeHeadDrift: 0.4,
+      gazeHeadFollow: 0.5,
+      gazeIntensity: 0.6,
+      gazePointerFollow: true,
+      hemiLight: 0.65,
+      keyLight: 1.1,
+      modelPositionX: 0.2,
+      modelPositionZ: -0.5,
+      modelRotationX: 4,
+      modelRotationY: -12,
+      modelRotationZ: 2,
+      modelScale: 1.15,
+      modelVerticalOffset: -0.4,
+      outline: false,
+      outlineAlpha: 0.65,
+      outlineColor: '#334455',
+      outlineThickness: 0.008,
+      mtoonGiEqualization: 0.6,
+      mtoonRimColor: '#ddeeff',
+      mtoonRimFresnel: 7.2,
+      mtoonRimLift: 0.35,
+      mtoonRimLightingMix: 0.45,
+      mtoonShadeColor: '#445566',
+      mtoonShadeShift: -0.2,
+      mtoonToony: 0.75,
+      mtoonTuning: true,
+      pbrClearcoat: 0.4,
+      pbrClearcoatRoughness: 0.25,
+      pbrEnvMapIntensity: 1.2,
+      pbrMetalness: 0.15,
+      pbrRoughness: 0.38,
+      pbrSpecularIntensity: 0.7,
+      realisticMode: true,
+      rimLight: 0.9,
+      sceneBackgroundMode: 'transparent',
+      sceneExposure: 1.25,
+    } satisfies PersistedChatState['visualSettings'];
+    const state: PersistedChatState = {
+      activePersonaId: DEFAULT_PERSONA.id,
+      activeTab: 'background',
+      aiSettings,
+      chatHistory: [
+        {
+          content: 'hello',
+          createdAt: Date.parse('2026-05-14T08:00:00.000Z'),
+          id: 'message-1',
+          role: 'user',
+        },
+      ],
+      chatHistories: {},
+      currentBundledModelId: 'hikari-chan',
+      currentCustomVrmModelId: 'custom-vrm-test-avatar',
+      emotionTelemetryEvents: [
+        {
+          affectArousal: 0.6,
+          affectDominance: 0.2,
+          affectLabel: 'bright',
+          affectValence: 0.5,
+          animationAccepted: true,
+          animationId: 'sachi-happy',
+          animationIndex: 2,
+          animationName: 'Sachi Happy',
+          animationReason: 'applied',
+          appliedIntensity: 0.74,
+          createdAt: 1778889700000,
+          emotion: 'amused',
+          expressionAccepted: true,
+          expressionReason: 'applied',
+          id: 'emotion-test-1',
+          metadataArousal: 0.7,
+          metadataDominance: 0.3,
+          metadataValence: 0.6,
+          requestedDurationMs: 1400,
+          requestedExpression: 'happy',
+          requestedIntensity: 0.72,
+          resolvedExpressionNames: ['happy', 'relaxed'],
+        },
+      ],
+      personaVoiceBindings: {
+        [DEFAULT_PERSONA.id]: {
+          customVoiceId: 'voice-lab-1',
+          label: 'Custom Neuro',
+          modelId: 'inworld-tts-2',
+          provider: 'inworld',
+          updatedAt: 1778889600000,
+          voiceId: 'inworld-custom-neuro',
+        },
+      },
+      personas,
+      relationshipMemories: {
+        'local:persona:neuro-sama': {
+          ...createDefaultRelationshipMemory(),
+          summary: 'local scope summary',
+        },
+      },
+      relationshipMemory: {
+        ...createDefaultRelationshipMemory(),
+        facts: ['likes saved settings'],
+        summary: 'global summary',
+      },
+      twitchChannel: '#CohhCarnage',
+      twitchSettings: {
+        ...createDefaultTwitchSettings(),
+        batchLowSize: 7,
+        commandsEnabled: false,
+        contextLimit: 120,
+        directChatterLimit: 12,
+        localDisplayName: 'Subby',
+        maxPendingJobs: 5,
+        mentionRequiredUnderThreshold: false,
+        replyGapMs: 1500,
+        streamTranscriptionContextLimit: 6,
+        streamTranscriptionEnabled: true,
+        streamTranscriptionIntervalSeconds: 120,
+        streamTranscriptionModel: 'openai/whisper-large-v3',
+        streamTranscriptionSampleSeconds: 20,
+        streamVisionContextEnabled: true,
+        streamVisionDetail: 'auto',
+        streamVisionIntervalSeconds: 150,
+        streamVisionMaxAgeSeconds: 240,
+      },
+      sequencerSettings,
+      uiState: {
+        ...createDefaultUiState(),
+        chatDraft: 'draft',
+        chatLogOpen: false,
+        menuOpen: true,
+      },
+      visualSettings,
+      voiceLabVoices: [
+        {
+          accent: 'neutral',
+          ageVibe: 'young adult',
+          assignedPersonaIds: [DEFAULT_PERSONA.id],
+          createdAt: 1778889500000,
+          description: 'Dry streamer voice.',
+          emotionalTone: 'sarcastic',
+          expressiveness: 0.72,
+          id: 'voice-lab-1',
+          modelId: 'inworld-tts-2',
+          name: 'Custom Neuro',
+          provider: 'inworld',
+          providerVoiceId: 'inworld-custom-neuro',
+          sample: {
+            fileName: 'sample.wav',
+            lastModified: 1778889400000,
+            mimeType: 'audio/wav',
+            size: 12345,
+          },
+          speakingStyle: 'fast dry banter',
+          stability: 0.58,
+          status: 'ready',
+          updatedAt: 1778889600000,
+        },
+      ],
+    };
+
+    await savePersistedChatState(state);
+    const loaded = await loadPersistedChatState();
+
+    expect(loaded.aiSettings).toEqual(aiSettings);
+    expect(loaded.visualSettings).toEqual(visualSettings);
+    expect(loaded.sequencerSettings).toMatchObject({
+      currentIndex: sequencerSettings.currentIndex,
+      duration: sequencerSettings.duration,
+      loop: sequencerSettings.loop,
+      playing: sequencerSettings.playing,
+      shuffle: sequencerSettings.shuffle,
+      speed: sequencerSettings.speed,
+    });
+    expect(loaded.sequencerSettings.playlist).toHaveLength(sequencerSettings.playlist.length);
+    expect(loaded.activeTab).toBe('background');
+    expect(loaded.currentBundledModelId).toBe('hikari-chan');
+    expect(loaded.currentCustomVrmModelId).toBe('custom-vrm-test-avatar');
+    expect(loaded.emotionTelemetryEvents[0]).toMatchObject({
+      animationName: 'Sachi Happy',
+      emotion: 'amused',
+      expressionReason: 'applied',
+      resolvedExpressionNames: ['happy', 'relaxed'],
+    });
+    expect(loaded.twitchChannel).toBe('cohhcarnage');
+    expect(loaded.twitchSettings).toMatchObject({
+      batchLowSize: 7,
+      commandsEnabled: false,
+      contextLimit: 120,
+      directChatterLimit: 12,
+      localDisplayName: 'Subby',
+      maxPendingJobs: 5,
+      mentionRequiredUnderThreshold: false,
+      replyGapMs: 1500,
+      streamTranscriptionContextLimit: 6,
+      streamTranscriptionEnabled: true,
+      streamTranscriptionIntervalSeconds: 120,
+      streamTranscriptionModel: 'openai/whisper-large-v3',
+      streamTranscriptionSampleSeconds: 20,
+      streamVisionContextEnabled: true,
+      streamVisionDetail: 'auto',
+      streamVisionIntervalSeconds: 150,
+      streamVisionMaxAgeSeconds: 240,
+    });
+    expect(loaded.uiState).toEqual({
+      ...state.uiState,
+      menuOpen: false,
+    });
+    expect(loaded.relationshipMemory.summary).toBe('global summary');
+    expect(loaded.relationshipMemories['local:persona:neuro-sama']?.summary).toBe(
+      'local scope summary',
+    );
+    expect(loaded.personaVoiceBindings[DEFAULT_PERSONA.id]).toMatchObject({
+      provider: 'inworld',
+      voiceId: 'inworld-custom-neuro',
+    });
+    expect(loaded.voiceLabVoices[0]).toMatchObject({
+      id: 'voice-lab-1',
+      provider: 'inworld',
+      providerVoiceId: 'inworld-custom-neuro',
+    });
+  });
+
+  it('defaults new installs to auto runtime tool mode with a 15-round agentic loop', async () => {
+    const defaults = createDefaultAiSettings();
+
+    expect(defaults.toolChoiceMode).toBe('auto');
+    expect(defaults.maxToolRounds).toBe(15);
+    expect(defaults.embeddingMode).toBe('browser');
+    expect(defaults.embeddingLocalModel).toBe('onnx-community/all-MiniLM-L6-v2-ONNX');
+    expect(defaults.embeddingModel).toBe('openai/text-embedding-3-small');
+  });
+
+  it('ignores retired post-processing settings from older saved state', async () => {
+    window.localStorage.setItem(
+      STORAGE_KEYS.visualSettings,
+      JSON.stringify({
+        ...createDefaultVisualSettings(),
+        bloom: true,
+        chroma: true,
+        glitch: true,
+        grain: true,
+        mtoonRimColor: 'not-a-color',
+        outlineThickness: 100,
+        sceneExposure: 1.3,
+      }),
+    );
+
+    const loaded = await loadPersistedChatState();
+
+    expect(loaded.visualSettings.sceneExposure).toBe(1.3);
+    expect(loaded.visualSettings.outlineThickness).toBe(0.02);
+    expect(loaded.visualSettings.mtoonRimColor).toBe('#ffffff');
+    expect('bloom' in loaded.visualSettings).toBe(false);
+    expect('glitch' in loaded.visualSettings).toBe(false);
+  });
+
+  it('normalizes legacy OpenRouter settings to app-owned state and OpenRouter model ids', async () => {
+    window.localStorage.setItem(
+      STORAGE_KEYS.aiSettings,
+      JSON.stringify({
+        ...createDefaultAiSettings(),
+        aiTransportMode: 'server-default',
+        llmProvider: 'openrouter-responses',
+        memoryAgentModel: 'gpt-5.4-mini',
+        model: 'gpt-5.4-nano',
+        openAiStateMode: 'conversation',
+      }),
+    );
+
+    const loaded = await loadPersistedChatState();
+
+    expect(loaded.aiSettings).toMatchObject({
+      aiTransportMode: 'http-stream',
+      llmProvider: 'openrouter-responses',
+      memoryAgentModel: DEFAULT_OPENROUTER_MODEL,
+      model: DEFAULT_OPENROUTER_MODEL,
+      openAiStateMode: 'stateless',
+    });
+  });
+
+  it('normalizes stream transcription away from chat and premium models', async () => {
+    window.localStorage.setItem(
+      STORAGE_KEYS.twitchSettings,
+      JSON.stringify({
+        ...createDefaultTwitchSettings(),
+        streamTranscriptionModel: 'o1-pro-2025-03-19',
+      }),
+    );
+
+    const loaded = await loadPersistedChatState();
+
+    expect(loaded.twitchSettings.streamTranscriptionModel).toBe('openai/whisper-large-v3');
+  });
+
+  it('normalizes malformed save input before writing persistence entries', async () => {
+    await expect(
+      savePersistedChatState({
+        activePersonaId: DEFAULT_PERSONA.id,
+        personas: createDefaultPersonas(),
+        relationshipMemory: createDefaultRelationshipMemory(),
+      } as PersistedChatState),
+    ).resolves.toBeUndefined();
+
+    const loaded = await loadPersistedChatState();
+
+    expect(loaded.personaVoiceBindings[DEFAULT_PERSONA.id]).toBeDefined();
+    expect(loaded.twitchSettings.directChatterLimit).toBe(
+      createDefaultTwitchSettings().directChatterLimit,
+    );
+  });
+
+  it('keeps edited built-in personas instead of replacing them with defaults', async () => {
+    const personas = createDefaultPersonas();
+    const editedPersonas = personas.map((persona) =>
+      persona.id === DEFAULT_PERSONA.id
+        ? {
+            ...persona,
+            description: 'A saved front-end personality edit.',
+            name: 'Neuro Saved',
+            systemPrompt:
+              'You are Neuro Saved, a locally edited persona that must survive reloads.',
+            userNickname: 'Subby',
+          }
+        : persona,
+    );
+    const state: PersistedChatState = {
+      activePersonaId: DEFAULT_PERSONA.id,
+      activeTab: 'character',
+      aiSettings: createDefaultAiSettings(),
+      chatHistory: [],
+      chatHistories: {},
+      currentBundledModelId: '',
+      currentCustomVrmModelId: '',
+      emotionTelemetryEvents: [],
+      personaVoiceBindings: createDefaultPersonaVoiceBindings(),
+      personas: editedPersonas,
+      relationshipMemories: {},
+      relationshipMemory: createDefaultRelationshipMemory(),
+      twitchChannel: 'subsect',
+      twitchSettings: createDefaultTwitchSettings(),
+      sequencerSettings: createDefaultSequencerSettings(),
+      uiState: createDefaultUiState(),
+      visualSettings: createDefaultVisualSettings(),
+      voiceLabVoices: [],
+    };
+
+    await savePersistedChatState(state);
+    const loaded = await loadPersistedChatState();
+    const editedDefaultPersona = loaded.personas.find(
+      (persona) => persona.id === DEFAULT_PERSONA.id,
+    );
+
+    expect(loaded.activePersonaId).toBe(DEFAULT_PERSONA.id);
+    expect(editedDefaultPersona).toMatchObject({
+      description: 'A saved front-end personality edit.',
+      name: 'Neuro Saved',
+      systemPrompt: 'You are Neuro Saved, a locally edited persona that must survive reloads.',
+      userNickname: 'Subby',
+    });
+  });
+});
