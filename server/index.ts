@@ -10,6 +10,7 @@ import { handleLocalBackupSettings } from './localBackup';
 import { createMemoryRouter } from './memory/routes';
 import { OverlaySocket } from './overlay/OverlaySocket';
 import { createTwitchRouter } from './twitch/routes';
+import { createTwitchRuntime } from './twitch/runtime';
 
 const PORT = Number(process.env.PORT ?? 8797);
 
@@ -53,13 +54,18 @@ app.post('/tts/stream', (req, res) => {
   void handleTtsStream(req, res);
 });
 
-app.use('/memory', createMemoryRouter());
-app.use('/twitch', createTwitchRouter());
-
 const server = createServer(app);
-new OverlaySocket(server, (event) => {
+const overlaySocket = new OverlaySocket(server, (event) => {
   console.log(`[INFO] (${SERVICE_NAME}) overlay client event: ${event.type}`);
 });
+const twitchRuntime = createTwitchRuntime({ overlaySocket });
+
+app.use('/memory', createMemoryRouter());
+app.use('/twitch', createTwitchRouter(twitchRuntime));
+
+if (twitchRuntime.shouldAutoStart()) {
+  twitchRuntime.start();
+}
 
 server.listen(PORT, '127.0.0.1', () => {
   console.log(`[INFO] (${SERVICE_NAME}) listening on http://127.0.0.1:${PORT}`);

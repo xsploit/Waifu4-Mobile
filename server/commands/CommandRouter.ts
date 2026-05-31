@@ -171,11 +171,13 @@ export class CommandRouter {
       type: 'command:response',
       payload: {
         text: message,
-        sendToChat: true,
+        sendToChat: this.sendChatReplies,
       },
     });
     this.emitStatus('info', message);
-    this.options.getChatSource().sendMessage(message);
+    if (this.sendChatReplies) {
+      this.options.getChatSource().sendMessage(message);
+    }
   }
 
   private emitStatus(level: 'info' | 'warning' | 'error', message: string) {

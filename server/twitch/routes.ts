@@ -6,6 +6,7 @@ import {
   captureTwitchStreamFrame,
   transcribeTwitchStreamSample,
 } from './TwitchStreamTranscriber';
+import type { TwitchRuntime } from './runtime';
 
 const twitchStreamBodySchema = z
   .object({
@@ -32,8 +33,45 @@ function fishBaseUrl() {
   ).replace(/\/+$/, '');
 }
 
-export function createTwitchRouter() {
+export function createTwitchRouter(runtime?: TwitchRuntime) {
   const router = Router();
+
+  router.get('/runtime/status', (_req, res) => {
+    res.json({ ok: true, runtime: runtime?.status() ?? null });
+  });
+
+  router.post('/runtime/start', (_req, res) => {
+    try {
+      runtime?.start();
+      res.json({ ok: true, runtime: runtime?.status() ?? null });
+    } catch (error) {
+      res.status(500).json({
+        ok: false,
+        error: error instanceof Error ? error.message : 'Twitch runtime start failed.',
+      });
+    }
+  });
+
+  router.post('/runtime/stop', (_req, res) => {
+    runtime?.stop();
+    res.json({ ok: true, runtime: runtime?.status() ?? null });
+  });
+
+  router.post('/runtime/mock-message', async (req, res) => {
+    if (!runtime) {
+      res.status(404).json({ ok: false, error: 'Twitch runtime is not configured.' });
+      return;
+    }
+    try {
+      const message = await runtime.injectMockMessage(req.body ?? {});
+      res.json({ ok: true, message, runtime: runtime.status() });
+    } catch (error) {
+      res.status(400).json({
+        ok: false,
+        error: error instanceof Error ? error.message : 'Mock Twitch message failed.',
+      });
+    }
+  });
 
   router.post('/transcribe-sample', async (req, res) => {
     try {
