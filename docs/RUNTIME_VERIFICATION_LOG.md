@@ -183,3 +183,19 @@ Non-secret parse summary:
   }
 }
 ```
+
+## 2026-05-31 Final Tab-Parity Gate
+
+Commands:
+
+```text
+npm test
+npm run build
+npm run smoke:runtime
+```
+
+Result: passed.
+
+- Vitest: 56 files, 259 tests passed.
+- Production build: `tsc --noEmit && vite build` passed.
+- Runtime smoke: health, Twitch runtime, memory status, POML render, and expected no-key guards passed.

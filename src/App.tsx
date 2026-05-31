@@ -7121,7 +7121,8 @@ function App() {
               ttsCached={selectedTtsCached}
               ttsStatus={ttsStatus}
               ttsVoices={ttsVoices}
-        remoteTtsVoices={activeRemoteTtsVoices}
+              remoteTtsVoiceCatalog={remoteTtsVoices}
+              remoteTtsVoices={activeRemoteTtsVoices}
               remoteVoicesError={remoteTtsVoicesError}
               remoteVoicesLoading={remoteTtsVoicesLoading}
               voiceLabVoices={voiceLabVoices}
