@@ -1599,7 +1599,12 @@ export function VrmStage({
         disposeVrm(loadedVrm);
       }
     };
-  }, [cancelScaleAnimation, modelUrl, setSequencerSettings, visualSettings.modelScale]);
+    // modelScale is intentionally omitted: a scale change (e.g. scroll-wheel zoom)
+    // must NOT retrigger a full VRM teardown/reload (that caused the model to vanish
+    // briefly and re-download on every notch). The scale-animation effect and the
+    // Avatar scale application keep modelScale in sync after load.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [cancelScaleAnimation, modelUrl, setSequencerSettings]);
 
   useEffect(() => {
     if (!vrm) {
