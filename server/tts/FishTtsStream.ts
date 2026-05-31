@@ -9,6 +9,7 @@ export type FishFormat = 'pcm' | 'mp3' | 'wav' | 'opus';
 export type FishStreamRequest = {
   apiKey: string;
   text: string;
+  textSegments?: string[];
   voiceId?: string; // reference_id
   backend?: FishBackend; // default s2-pro (D9)
   format?: FishFormat; // default pcm (low-latency playback)
@@ -45,6 +46,14 @@ export async function streamFishTts(
 
   // This slice speaks a given string; the LLM->TTS delta bridge is a later slice.
   async function* textStream(): AsyncIterable<string> {
+    if (req.textSegments?.length) {
+      for (const segment of req.textSegments) {
+        if (segment) {
+          yield segment;
+        }
+      }
+      return;
+    }
     yield req.text;
   }
 

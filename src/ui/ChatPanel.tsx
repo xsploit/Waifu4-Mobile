@@ -89,6 +89,7 @@ const ZERO_TIMING_TOTALS: TimingTotals = {
 
 const DEFAULT_BENCHMARK_TEXT =
   'The little star smiled, took one careful breath, and said hello to the morning.';
+const FISH_AB_GAP_MS = 700;
 
 export function ChatPanel() {
   const [provider, setProvider] = useState<GatewayId>('vercel-gateway');
@@ -126,6 +127,7 @@ export function ChatPanel() {
   const [benchmarkRunning, setBenchmarkRunning] = useState(false);
   const [benchmarkStatus, setBenchmarkStatus] = useState('bench=idle');
   const [benchmarkResults, setBenchmarkResults] = useState<BenchmarkResult[]>([]);
+  const [fishCompareStatus, setFishCompareStatus] = useState('fish A/B=idle');
   const [log, setLog] = useState<Turn[]>([]);
   const [streaming, setStreaming] = useState('');
   const [meta, setMeta] = useState<ReplyMetadata | null>(null);
@@ -458,6 +460,132 @@ export function ChatPanel() {
     phonemes: left.phonemes + right.phonemes,
     visemes: left.visemes + right.visemes,
   });
+
+  const fishCompareSegments = (text: string): string[] => {
+    const trimmed = text.trim();
+    if (!trimmed) {
+      return [];
+    }
+    const parts = trimmed.match(/[^.!?,;:]+[.!?,;:]?\s*/g)?.map((part) => part.trim()).filter(Boolean) ?? [
+      trimmed,
+    ];
+    if (parts.length <= 1) {
+      const words = trimmed.split(/\s+/);
+      const chunkSize = Math.max(3, Math.ceil(words.length / 3));
+      return Array.from({ length: Math.ceil(words.length / chunkSize) }, (_, index) =>
+        words.slice(index * chunkSize, (index + 1) * chunkSize).join(' '),
+      ).filter(Boolean);
+    }
+    return parts;
+  };
+
+  const sleep = (ms: number) => new Promise((resolve) => window.setTimeout(resolve, ms));
+
+  const playFishComparisonMode = async (
+    label: string,
+    text: string,
+    textSegments: string[] | undefined,
+    controller: AbortController,
+  ): Promise<BenchmarkResult> => {
+    const playback = await ensureAudioPlayback();
+    playback.stop();
+    playback.reset();
+    const startedAt = performance.now();
+    let firstAudioMs: number | null = null;
+    let chunks = 0;
+    let bytes = 0;
+    setFishCompareStatus(`fish A/B=${label}`);
+    setTtsStatus(`fish A/B · ${label}`);
+    for await (const ev of streamTts(
+      {
+        provider: 'fish',
+        text,
+        textSegments,
+        voiceId: voiceId.trim() || undefined,
+        format: 'pcm',
+        sampleRate: 44100,
+        backend: 's2-pro',
+        chunkLength: 200,
+        latency: 'balanced',
+        conditionOnPreviousChunks: true,
+      },
+      { ttsKey: ttsKey.trim() },
+      controller.signal,
+    )) {
+      if (ev.type === 'audio') {
+        if (ev.format !== 'pcm') {
+          throw new Error(`Unsupported audio format ${ev.format}`);
+        }
+        await playback.playPcmChunk(ev.audio, ev.sampleRate ?? 44100);
+      } else if (ev.type === 'done') {
+        firstAudioMs = ev.stats.firstAudioMs;
+        chunks = ev.stats.chunks;
+        bytes = ev.stats.bytes;
+      } else {
+        throw new Error(ev.error);
+      }
+    }
+    const networkDoneAt = performance.now();
+    await playback.waitForIdle();
+    return {
+      id: label.toLowerCase().replace(/\s+/g, '-'),
+      label,
+      round: 1,
+      ok: true,
+      firstAudioMs,
+      totalMs: Math.round(networkDoneAt - startedAt),
+      playbackMs: Math.round(performance.now() - startedAt),
+      chunks,
+      bytes,
+      timing: ZERO_TIMING_TOTALS,
+    };
+  };
+
+  const playFishComparison = async () => {
+    const text = benchmarkText.trim();
+    if (!text || benchmarkRunning) {
+      return;
+    }
+    if (!ttsKey.trim()) {
+      setFishCompareStatus('fish A/B=no Fish key');
+      return;
+    }
+    const segments = fishCompareSegments(text);
+    const controller = new AbortController();
+    benchmarkAbortRef.current = controller;
+    setBenchmarkRunning(true);
+    stopTts('fish A/B starting…');
+    try {
+      const currentResults: BenchmarkResult[] = [];
+      for (const segment of segments) {
+        currentResults.push(await playFishComparisonMode(`current segment ${currentResults.length + 1}`, segment, undefined, controller));
+      }
+      await sleep(FISH_AB_GAP_MS);
+      const proposed = await playFishComparisonMode('single Fish stream', text, segments, controller);
+      setBenchmarkResults([
+        ...benchmarkResults,
+        {
+          id: 'fish-current-segmented',
+          label: 'Fish current segmented',
+          round: 1,
+          ok: true,
+          firstAudioMs: currentResults[0]?.firstAudioMs ?? null,
+          totalMs: currentResults.reduce((total, result) => total + result.totalMs, 0),
+          playbackMs: currentResults.reduce((total, result) => total + result.playbackMs, 0),
+          chunks: currentResults.reduce((total, result) => total + result.chunks, 0),
+          bytes: currentResults.reduce((total, result) => total + result.bytes, 0),
+          timing: ZERO_TIMING_TOTALS,
+        },
+        proposed,
+      ]);
+      setFishCompareStatus(`fish A/B=done · ${segments.length} segments then single stream`);
+    } catch (err) {
+      setFishCompareStatus(`fish A/B=${err instanceof Error ? err.message : String(err)}`);
+    } finally {
+      setBenchmarkRunning(false);
+      benchmarkAbortRef.current = null;
+    }
+  };
 
   const benchmarkCandidates = (): BenchmarkCandidate[] => {
     const candidates: BenchmarkCandidate[] = [];
@@ -915,8 +1043,16 @@ export function ChatPanel() {
           >
             copy results
           </button>
+          <button
+            onClick={() => void playFishComparison()}
+            disabled={benchmarkRunning || !ttsKey.trim()}
+            style={{ ...inputStyle, cursor: 'pointer' }}
+          >
+            play Fish A/B
+          </button>
         </div>
         <div style={{ fontSize: 12, color: '#9b9ba3' }}>{benchmarkStatus}</div>
+        <div style={{ fontSize: 12, color: '#9b9ba3' }}>{fishCompareStatus}</div>
         {benchmarkSummary().length > 0 && (
           <div style={{ display: 'grid', gap: 4, fontSize: 12, color: '#bdbdc7' }}>
             {benchmarkSummary().map((row) => (

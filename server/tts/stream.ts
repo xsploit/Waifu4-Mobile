@@ -6,6 +6,7 @@ import { streamInworldTts } from './InworldTtsStream';
 
 const ttsRequestSchema = z.object({
   text: z.string().min(1),
+  textSegments: z.array(z.string().min(1)).max(32).optional(),
   provider: z.enum(['fish', 'inworld']).optional(),
   voiceId: z.string().optional(),
   backend: z.enum(['s1', 's2-pro']).optional(),

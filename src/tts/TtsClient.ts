@@ -4,6 +4,7 @@ export type TtsCredentials = {
 
 export type TtsStreamRequest = {
   text: string;
+  textSegments?: string[];
   provider?: 'fish' | 'inworld';
   voiceId?: string;
   backend?: 's1' | 's2-pro';
@@ -174,6 +175,7 @@ export async function* streamTts(
     },
     body: JSON.stringify({
       text: request.text,
+      textSegments: request.textSegments,
       provider: request.provider ?? 'fish',
       voiceId: request.voiceId,
       backend: request.backend ?? 's2-pro',
