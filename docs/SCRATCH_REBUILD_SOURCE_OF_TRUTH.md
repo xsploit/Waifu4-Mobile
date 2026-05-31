@@ -40,19 +40,20 @@ EXCLUDE not part of this rebuild path
 | GRILLO/Ladybug backend worker | DONE | Old services/tests copied, strict compile seams patched, routes wired under `/memory`, committed as `d8702d9`. |
 | Source-of-truth doc | DONE | Imported into this repo and annotated by this overlay. |
 | Public assets | COPIED | `public/cdn-assets` is present in the rebuild. |
-| Legacy visual frontend | COPIED | `legacy-frontend/src/components` contains old component/tabs surface, not yet promoted as active app. |
-| Settings/storage compatibility foundation | COPIED | Active `src/lib` now has old menu/chat/product/twitch/VRM sequencer types, defaults, backup parsing, key vault, queue helpers, and focused tests. Piper is represented by a parked compatibility module, not the full browser worker. |
+| Direct frontend shell | DONE | Old `src/App.tsx`, `src/components`, and `src/style.css` promoted as the active frontend. Patch only backend/TTS/build seams; do not reshape the UI. |
+| Settings/storage compatibility foundation | COPIED | Active `src/lib` now has old menu/chat/product/twitch/VRM sequencer types, defaults, backup parsing, key vault, queue helpers, Piper browser support, and focused tests. Piper may still be parked or dropped after the TTS seam audit. |
 | Twitch backend transcription/frame foundation | COPIED | Old IRC parser/source and stream transcriber copied; `/twitch/transcribe-sample` and `/twitch/capture-frame` are wired to current backend key headers/env. |
-| VRM loader/model/animation foundation | COPIED | Old `loadVrm`, custom VRM library, postprocessing, animation retargeting, sequencer, manifests, and tests are active. Old lipsync weights remain excluded from this slice. |
-| Active VRM stage foundation | DONE | Old `VrmStage` copied/adapted into active `src/components`, mounted in the rebuild app, and patched to consume the new `MouthWeights` seam instead of the old TTS/lipsync manager. |
+| VRM loader/model/animation foundation | COPIED | Old `loadVrm`, custom VRM library, postprocessing, animation retargeting, sequencer, lipsync helpers, manifests, and tests are active. |
+| Direct VRM stage/settings surface | DONE | Old direct `VrmStage`, settings tabs, chat overlay, and menu shell are now the active frontend surface. Next seam audit is mouth/TTS ownership against the new realtime TTS + `wlipsync` path. |
+| POML dynamic prompt renderer | DONE | Old vendored `pomljs` renderer copied into the backend, template reads are cached, and `/ai/poml/render` is exposed behind the `/api` proxy for the direct frontend. Provider/model prompt caching is a later optimization. |
 
 ### Old Code Audit Snapshot
 
 | Old feature area | Old files found | Rebuild state | Next action |
 | --- | ---: | --- | --- |
-| `src/components` visual shell/tabs | 22 | COPIED in `legacy-frontend` | Promote/adapt into active `src`, preserving visual shape. |
-| `src/lib/chat` prompts/storage/memory/queue | 46 | Partial active copy | Storage/defaults/provider defaults/chat turn/Twitch queue copied; prompt/memory/GRILLO frontend pieces still need ADAPT. |
-| `src/lib/grillo` schemas/tools/context | 48 | Backend worker copied; frontend/schema lib missing | ADAPT for context UI and non-blocking prompt packets. |
+| `src/components` visual shell/tabs | 22 | Active direct copy | Preserve visual shape one-to-one; patch only proper backend/TTS/build seams. |
+| `src/lib/chat` prompts/storage/memory/queue | 46 | Active direct copy/adapt | Prompt/POML/storage/defaults/provider defaults/chat turn/Twitch queue copied; GRILLO frontend pieces still need runtime verification. |
+| `src/lib/grillo` schemas/tools/context | 48 | Active copy | Backend worker and frontend schema/context libs copied; verify non-blocking chat context integration. |
 | `src/lib/product` backup/key vault/account | 9 | Active copy | Backup/key vault/account files copied; wire into active UI next. |
 | `src/lib/tts` manager/Piper/remote | 8 | Parked shim only | New TTS exists, old manager not active; Piper worker still PARKED. |
 | `src/lib/twitch` direct IRC/transcription helpers | 4 | Active copy | Direct IRC and stream transcription helpers copied; backend endpoints still needed. |
@@ -94,11 +95,14 @@ EXCLUDE not part of this rebuild path
 8. **Wire GRILLO into chat non-blockingly**
    Use GRILLO as a context provider only: ingest completed turns, optionally build context packets before prompt construction, and run ticks without blocking chat/TTS/mouth. GRILLO failures must degrade to no memory context.
 
-9. **Restore commands, overlay, and packaged/OBS surfaces**
+9. **Add provider prompt caching deliberately**
+   Keep POML for dynamic prompt assembly. Add prompt/cache-key support where providers expose it, likely per OpenRouter/provider route and Vercel Gateway/OpenAI route. Cache at the provider boundary; do not add an extra local queue or delay in front of streaming chat.
+
+10. **Restore commands, overlay, and packaged/OBS surfaces**
    Bring back command-driven camera/VRM/animation/TTS controls, overlay socket events, and browser-source behavior after the active frontend and Twitch backend seams exist.
 
-10. **Park or reintroduce Piper deliberately**
-    Keep old Piper assets/settings visible only if it helps compatibility. Reintroduce browser Piper only after Fish/Inworld/avatar parity is stable, or drop it if the product no longer needs offline/browser TTS.
+11. **Park or reintroduce Piper deliberately**
+     Keep old Piper assets/settings visible only if it helps compatibility. Reintroduce browser Piper only after Fish/Inworld/avatar parity is stable, or drop it if the product no longer needs offline/browser TTS.
 
 ### Copy Policy Going Forward
 

@@ -1,0 +1,48 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "chat_link.schema.json",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "link_id",
+    "interface",
+    "interface_path",
+    "created_at",
+    "updated_at"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": "1.0.0"
+    },
+    "link_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "interface": {
+      "type": "string",
+      "minLength": 1
+    },
+    "interface_path": {
+      "type": "string",
+      "minLength": 1
+    },
+    "chat_name": {
+      "type": "string"
+    },
+    "message_thread_name": {
+      "type": "string"
+    },
+    "metadata": {
+      "type": "object"
+    },
+    "created_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "updated_at": {
+      "type": "string",
+      "format": "date-time"
+    }
+  }
+}

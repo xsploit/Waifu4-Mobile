@@ -1,0 +1,66 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "settings.schema.json",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "lane",
+    "provider",
+    "model"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": "1.0.0"
+    },
+    "lane": {
+      "enum": [
+        "chat",
+        "reflection",
+        "embedding"
+      ]
+    },
+    "provider": {
+      "type": "string",
+      "enum": [
+        "openai",
+        "openrouter",
+        "ollama",
+        "lmstudio",
+        "sentence_transformers"
+      ]
+    },
+    "provider_package": {
+      "type": "string"
+    },
+    "provider_family": {
+      "enum": [
+        "native",
+        "openai_compatible",
+        "community"
+      ]
+    },
+    "provider_mode": {
+      "enum": [
+        "responses_native",
+        "responses_emulated"
+      ]
+    },
+    "model": {
+      "type": "string",
+      "minLength": 1
+    },
+    "endpoint": {
+      "type": "string"
+    },
+    "api_key_ref": {
+      "type": "string"
+    },
+    "options": {
+      "type": "object"
+    },
+    "capabilities": {
+      "type": "object"
+    }
+  }
+}

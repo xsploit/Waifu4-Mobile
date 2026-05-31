@@ -1,0 +1,89 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "memory_write_candidate.schema.json",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "candidate_id",
+    "type",
+    "content",
+    "summary",
+    "confidence",
+    "evidence_turn_ids",
+    "user_id",
+    "channel_id",
+    "origin_turn_id",
+    "source",
+    "created_at"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": "1.0.0"
+    },
+    "candidate_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "type": {
+      "enum": [
+        "preference",
+        "fact",
+        "goal",
+        "boundary",
+        "bond_signal",
+        "thread"
+      ]
+    },
+    "content": {
+      "type": "string",
+      "minLength": 1
+    },
+    "summary": {
+      "type": "string",
+      "minLength": 1
+    },
+    "tags": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "minLength": 1
+      }
+    },
+    "confidence": {
+      "type": "number",
+      "minimum": 0,
+      "maximum": 1
+    },
+    "evidence_turn_ids": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "minLength": 1
+      }
+    },
+    "user_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "channel_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "origin_turn_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "source": {
+      "enum": [
+        "chat",
+        "diary",
+        "reflection"
+      ]
+    },
+    "created_at": {
+      "type": "string",
+      "format": "date-time"
+    }
+  }
+}

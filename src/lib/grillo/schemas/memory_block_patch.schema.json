@@ -1,0 +1,53 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "memory_block_patch.schema.json",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "block_name",
+    "operation",
+    "items",
+    "reason",
+    "source_candidate_ids"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": "1.0.0"
+    },
+    "block_name": {
+      "enum": [
+        "preferences",
+        "boundaries",
+        "relationship_state",
+        "ongoing_topics",
+        "ongoing_threads",
+        "verified_facts",
+        "open_threads",
+        "core_identity",
+        "working_scratchpad"
+      ]
+    },
+    "operation": {
+      "enum": [
+        "upsert",
+        "remove",
+        "merge"
+      ]
+    },
+    "items": {
+      "type": "array"
+    },
+    "reason": {
+      "type": "string",
+      "minLength": 1
+    },
+    "source_candidate_ids": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "minLength": 1
+      }
+    }
+  }
+}

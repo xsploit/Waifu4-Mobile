@@ -1,0 +1,53 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "relationship_profile.schema.json",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "profile_version",
+    "user_id",
+    "tone_preferences",
+    "interaction_style",
+    "boundaries",
+    "active_threads",
+    "updated_from_candidates",
+    "created_at"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": "1.0.0"
+    },
+    "profile_version": {
+      "type": "integer",
+      "minimum": 1
+    },
+    "user_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "tone_preferences": {
+      "type": "array"
+    },
+    "interaction_style": {
+      "type": "array"
+    },
+    "boundaries": {
+      "type": "array"
+    },
+    "active_threads": {
+      "type": "array"
+    },
+    "updated_from_candidates": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "minLength": 1
+      }
+    },
+    "created_at": {
+      "type": "string",
+      "format": "date-time"
+    }
+  }
+}

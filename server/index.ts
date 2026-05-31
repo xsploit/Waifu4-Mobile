@@ -2,6 +2,7 @@ import express from 'express';
 import { buildHealth, SERVICE_NAME } from './health';
 import { handleChat } from './ai/chat';
 import { handleModels } from './ai/models';
+import { renderYourWifeyPomlResponse } from './ai/PomlRenderer';
 import { handleTtsStream } from './tts/stream';
 import { handleLocalBackupSettings } from './localBackup';
 import { createMemoryRouter } from './memory/routes';
@@ -30,6 +31,13 @@ app.get('/ai/models', (req, res) => {
 // POST /ai/chat — SSE reply stream (delta / done / error).
 app.post('/ai/chat', (req, res) => {
   void handleChat(req, res);
+});
+
+// POST /ai/poml/render — cached local POML template renderer for the copied frontend.
+app.post('/ai/poml/render', (req, res) => {
+  void renderYourWifeyPomlResponse(req.body?.variables).then((result) => {
+    res.status(result.ok ? 200 : 500).json(result);
+  });
 });
 
 // POST /tts/stream — NDJSON audio stream (audio / done / error).

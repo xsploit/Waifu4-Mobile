@@ -1,0 +1,20 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "worker_tool_memory_read.schema.json",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "block_name": {
+      "enum": [
+        "preferences",
+        "boundaries",
+        "relationship_state",
+        "ongoing_threads",
+        "verified_facts",
+        "open_threads",
+        "core_identity",
+        "working_scratchpad"
+      ]
+    }
+  }
+}

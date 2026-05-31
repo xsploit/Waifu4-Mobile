@@ -1,15 +1,21 @@
-import { StrictMode } from 'react';
+import type { ReactNode } from 'react';
 import { createRoot } from 'react-dom/client';
-import { App } from './app/App';
-import './style.css';
+import App from './App';
+import { ErrorBoundary } from './components/ErrorBoundary';
 
-const root = document.getElementById('root');
-if (!root) {
-  throw new Error('Root element #root not found');
+const rootElement = document.getElementById('root');
+if (!rootElement) {
+  throw new Error('[Template React Simple] Root element not found');
 }
 
-createRoot(root).render(
-  <StrictMode>
+const root = createRoot(rootElement);
+
+const render = (node: ReactNode) => {
+  root.render(node);
+};
+
+render(
+  <ErrorBoundary>
     <App />
-  </StrictMode>,
+  </ErrorBoundary>,
 );

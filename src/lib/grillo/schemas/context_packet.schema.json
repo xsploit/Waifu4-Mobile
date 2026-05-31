@@ -1,0 +1,147 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "context_packet.schema.json",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "user_id",
+    "channel_id",
+    "history_scope",
+    "background_information",
+    "instructions",
+    "memory",
+    "output_description"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": "1.0.0"
+    },
+    "user_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "channel_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "history_scope": {
+      "const": "channel_only"
+    },
+    "background_information": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "character_id",
+        "relationship_profile_version"
+      ],
+      "properties": {
+        "interface": {
+          "type": "string"
+        },
+        "interface_path": {
+          "type": "string"
+        },
+        "channel_id": {
+          "type": "string"
+        },
+        "user_name": {
+          "type": "string"
+        },
+        "character_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "current_datetime_iso": {
+          "type": "string",
+          "minLength": 1
+        },
+        "current_local_date": {
+          "type": "string",
+          "minLength": 1
+        },
+        "current_local_time": {
+          "type": "string",
+          "minLength": 1
+        },
+        "current_timezone": {
+          "type": "string",
+          "minLength": 1
+        },
+        "relationship_profile_version": {
+          "type": "number",
+          "minimum": 0
+        }
+      }
+    },
+    "instructions": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "style",
+        "anti_repeat"
+      ],
+      "properties": {
+        "style": {
+          "type": "string",
+          "minLength": 1
+        },
+        "anti_repeat": {
+          "type": "string",
+          "minLength": 1
+        },
+        "instructions_verbose": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
+    "memory": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "channel_history",
+        "relationship_memory",
+        "recalled_memories",
+        "thoughts"
+      ],
+      "properties": {
+        "channel_history": {
+          "type": "array"
+        },
+        "relationship_memory": {
+          "type": "array"
+        },
+        "recalled_memories": {
+          "type": "array"
+        },
+        "thoughts": {
+          "type": "array"
+        }
+      }
+    },
+    "output_description": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "mode",
+        "max_sentences",
+        "tone"
+      ],
+      "properties": {
+        "mode": {
+          "type": "string",
+          "minLength": 1
+        },
+        "max_sentences": {
+          "type": "number",
+          "minimum": 1
+        },
+        "tone": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    }
+  }
+}

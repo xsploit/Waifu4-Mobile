@@ -1,0 +1,31 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "worker_tool_profile_patch.schema.json",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "field",
+    "operation",
+    "value"
+  ],
+  "properties": {
+    "field": {
+      "enum": [
+        "tone_preferences",
+        "interaction_style",
+        "boundaries",
+        "active_threads"
+      ]
+    },
+    "operation": {
+      "enum": [
+        "add",
+        "remove"
+      ]
+    },
+    "value": {
+      "type": "string",
+      "minLength": 1
+    }
+  }
+}

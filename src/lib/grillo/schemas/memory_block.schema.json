@@ -1,0 +1,72 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "memory_block.schema.json",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "block_id",
+    "user_id",
+    "block_name",
+    "operation",
+    "items",
+    "reason",
+    "source_candidate_ids",
+    "created_at"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": "1.0.0"
+    },
+    "block_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "user_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "block_name": {
+      "enum": [
+        "preferences",
+        "boundaries",
+        "relationship_state",
+        "ongoing_topics",
+        "ongoing_threads",
+        "verified_facts",
+        "open_threads",
+        "core_identity",
+        "working_scratchpad"
+      ]
+    },
+    "operation": {
+      "enum": [
+        "upsert",
+        "remove",
+        "merge"
+      ]
+    },
+    "items": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "minLength": 1
+      }
+    },
+    "reason": {
+      "type": "string",
+      "minLength": 1
+    },
+    "source_candidate_ids": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "minLength": 1
+      }
+    },
+    "created_at": {
+      "type": "string",
+      "format": "date-time"
+    }
+  }
+}

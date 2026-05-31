@@ -20,17 +20,16 @@ import type {
 } from '../lib/menu/types';
 import { crossfadeToAction, loadVrmAnimationClip, resetCrossfadeState } from '../lib/vrm/animation';
 import { applyMaterialSettings, disposeVrm, loadVrm, setRealisticMode } from '../lib/vrm/loadVrm';
+import { updateLipSync, resetLipSync } from '../lib/vrm/lipsync';
 import { initPostProcessing, resizePostProcessing } from '../lib/vrm/postprocessing';
 import type { PostProcessingRefs } from '../lib/vrm/postprocessing';
 import { AnimationSequencer } from '../lib/vrm/sequencer';
-import type { MouthWeights } from '../lipsync/MouthWeights';
-import { ZERO_MOUTH_WEIGHTS } from '../lipsync/MouthWeights';
+import { getTtsManager, type TtsManager } from '../lib/tts/manager';
 
 type VrmStageProps = {
   active: boolean;
   facialExpressionRequest: FacialExpressionRequest | null;
   manualPlayRequest: ManualPlayRequest | null;
-  mouthWeights?: MouthWeights;
   modelUrl: string | null;
   sequencerSettings: SequencerSettings;
   setSequencerSettings: Dispatch<SetStateAction<SequencerSettings>>;
@@ -55,7 +54,7 @@ type SceneRuntimeProps = {
   active: boolean;
   animationSpeed: number;
   mixer: THREE.AnimationMixer | null;
-  mouthWeights: MouthWeights;
+  ttsManager: TtsManager;
   visualSettings: VisualSettings;
   vrm: VRM | null;
 };
@@ -206,7 +205,6 @@ const RESERVED_EXPRESSION_KEYS = new Set([
   'oh',
   'ou',
 ]);
-const MOUTH_EXPRESSION_NAMES: Array<keyof MouthWeights> = ['aa', 'ih', 'ou', 'ee', 'oh'];
 const GAZE_CENTER_Y = 1.42;
 const GAZE_CENTER_Z = 2.2;
 const GAZE_HEAD_MAX_HORIZONTAL = 0.24;
@@ -516,19 +514,6 @@ function setBlinkExpression(vrm: VRM | null, value: number) {
   const expressionNames = getBlinkExpressionNames(manager);
   for (const expressionName of expressionNames) {
     manager.setValue(expressionName, nextValue);
-  }
-}
-
-function setMouthWeights(vrm: VRM | null, weights: MouthWeights) {
-  const manager = vrm?.expressionManager;
-  if (!manager) {
-    return;
-  }
-
-  for (const name of MOUTH_EXPRESSION_NAMES) {
-    if (manager.getExpression(name)) {
-      manager.setValue(name, THREE.MathUtils.clamp(weights[name], 0, 1));
-    }
   }
 }
 
@@ -1029,12 +1014,24 @@ function updateArmClipGuard(vrm: VRM, settings: VisualSettings) {
   }
 }
 
+function isTtsPlaybackActive(ttsManager: TtsManager) {
+  return (
+    (!!ttsManager.currentAudio &&
+      !ttsManager.currentAudio.paused &&
+      !ttsManager.currentAudio.ended) ||
+    ttsManager.isPlaying
+  );
+}
+
 function updateVrmFrame(
   vrm: VRM,
+  ttsManager: TtsManager,
   delta: number,
-  mouthWeights: MouthWeights,
+  updateMouthFromTts: boolean,
 ) {
-  setMouthWeights(vrm, mouthWeights);
+  if (updateMouthFromTts) {
+    updateLipSync(vrm, ttsManager);
+  }
 
   if (!ROUTELET_RENDER_MODE) {
     vrm.update(delta);
@@ -1056,7 +1053,7 @@ function SceneRuntime({
   active,
   animationSpeed,
   mixer,
-  mouthWeights,
+  ttsManager,
   visualSettings,
   vrm,
 }: SceneRuntimeProps) {
@@ -1161,12 +1158,16 @@ function SceneRuntime({
 
   useFrame((frameState, delta) => {
     const perspectiveCamera = camera as THREE.PerspectiveCamera;
+    const ttsPlaybackActive = isTtsPlaybackActive(ttsManager);
     const cameraLerp = 1 - Math.exp(-delta * 9);
     perspectiveCamera.position.lerp(cameraTargetPositionRef.current, cameraLerp);
     cameraLookAtRef.current.lerp(cameraLookAtTargetRef.current, cameraLerp);
     perspectiveCamera.lookAt(cameraLookAtRef.current);
 
     if (vrm && active) {
+      if (!ttsPlaybackActive) {
+        updateLipSync(vrm, ttsManager);
+      }
       updateAutoBlink(vrm, blinkRuntimeRef.current, delta, visualSettings);
     }
 
@@ -1176,7 +1177,7 @@ function SceneRuntime({
     }
 
     if (vrm && active) {
-      updateVrmFrame(vrm, delta, mouthWeights);
+      updateVrmFrame(vrm, ttsManager, delta, ttsPlaybackActive);
       updateArmClipGuard(vrm, visualSettings);
       updateAutoGaze(vrm, gazeRuntimeRef.current, delta, visualSettings, frameState.pointer);
     } else if (vrm) {
@@ -1275,7 +1276,6 @@ export function VrmStage({
   active,
   facialExpressionRequest,
   manualPlayRequest,
-  mouthWeights = ZERO_MOUTH_WEIGHTS,
   modelUrl,
   onAnimationTelemetry,
   onFacialExpressionTelemetry,
@@ -1284,6 +1284,7 @@ export function VrmStage({
   setVisualSettings,
   visualSettings,
 }: VrmStageProps) {
+  const ttsManager = useMemo(() => getTtsManager(), []);
   const clampScale = (value: number) =>
     THREE.MathUtils.clamp(value, SCALE_LIMITS.min, SCALE_LIMITS.max);
   const [vrm, setVrm] = useState<VRM | null>(null);
@@ -1540,7 +1541,7 @@ export function VrmStage({
 
       if (loadedVrm) {
         clearFacialExpressionRuntime(loadedVrm, facialExpressionRuntimeRef.current);
-        setMouthWeights(loadedVrm, ZERO_MOUTH_WEIGHTS);
+        resetLipSync(loadedVrm);
         disposeVrm(loadedVrm);
       }
     };
@@ -1904,7 +1905,7 @@ export function VrmStage({
           active={active}
           animationSpeed={sequencerSettings.speed}
           mixer={mixer}
-          mouthWeights={mouthWeights}
+          ttsManager={ttsManager}
           visualSettings={visualSettings}
           vrm={vrm}
         />

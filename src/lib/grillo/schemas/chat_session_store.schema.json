@@ -1,0 +1,110 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "chat_session_store.schema.json",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "updated_at",
+    "sessions"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": "1.0.0"
+    },
+    "updated_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "sessions": {
+      "type": "object",
+      "additionalProperties": {
+        "$ref": "#/$defs/chat_session"
+      }
+    }
+  },
+  "$defs": {
+    "chat_session": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "session_id",
+        "interface_path",
+        "channel_id",
+        "provider",
+        "model",
+        "turn_count",
+        "use_conversation",
+        "use_previous_response_chain",
+        "updated_at"
+      ],
+      "properties": {
+        "session_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "interface_path": {
+          "type": "string",
+          "minLength": 1
+        },
+        "channel_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "user_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "persona_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "tool_signature": {
+          "type": "string",
+          "minLength": 1
+        },
+        "provider": {
+          "enum": [
+            "openai",
+            "openrouter",
+            "ollama",
+            "lmstudio"
+          ]
+        },
+        "model": {
+          "type": "string",
+          "minLength": 1
+        },
+        "conversation_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "last_response_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "turn_count": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "use_conversation": {
+          "type": "boolean"
+        },
+        "use_previous_response_chain": {
+          "type": "boolean"
+        },
+        "updated_at": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "last_reset_at": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "last_error": {
+          "type": "string"
+        }
+      }
+    }
+  }
+}

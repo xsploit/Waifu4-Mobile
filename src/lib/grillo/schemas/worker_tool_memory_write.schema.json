@@ -1,0 +1,48 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "worker_tool_memory_write.schema.json",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "block_name",
+    "items"
+  ],
+  "properties": {
+    "block_name": {
+      "enum": [
+        "preferences",
+        "boundaries",
+        "relationship_state",
+        "ongoing_threads",
+        "verified_facts",
+        "open_threads",
+        "core_identity",
+        "working_scratchpad"
+      ]
+    },
+    "items": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "string",
+        "minLength": 1
+      }
+    },
+    "operation": {
+      "enum": [
+        "merge",
+        "replace"
+      ]
+    },
+    "reason": {
+      "type": "string"
+    },
+    "source_candidate_ids": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "minLength": 1
+      }
+    }
+  }
+}

@@ -1,0 +1,108 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "diary_entry.schema.json",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "diary_id",
+    "beat_type",
+    "summary",
+    "personal_thought",
+    "tags",
+    "user_id",
+    "origin_turn_id",
+    "created_at"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": "1.0.0"
+    },
+    "diary_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "beat_type": {
+      "enum": [
+        "tag_elaboration",
+        "self_reflection",
+        "curiosity",
+        "memory_consolidation",
+        "relationship",
+        "chat_interaction"
+      ]
+    },
+    "summary": {
+      "type": "string",
+      "minLength": 1
+    },
+    "content": {
+      "type": "string",
+      "minLength": 1
+    },
+    "interaction_summary": {
+      "type": "string",
+      "minLength": 1
+    },
+    "user_message": {
+      "type": "string",
+      "minLength": 1
+    },
+    "personal_thought": {
+      "type": "string",
+      "minLength": 1
+    },
+    "tags": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "context_tags": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "involved_users": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "emotions": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "name",
+          "intensity"
+        ],
+        "properties": {
+          "name": {
+            "type": "string",
+            "minLength": 1
+          },
+          "intensity": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 10
+          }
+        }
+      }
+    },
+    "user_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "origin_turn_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "created_at": {
+      "type": "string",
+      "format": "date-time"
+    }
+  }
+}
