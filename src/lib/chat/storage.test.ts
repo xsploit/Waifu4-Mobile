@@ -479,6 +479,21 @@ describe('chat settings persistence', () => {
     expect(loaded.voiceLabVoices[0]?.modelId).toBe('s2');
   });
 
+  it('normalizes copied chat model ids away from provider embedding settings', async () => {
+    window.localStorage.setItem(
+      STORAGE_KEYS.aiSettings,
+      JSON.stringify({
+        ...createDefaultAiSettings(),
+        embeddingMode: 'provider',
+        embeddingModel: 'openai/gpt-4o-mini',
+      }),
+    );
+
+    const loaded = await loadPersistedChatState();
+
+    expect(loaded.aiSettings.embeddingModel).toBe('openai/text-embedding-3-small');
+  });
+
   it('normalizes malformed save input before writing persistence entries', async () => {
     await expect(
       savePersistedChatState({

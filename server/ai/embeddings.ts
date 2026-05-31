@@ -22,9 +22,16 @@ export function normalizeEmbeddingText(input: string) {
 }
 
 export function normalizeEmbeddingModel(model: unknown) {
-  return typeof model === 'string' && model.trim()
-    ? model.trim().slice(0, 160)
-    : DEFAULT_EMBEDDING_MODEL;
+  if (typeof model !== 'string' || !model.trim()) {
+    return DEFAULT_EMBEDDING_MODEL;
+  }
+  const normalized = model.trim().slice(0, 160);
+  const leaf = (normalized.split('/').pop() ?? normalized).toLowerCase();
+  const isOpenAiChatModel =
+    /^gpt[-.]/.test(leaf) ||
+    /^o[134][-.]?$/.test(leaf) ||
+    /^o[134][-.]/.test(leaf);
+  return isOpenAiChatModel ? DEFAULT_EMBEDDING_MODEL : normalized;
 }
 
 function normalizeEmbeddingVector(value: unknown) {

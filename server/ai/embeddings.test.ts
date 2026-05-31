@@ -12,4 +12,10 @@ describe('embedding request normalization', () => {
     expect(normalizeEmbeddingModel(undefined)).toBe('openai/text-embedding-3-small');
     expect(normalizeEmbeddingModel(' google/text-embedding-005 ')).toBe('google/text-embedding-005');
   });
+
+  it('falls back when copied chat model ids are used as embedding models', () => {
+    expect(normalizeEmbeddingModel('openai/gpt-4o-mini')).toBe('openai/text-embedding-3-small');
+    expect(normalizeEmbeddingModel('gpt-5-nano')).toBe('openai/text-embedding-3-small');
+    expect(normalizeEmbeddingModel('openai/o3-mini')).toBe('openai/text-embedding-3-small');
+  });
 });

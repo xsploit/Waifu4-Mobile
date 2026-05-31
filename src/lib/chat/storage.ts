@@ -319,6 +319,19 @@ function normalizeLegacyOpenAiModel(model: string, fallback: string) {
   }
 }
 
+function normalizeProviderEmbeddingModel(value: unknown, fallback: string) {
+  if (typeof value !== 'string' || !value.trim() || isPremiumCostModelId(value)) {
+    return fallback;
+  }
+  const model = value.trim().slice(0, 160);
+  const leaf = (model.split('/').pop() ?? model).toLowerCase();
+  const isOpenAiChatModel =
+    /^gpt[-.]/.test(leaf) ||
+    /^o[134][-.]?$/.test(leaf) ||
+    /^o[134][-.]/.test(leaf);
+  return isOpenAiChatModel ? fallback : model;
+}
+
 function normalizeAiSettings(value: unknown): AiSettings {
   const defaults = createDefaultAiSettings();
 
@@ -352,12 +365,7 @@ function normalizeAiSettings(value: unknown): AiSettings {
     source.embeddingMode === 'provider'
       ? source.embeddingMode
       : defaults.embeddingMode;
-  const embeddingModel =
-    typeof source.embeddingModel === 'string' &&
-    source.embeddingModel.trim() &&
-    !isPremiumCostModelId(source.embeddingModel)
-      ? source.embeddingModel.trim().slice(0, 160)
-      : defaults.embeddingModel;
+  const embeddingModel = normalizeProviderEmbeddingModel(source.embeddingModel, defaults.embeddingModel);
   const embeddingLocalModel =
     typeof source.embeddingLocalModel === 'string' && source.embeddingLocalModel.trim()
       ? source.embeddingLocalModel.trim().slice(0, 220)
