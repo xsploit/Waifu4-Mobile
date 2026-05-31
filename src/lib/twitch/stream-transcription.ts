@@ -31,11 +31,16 @@ export type TwitchStreamFrameResponse = {
   error?: string;
   frame?: {
     channel?: string;
+    detail?: 'auto' | 'high' | 'low';
     imageDataUrl?: string;
     mimeType?: string;
   };
   ok?: boolean;
 };
+
+export function normalizeTwitchStreamVisionDetail(value: unknown): 'auto' | 'high' | 'low' {
+  return value === 'high' || value === 'auto' ? value : 'low';
+}
 
 const SAFE_TWITCH_TRANSCRIPTION_MODELS = new Map([
   ['whisper-1', 'openai/whisper-1'],

@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   isLikelyVisionModel,
+  normalizeTwitchStreamVisionDetail,
   normalizeTwitchStreamTranscriptionModel,
 } from './stream-transcription';
 
@@ -20,5 +21,13 @@ describe('stream transcription helpers', () => {
     expect(isLikelyVisionModel('vercel-gateway', 'gpt-5_4-pro-2026-03-05')).toBe(false);
     expect(isLikelyVisionModel('vercel-gateway', 'gpt-5_5-2026-04-23')).toBe(true);
     expect(isLikelyVisionModel('openrouter-responses', 'google/gemini-2.5-pro')).toBe(true);
+  });
+
+  it('normalizes Twitch stream frame detail to supported capture modes', () => {
+    expect(normalizeTwitchStreamVisionDetail('high')).toBe('high');
+    expect(normalizeTwitchStreamVisionDetail('auto')).toBe('auto');
+    expect(normalizeTwitchStreamVisionDetail('low')).toBe('low');
+    expect(normalizeTwitchStreamVisionDetail('weird')).toBe('low');
+    expect(normalizeTwitchStreamVisionDetail(undefined)).toBe('low');
   });
 });

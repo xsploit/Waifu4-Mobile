@@ -14,6 +14,8 @@ type TranscribeTwitchStreamOptions = {
   sampleSeconds: number;
 };
 
+export type TwitchStreamFrameDetail = 'auto' | 'high' | 'low';
+
 const MAX_AUDIO_BYTES = 18 * 1024 * 1024;
 const MAX_FRAME_BYTES = 6 * 1024 * 1024;
 const MAX_TOOL_OUTPUT_BYTES = 1024 * 1024;
@@ -208,7 +210,19 @@ function resolveFishAsrUrl(baseUrl: string) {
   return `${withoutTrailingSlash.replace(/\/v1\/.*$/i, '')}/v1/asr`;
 }
 
-async function captureJpegFrame(streamUrl: string) {
+export function getTwitchFrameScaleFilter(detail: TwitchStreamFrameDetail) {
+  switch (detail) {
+    case 'high':
+      return 'scale=1920:-2';
+    case 'auto':
+      return 'scale=1280:-2';
+    case 'low':
+    default:
+      return 'scale=960:-2';
+  }
+}
+
+async function captureJpegFrame(streamUrl: string, detail: TwitchStreamFrameDetail) {
   const result = await runProcess(
     'ffmpeg',
     [
@@ -221,7 +235,7 @@ async function captureJpegFrame(streamUrl: string) {
       '-frames:v',
       '1',
       '-vf',
-      'scale=960:-2',
+      getTwitchFrameScaleFilter(detail),
       '-q:v',
       '5',
       '-f',
@@ -322,12 +336,16 @@ export async function transcribeTwitchStreamSample(options: TranscribeTwitchStre
   };
 }
 
-export async function captureTwitchStreamFrame(channelValue: string) {
+export async function captureTwitchStreamFrame(
+  channelValue: string,
+  detail: TwitchStreamFrameDetail = 'low',
+) {
   const channel = cleanChannel(channelValue);
   const streamUrl = await resolveTwitchStreamUrl(channel, 'video');
-  const frame = await captureJpegFrame(streamUrl);
+  const frame = await captureJpegFrame(streamUrl, detail);
   return {
     channel,
+    detail,
     imageDataUrl: `data:image/jpeg;base64,${frame.toString('base64')}`,
     mimeType: 'image/jpeg',
   };

@@ -201,6 +201,7 @@ import {
 import {
   formatTwitchStreamTranscriptContext,
   isLikelyVisionModel,
+  normalizeTwitchStreamVisionDetail,
   normalizeTwitchStreamTranscriptionModel,
   type TwitchStreamFrame,
   type TwitchStreamFrameResponse,
@@ -1264,6 +1265,7 @@ async function requestTwitchStreamFrame(input: {
   const response = await fetch(getTwitchFrameCaptureUrl(), {
     body: JSON.stringify({
       channel: input.channel,
+      detail: input.detail,
     }),
     headers: {
       'Content-Type': 'application/json',
@@ -1277,7 +1279,7 @@ async function requestTwitchStreamFrame(input: {
   return {
     channel: data.frame.channel || input.channel,
     createdAt: Date.now(),
-    detail: input.detail,
+    detail: normalizeTwitchStreamVisionDetail(data.frame.detail || input.detail),
     imageDataUrl: data.frame.imageDataUrl.trim(),
     mimeType: data.frame.mimeType || 'image/jpeg',
   } satisfies TwitchStreamFrame;

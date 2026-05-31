@@ -1,6 +1,9 @@
 import { Router } from 'express';
 import { z } from 'zod';
-import { normalizeTwitchStreamTranscriptionModel } from '../../src/lib/twitch/stream-transcription';
+import {
+  normalizeTwitchStreamTranscriptionModel,
+  normalizeTwitchStreamVisionDetail,
+} from '../../src/lib/twitch/stream-transcription';
 import { readProviderKeys } from '../ai/providerKeys';
 import {
   captureTwitchStreamFrame,
@@ -14,6 +17,7 @@ const twitchStreamBodySchema = z
     model: z.string().optional(),
     provider: z.enum(['openrouter', 'fish-speech']).optional(),
     sampleSeconds: z.number().optional(),
+    detail: z.enum(['auto', 'high', 'low']).optional(),
   })
   .passthrough();
 
@@ -105,7 +109,8 @@ export function createTwitchRouter(runtime?: TwitchRuntime) {
   router.post('/capture-frame', async (req, res) => {
     try {
       const body = twitchStreamBodySchema.parse(req.body ?? {});
-      const frame = await captureTwitchStreamFrame(fallbackChannel(body.channel));
+      const detail = normalizeTwitchStreamVisionDetail(body.detail);
+      const frame = await captureTwitchStreamFrame(fallbackChannel(body.channel), detail);
       res.json({ ok: true, frame });
     } catch (error) {
       res.json({
