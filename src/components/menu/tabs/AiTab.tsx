@@ -1,5 +1,5 @@
 import type { Dispatch, SetStateAction } from 'react';
-import type { ProviderModelInfo } from '../../../brain/modelCapability';
+import { supportsImageInput, type ProviderModelInfo } from '../../../brain/modelCapability';
 import type { AiProxyHealth, AiSettings } from '../../../lib/chat/types';
 import {
   applyLlmProviderSwitchDefaults,
@@ -59,14 +59,14 @@ function getModelCapabilityTags(model: ProviderModelInfo | undefined) {
   if (!model) {
     return [];
   }
-  const tags = new Set(model.tags ?? []);
-  const params = new Set(model.supportedParameters);
+  const tags = new Set((model.tags ?? []).map((tag) => tag.toLowerCase()));
+  const params = new Set(model.supportedParameters.map((param) => param.toLowerCase()));
   const capabilityTags: string[] = [];
 
   if (model.supportsStructuredOutputs) {
     capabilityTags.push('json');
   }
-  if (tags.has('vision') || tags.has('image') || tags.has('image-input')) {
+  if (supportsImageInput(model)) {
     capabilityTags.push('vision');
   }
   if (tags.has('file') || tags.has('file-input')) {
@@ -80,6 +80,9 @@ function getModelCapabilityTags(model: ProviderModelInfo | undefined) {
   }
   if (tags.has('tool-use') || params.has('tools') || params.has('tool_choice')) {
     capabilityTags.push('tools');
+  }
+  if (model.supportsImplicitCaching || tags.has('implicit-caching')) {
+    capabilityTags.push('cache');
   }
   if (model.type && model.type !== 'language') {
     capabilityTags.push(model.type);

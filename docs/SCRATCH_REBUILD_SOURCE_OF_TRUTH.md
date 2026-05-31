@@ -36,6 +36,7 @@ EXCLUDE not part of this rebuild path
 | --- | --- | --- |
 | Local backend boundary | DONE | `server/index.ts`, request-scoped keys, `/ai/chat`, `/tts/stream`. |
 | LLM main brain | DONE | SSE visible `delta`, structured/text lanes, no raw JSON to speech, OpenRouter/Vercel gateway support. |
+| Model capability metadata | DONE | Provider model lists carry structured-output, chat/embedding, vision/file/reasoning/tool/cache, context, and max-token metadata into the dropdown and lane decision. OpenRouter uses advertised `structured_outputs`; Vercel Gateway keeps the current language-model policy unless richer endpoint params prove a safer text lane. |
 | TTS core | DONE | Fish realtime/current, Fish timestamp SSE, Inworld HTTP/WebSocket, benchmark mode, unified timing metadata. Copied frontend remote TTS requests map directly to the rebuilt `/tts/stream` schema and expose Fish WebSocket/timestamp-SSE plus Inworld HTTP/WebSocket transports and provider micro-parameters without backend behavior changes. The copied TTS tab now restores the browser-audible benchmark surface from the earlier simple demo. |
 | Mouth core | DONE | `wlipsync` live path works from the playback audio source; provider timing is normalized for future captions/flaps. |
 | GRILLO/Ladybug backend worker | DONE | Old services/tests copied, strict compile seams patched, routes wired under `/memory`, committed as `d8702d9`. |

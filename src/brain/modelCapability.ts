@@ -7,10 +7,14 @@ import type { GatewayId, ReplyFormat } from './BrainTypes';
  */
 export type ProviderModelInfo = {
   contextWindow?: number;
+  description?: string;
   id: string;
+  inputModalities?: string[];
   maxTokens?: number;
   name?: string;
+  outputModalities?: string[];
   supportedParameters: string[];
+  supportsImplicitCaching?: boolean;
   supportsStructuredOutputs: boolean;
   tags?: string[];
   type?: string;
@@ -19,9 +23,41 @@ export type ProviderModelInfo = {
 const STRUCTURED_PARAM = 'structured_outputs';
 const EMBEDDING_TAGS = new Set(['embed', 'embedding', 'embeddings', 'text-embedding']);
 const IMAGE_INPUT_TAGS = new Set(['image', 'image-input', 'vision']);
+const IMPLICIT_CACHE_TAGS = new Set(['cache', 'caching', 'implicit-caching', 'prompt-caching']);
 
 function asStringArray(value: unknown): string[] {
   return Array.isArray(value) ? value.filter((v): v is string => typeof v === 'string') : [];
+}
+
+function normalizeTags(values: string[]) {
+  return [...new Set(values.map((value) => value.trim().toLowerCase()).filter(Boolean))];
+}
+
+function asNumber(value: unknown) {
+  return typeof value === 'number' && Number.isFinite(value) ? value : undefined;
+}
+
+function collectEndpointSupportedParameters(value: unknown) {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+  return value.flatMap((endpoint) =>
+    endpoint && typeof endpoint === 'object'
+      ? asStringArray((endpoint as { supported_parameters?: unknown }).supported_parameters)
+      : [],
+  );
+}
+
+function hasImplicitCachingEndpoint(value: unknown) {
+  return (
+    Array.isArray(value) &&
+    value.some(
+      (endpoint) =>
+        endpoint &&
+        typeof endpoint === 'object' &&
+        (endpoint as { supports_implicit_caching?: unknown }).supports_implicit_caching === true,
+    )
+  );
 }
 
 /**
@@ -60,16 +96,19 @@ export function parseOpenRouterModels(payload: unknown): ProviderModelInfo[] {
       ...asStringArray(e.top_provider?.supported_parameters),
     ]);
     const inputModalities = asStringArray(e.architecture?.input_modalities);
+    const outputModalities = asStringArray(e.architecture?.output_modalities);
     models.push({
-      ...(typeof e.context_length === 'number' ? { contextWindow: e.context_length } : {}),
+      ...(asNumber(e.context_length) !== undefined ? { contextWindow: asNumber(e.context_length) } : {}),
       id: e.id,
-      ...(typeof e.top_provider?.max_completion_tokens === 'number'
-        ? { maxTokens: e.top_provider.max_completion_tokens }
+      ...(asNumber(e.top_provider?.max_completion_tokens) !== undefined
+        ? { maxTokens: asNumber(e.top_provider?.max_completion_tokens) }
         : {}),
       ...(typeof e.name === 'string' ? { name: e.name } : {}),
+      ...(inputModalities.length > 0 ? { inputModalities: normalizeTags(inputModalities) } : {}),
+      ...(outputModalities.length > 0 ? { outputModalities: normalizeTags(outputModalities) } : {}),
       supportedParameters: [...params],
       supportsStructuredOutputs: params.has(STRUCTURED_PARAM),
-      tags: inputModalities,
+      tags: normalizeTags(inputModalities),
       ...(typeof e.type === 'string' ? { type: e.type } : {}),
     });
   }
@@ -89,9 +128,17 @@ export function parseVercelGatewayModels(payload: unknown): ProviderModelInfo[] 
       continue;
     }
     const e = entry as {
+      architecture?: {
+        input_modalities?: unknown;
+        output_modalities?: unknown;
+      };
       context_window?: unknown;
+      description?: unknown;
+      endpoints?: unknown;
       id?: unknown;
       max_tokens?: unknown;
+      modelType?: unknown;
+      model_type?: unknown;
       name?: unknown;
       supported_parameters?: unknown;
       tags?: unknown;
@@ -100,19 +147,41 @@ export function parseVercelGatewayModels(payload: unknown): ProviderModelInfo[] 
     if (typeof e.id !== 'string') {
       continue;
     }
-    const type = typeof e.type === 'string' ? e.type : undefined;
-    const supportedParameters = asStringArray(e.supported_parameters);
+    const type =
+      typeof e.type === 'string'
+        ? e.type
+        : typeof e.modelType === 'string'
+          ? e.modelType
+          : typeof e.model_type === 'string'
+            ? e.model_type
+            : undefined;
+    const supportedParameters = [
+      ...new Set([
+        ...asStringArray(e.supported_parameters),
+        ...collectEndpointSupportedParameters(e.endpoints),
+      ]),
+    ];
+    const inputModalities = normalizeTags(asStringArray(e.architecture?.input_modalities));
+    const outputModalities = normalizeTags(asStringArray(e.architecture?.output_modalities));
+    const tags = normalizeTags([...asStringArray(e.tags), ...inputModalities]);
+    const hasEndpointParams = supportedParameters.length > 0;
     models.push({
-      ...(typeof e.context_window === 'number' ? { contextWindow: e.context_window } : {}),
+      ...(asNumber(e.context_window) !== undefined ? { contextWindow: asNumber(e.context_window) } : {}),
+      ...(typeof e.description === 'string' ? { description: e.description } : {}),
       id: e.id,
-      ...(typeof e.max_tokens === 'number' ? { maxTokens: e.max_tokens } : {}),
+      ...(inputModalities.length > 0 ? { inputModalities } : {}),
+      ...(asNumber(e.max_tokens) !== undefined ? { maxTokens: asNumber(e.max_tokens) } : {}),
       ...(typeof e.name === 'string' ? { name: e.name } : {}),
+      ...(outputModalities.length > 0 ? { outputModalities } : {}),
       supportedParameters,
-      // Gateway documents structured outputs at the API layer, but its basic
-      // model list does not expose a per-model flag. Preserve the current
-      // Gateway policy for language models until endpoint metadata is richer.
-      supportsStructuredOutputs: type === 'language',
-      tags: asStringArray(e.tags),
+      supportsImplicitCaching:
+        tags.some((tag) => IMPLICIT_CACHE_TAGS.has(tag)) || hasImplicitCachingEndpoint(e.endpoints),
+      // Gateway's basic model list exposes type/tags; endpoint metadata can add
+      // exact parameter support when present. Preserve the current language-model
+      // policy unless richer endpoint params explicitly prove otherwise.
+      supportsStructuredOutputs:
+        type === 'language' && (!hasEndpointParams || supportedParameters.includes(STRUCTURED_PARAM)),
+      tags,
       ...(type ? { type } : {}),
     });
   }
@@ -132,7 +201,9 @@ export function selectReplyFormat(
   if (provider === 'openrouter-responses') {
     return info?.supportsStructuredOutputs ? 'structured' : 'text';
   }
-  // vercel-gateway — TODO: replace with real gateway capability metadata.
+  if (info && info.supportedParameters.length > 0) {
+    return info.supportsStructuredOutputs ? 'structured' : 'text';
+  }
   return 'structured';
 }
 
@@ -148,7 +219,7 @@ export function isEmbeddingModel(info?: ProviderModelInfo | null) {
   if (type === 'embedding' || type === 'embeddings') {
     return true;
   }
-  const tags = info.tags ?? [];
+  const tags = normalizeTags(info.tags ?? []);
   if (tags.some((tag) => EMBEDDING_TAGS.has(tag.toLowerCase()))) {
     return true;
   }
@@ -157,5 +228,6 @@ export function isEmbeddingModel(info?: ProviderModelInfo | null) {
 }
 
 export function supportsImageInput(info?: ProviderModelInfo | null) {
-  return (info?.tags ?? []).some((tag) => IMAGE_INPUT_TAGS.has(tag));
+  const tags = normalizeTags([...(info?.tags ?? []), ...(info?.inputModalities ?? [])]);
+  return tags.some((tag) => IMAGE_INPUT_TAGS.has(tag));
 }

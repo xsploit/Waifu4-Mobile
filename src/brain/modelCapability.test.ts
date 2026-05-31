@@ -12,7 +12,7 @@ const SAMPLE = {
   data: [
     {
       id: 'openai/gpt-4o-mini',
-      architecture: { input_modalities: ['text', 'image'] },
+      architecture: { input_modalities: ['text', 'IMAGE'], output_modalities: ['text'] },
       context_length: 128000,
       name: 'GPT-4o mini',
       supported_parameters: ['tools', 'response_format', 'structured_outputs'],
@@ -39,8 +39,10 @@ describe('parseOpenRouterModels', () => {
     expect(models[0]).toMatchObject({
       contextWindow: 128000,
       id: 'openai/gpt-4o-mini',
+      inputModalities: ['text', 'image'],
       maxTokens: 16384,
       name: 'GPT-4o mini',
+      outputModalities: ['text'],
       supportsStructuredOutputs: true,
       tags: ['text', 'image'],
     });
@@ -73,9 +75,17 @@ describe('parseVercelGatewayModels', () => {
           id: 'openai/gpt-5.4',
           name: 'GPT-5.4',
           type: 'language',
+          description: 'Fast language model',
           context_window: 400000,
           max_tokens: 128000,
-          tags: ['reasoning', 'tool-use'],
+          tags: ['Reasoning', 'tool-use', 'implicit-caching'],
+          architecture: { input_modalities: ['text', 'image'], output_modalities: ['text'] },
+          endpoints: [
+            {
+              supported_parameters: ['tools', 'structured_outputs'],
+              supports_implicit_caching: true,
+            },
+          ],
         },
         {
           id: 'openai/text-embedding-3-small',
@@ -87,12 +97,16 @@ describe('parseVercelGatewayModels', () => {
 
     expect(models[0]).toMatchObject({
       contextWindow: 400000,
+      description: 'Fast language model',
       id: 'openai/gpt-5.4',
+      inputModalities: ['text', 'image'],
       maxTokens: 128000,
       name: 'GPT-5.4',
-      supportedParameters: [],
+      outputModalities: ['text'],
+      supportedParameters: ['tools', 'structured_outputs'],
+      supportsImplicitCaching: true,
       supportsStructuredOutputs: true,
-      tags: ['reasoning', 'tool-use'],
+      tags: ['reasoning', 'tool-use', 'implicit-caching', 'text', 'image'],
       type: 'language',
     });
     expect(models[1]).toMatchObject({
@@ -136,6 +150,25 @@ describe('selectReplyFormat', () => {
     expect(selectReplyFormat('vercel-gateway')).toBe('structured');
     expect(selectReplyFormat('vercel-gateway', null)).toBe('structured');
   });
+
+  it('vercel-gateway: honors endpoint params when richer metadata is available', () => {
+    expect(
+      selectReplyFormat('vercel-gateway', {
+        id: 'safe',
+        supportedParameters: ['structured_outputs'],
+        supportsStructuredOutputs: true,
+        type: 'language',
+      }),
+    ).toBe('structured');
+    expect(
+      selectReplyFormat('vercel-gateway', {
+        id: 'plain',
+        supportedParameters: ['tools'],
+        supportsStructuredOutputs: false,
+        type: 'language',
+      }),
+    ).toBe('text');
+  });
 });
 
 describe('model capability helpers', () => {
@@ -165,9 +198,10 @@ describe('model capability helpers', () => {
     expect(
       supportsImageInput({
         id: 'x',
+        inputModalities: ['text'],
         supportedParameters: [],
         supportsStructuredOutputs: true,
-        tags: ['text', 'image'],
+        tags: ['text', 'IMAGE'],
       }),
     ).toBe(true);
     expect(
