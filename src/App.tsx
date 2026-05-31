@@ -146,6 +146,7 @@ import type {
   SavedVrmModelSummary,
   SceneBackgroundMode,
   SettingsTabId,
+  VrmTelemetrySnapshot,
 } from './lib/menu/types';
 import { fetchGameAssetBlob } from './lib/cdn/assets';
 import {
@@ -1872,6 +1873,7 @@ function App() {
   const [emotionTelemetryEvents, setEmotionTelemetryEvents] = useState<EmotionTelemetryEvent[]>(
     [],
   );
+  const [vrmTelemetry, setVrmTelemetry] = useState<VrmTelemetrySnapshot | null>(null);
   const [visualSettings, setVisualSettings] = useState(createDefaultVisualSettings);
   const [sequencerSettings, setSequencerSettings] = useState(createDefaultSequencerSettings);
   const [personas, setPersonas] = useState<PersonaProfile[]>(createDefaultPersonas);
@@ -6701,6 +6703,7 @@ function App() {
         modelUrl={modelUrl}
         onAnimationTelemetry={patchEmotionTelemetryEvent}
         onFacialExpressionTelemetry={patchEmotionTelemetryEvent}
+        onVrmTelemetry={setVrmTelemetry}
         sequencerSettings={sequencerSettings}
         setSequencerSettings={setSequencerSettings}
         setVisualSettings={setVisualSettings}
@@ -6837,6 +6840,7 @@ function App() {
               currentBundledModelId={currentBundledModelId}
               currentCustomVrmModelId={currentCustomVrmModelId}
               emotionTelemetryEvents={emotionTelemetryEvents}
+              vrmTelemetry={vrmTelemetry}
               localTransferStatus={localTransferStatus}
               onClearChat={handleClearChat}
               onClearDraft={handleClearDraft}

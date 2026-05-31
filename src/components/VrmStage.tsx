@@ -16,6 +16,7 @@ import type {
   FacialExpressionRequest,
   ManualPlayRequest,
   SequencerSettings,
+  VrmTelemetrySnapshot,
   VisualSettings,
 } from '../lib/menu/types';
 import { crossfadeToAction, loadVrmAnimationClip, resetCrossfadeState } from '../lib/vrm/animation';
@@ -36,6 +37,7 @@ type VrmStageProps = {
   setVisualSettings: Dispatch<SetStateAction<VisualSettings>>;
   onAnimationTelemetry?: (patch: EmotionTelemetryPatch) => void;
   onFacialExpressionTelemetry?: (patch: EmotionTelemetryPatch) => void;
+  onVrmTelemetry?: (snapshot: VrmTelemetrySnapshot | null) => void;
   visualSettings: VisualSettings;
 };
 
@@ -54,6 +56,7 @@ type SceneRuntimeProps = {
   active: boolean;
   animationSpeed: number;
   mixer: THREE.AnimationMixer | null;
+  onVrmTelemetry?: (snapshot: VrmTelemetrySnapshot | null) => void;
   ttsManager: TtsManager;
   visualSettings: VisualSettings;
   vrm: VRM | null;
@@ -205,6 +208,8 @@ const RESERVED_EXPRESSION_KEYS = new Set([
   'oh',
   'ou',
 ]);
+const MOUTH_EXPRESSION_NAMES = ['aa', 'ih', 'ou', 'ee', 'oh'] as const;
+const VRM_TELEMETRY_INTERVAL_MS = 250;
 const GAZE_CENTER_Y = 1.42;
 const GAZE_CENTER_Z = 2.2;
 const GAZE_HEAD_MAX_HORIZONTAL = 0.24;
@@ -536,6 +541,40 @@ function getExpressionNames(manager: VrmExpressionManager) {
   return Object.keys(manager.expressionMap).filter(
     (name) => !RESERVED_EXPRESSION_KEYS.has(normalizeFacialExpressionKey(name)),
   );
+}
+
+function getVrmExpressionValue(manager: VrmExpressionManager, name: string) {
+  const value = (manager as VrmExpressionManager & { getValue?: (expressionName: string) => number })
+    .getValue?.(name);
+  return typeof value === 'number' && Number.isFinite(value) ? THREE.MathUtils.clamp(value, 0, 1) : 0;
+}
+
+function createVrmTelemetrySnapshot(vrm: VRM): VrmTelemetrySnapshot | null {
+  const manager = vrm.expressionManager;
+  if (!manager) {
+    return null;
+  }
+
+  const mouthWeights = Object.fromEntries(
+    MOUTH_EXPRESSION_NAMES.map((name) => [name, getVrmExpressionValue(manager, name)]),
+  ) as VrmTelemetrySnapshot['mouthWeights'];
+  const activeMouthExpression =
+    MOUTH_EXPRESSION_NAMES.map((name) => ({ name, value: mouthWeights[name] }))
+      .filter((entry) => entry.value > 0.001)
+      .sort((a, b) => b.value - a.value)[0]?.name ?? null;
+  const expressionWeights = getExpressionNames(manager)
+    .map((name) => ({ name, value: getVrmExpressionValue(manager, name) }))
+    .filter((entry) => entry.value > 0.001)
+    .sort((a, b) => b.value - a.value || a.name.localeCompare(b.name))
+    .slice(0, 8);
+
+  return {
+    activeExpressionCount: expressionWeights.length,
+    activeMouthExpression,
+    expressionWeights,
+    mouthWeights,
+    updatedAt: Date.now(),
+  };
 }
 
 function resolveFacialExpressionNames(manager: VrmExpressionManager, expression: string) {
@@ -1053,6 +1092,7 @@ function SceneRuntime({
   active,
   animationSpeed,
   mixer,
+  onVrmTelemetry,
   ttsManager,
   visualSettings,
   vrm,
@@ -1067,6 +1107,7 @@ function SceneRuntime({
   const cameraLookAtTargetRef = useRef(initialCameraRig.target.clone());
   const blinkRuntimeRef = useRef(createBlinkRuntimeState());
   const gazeRuntimeRef = useRef(createGazeRuntimeState());
+  const lastTelemetryAtRef = useRef(0);
 
   useEffect(() => {
     const perspectiveCamera = camera as THREE.PerspectiveCamera;
@@ -1156,6 +1197,13 @@ function SceneRuntime({
     return () => clearProceduralGaze(vrm, gazeRuntimeRef.current);
   }, [visualSettings.autoGaze, vrm]);
 
+  useEffect(() => {
+    if (!vrm) {
+      onVrmTelemetry?.(null);
+      lastTelemetryAtRef.current = 0;
+    }
+  }, [onVrmTelemetry, vrm]);
+
   useFrame((frameState, delta) => {
     const perspectiveCamera = camera as THREE.PerspectiveCamera;
     const ttsPlaybackActive = isTtsPlaybackActive(ttsManager);
@@ -1180,6 +1228,11 @@ function SceneRuntime({
       updateVrmFrame(vrm, ttsManager, delta, ttsPlaybackActive);
       updateArmClipGuard(vrm, visualSettings);
       updateAutoGaze(vrm, gazeRuntimeRef.current, delta, visualSettings, frameState.pointer);
+      const now = performance.now();
+      if (onVrmTelemetry && now - lastTelemetryAtRef.current >= VRM_TELEMETRY_INTERVAL_MS) {
+        lastTelemetryAtRef.current = now;
+        onVrmTelemetry(createVrmTelemetrySnapshot(vrm));
+      }
     } else if (vrm) {
       clearProceduralGaze(vrm, gazeRuntimeRef.current);
     }
@@ -1279,6 +1332,7 @@ export function VrmStage({
   modelUrl,
   onAnimationTelemetry,
   onFacialExpressionTelemetry,
+  onVrmTelemetry,
   sequencerSettings,
   setSequencerSettings,
   setVisualSettings,
@@ -1905,6 +1959,7 @@ export function VrmStage({
           active={active}
           animationSpeed={sequencerSettings.speed}
           mixer={mixer}
+          onVrmTelemetry={onVrmTelemetry}
           ttsManager={ttsManager}
           visualSettings={visualSettings}
           vrm={vrm}

@@ -183,3 +183,16 @@ export type EmotionTelemetryPatch = {
   expressionReason?: string;
   resolvedExpressionNames?: string[];
 };
+
+export type VrmExpressionWeightSnapshot = {
+  name: string;
+  value: number;
+};
+
+export type VrmTelemetrySnapshot = {
+  activeExpressionCount: number;
+  activeMouthExpression: string | null;
+  expressionWeights: VrmExpressionWeightSnapshot[];
+  mouthWeights: Record<'aa' | 'ih' | 'ou' | 'ee' | 'oh', number>;
+  updatedAt: number;
+};

@@ -22,6 +22,7 @@ import type {
   SavedVrmModelSummary,
   SequencerSettings,
   SettingsTabId,
+  VrmTelemetrySnapshot,
   VisualSettings,
 } from '../../lib/menu/types';
 import type { PiperVoiceProfile } from '../../lib/tts/piper';
@@ -70,6 +71,7 @@ type SettingsPanelProps = {
   currentBundledModelId: string;
   currentCustomVrmModelId: string;
   emotionTelemetryEvents: EmotionTelemetryEvent[];
+  vrmTelemetry: VrmTelemetrySnapshot | null;
   localTransferStatus: string;
   onClose: () => void;
   onDeletePersona: (id: string) => void;
@@ -285,6 +287,7 @@ export function SettingsPanel({
   twitchStreamTranscriptionStatus,
   twitchStreamVisionStatus,
   visualSettings,
+  vrmTelemetry,
   modelsError,
   modelsLoading,
   voicesError,
@@ -308,7 +311,7 @@ export function SettingsPanel({
         setSequencerSettings={setSequencerSettings}
       />
     ) : activeTab === 'emotion-telemetry' ? (
-      <EmotionTelemetryTab emotionTelemetryEvents={emotionTelemetryEvents} />
+      <EmotionTelemetryTab emotionTelemetryEvents={emotionTelemetryEvents} vrmTelemetry={vrmTelemetry} />
     ) : activeTab === 'background' ? (
       <BackgroundTab
         activePersonaName={activePersona?.name ?? DEFAULT_PERSONA.name}

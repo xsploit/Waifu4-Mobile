@@ -1,7 +1,8 @@
-import type { EmotionTelemetryEvent } from '../../../lib/menu/types';
+import type { EmotionTelemetryEvent, VrmTelemetrySnapshot } from '../../../lib/menu/types';
 
 type EmotionTelemetryTabProps = {
   emotionTelemetryEvents: EmotionTelemetryEvent[];
+  vrmTelemetry: VrmTelemetrySnapshot | null;
 };
 
 function formatTelemetryTop(values: string[], fallback: string) {
@@ -19,7 +20,20 @@ function formatTelemetryTop(values: string[], fallback: string) {
   };
 }
 
-export function EmotionTelemetryTab({ emotionTelemetryEvents }: EmotionTelemetryTabProps) {
+function formatWeight(value: number) {
+  return value.toFixed(2);
+}
+
+function formatWeightList(weights: VrmTelemetrySnapshot['expressionWeights']) {
+  return weights.length
+    ? weights.map((entry) => `${entry.name} ${formatWeight(entry.value)}`).join(' / ')
+    : 'none';
+}
+
+export function EmotionTelemetryTab({
+  emotionTelemetryEvents,
+  vrmTelemetry,
+}: EmotionTelemetryTabProps) {
   const recentTelemetryEvents = emotionTelemetryEvents.slice(0, 20);
   const telemetryEmotionSummary = formatTelemetryTop(
     recentTelemetryEvents.map((event) => event.emotion),
@@ -48,6 +62,31 @@ export function EmotionTelemetryTab({ emotionTelemetryEvents }: EmotionTelemetry
         </div>
       </div>
       <div className="anim-group-list">
+        <div className="emotion-telemetry-summary">
+          <div>
+            <span>Mouth</span>
+            <strong>{vrmTelemetry?.activeMouthExpression ?? 'none'}</strong>
+            <em>
+              aa {formatWeight(vrmTelemetry?.mouthWeights.aa ?? 0)} / ih{' '}
+              {formatWeight(vrmTelemetry?.mouthWeights.ih ?? 0)} / ou{' '}
+              {formatWeight(vrmTelemetry?.mouthWeights.ou ?? 0)} / ee{' '}
+              {formatWeight(vrmTelemetry?.mouthWeights.ee ?? 0)} / oh{' '}
+              {formatWeight(vrmTelemetry?.mouthWeights.oh ?? 0)}
+            </em>
+          </div>
+          <div>
+            <span>Final Expressions</span>
+            <strong>{formatWeightList(vrmTelemetry?.expressionWeights ?? [])}</strong>
+            <em>{vrmTelemetry?.activeExpressionCount ?? 0} active</em>
+          </div>
+          <div>
+            <span>Snapshot</span>
+            <strong>
+              {vrmTelemetry ? new Date(vrmTelemetry.updatedAt).toLocaleTimeString() : 'no VRM'}
+            </strong>
+            <em>throttled live weights</em>
+          </div>
+        </div>
         {emotionTelemetryEvents.length === 0 ? (
           <div className="row anim-row disabled">
             <span className="name">No emotion metadata played yet.</span>
