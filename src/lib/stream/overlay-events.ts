@@ -61,7 +61,9 @@ export type OverlayServerEvent =
       payload:
         | { action: 'reload' }
         | { action: 'set-ai-model'; model: string }
+        | { action: 'list-personas' }
         | { action: 'set-persona'; persona: string }
+        | { action: 'set-character'; selector: string }
         | { action: 'list-vrms' }
         | { action: 'load-vrm'; model: string }
         | { action: 'set-camera-view'; viewMode: 'full-body' | 'half-body' }

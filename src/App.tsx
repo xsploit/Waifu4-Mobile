@@ -5417,6 +5417,9 @@ function App() {
           }));
           appendSystemMessage(`Stream command: LLM model set to ${command.model}.`);
           break;
+        case 'list-personas':
+          appendSystemMessage(`Personas: ${personas.map((persona) => persona.name).join(', ')}.`);
+          break;
         case 'set-persona': {
           const nextPersona = resolvePersonaSelector(command.persona, personas);
           if (!nextPersona) {
@@ -5426,6 +5429,25 @@ function App() {
 
           setActivePersonaId(nextPersona.id);
           appendSystemMessage(`Stream command: persona set to ${nextPersona.name}.`);
+          break;
+        }
+        case 'set-character': {
+          const nextPersona = resolvePersonaSelector(command.selector, personas);
+          if (nextPersona) {
+            setActivePersonaId(nextPersona.id);
+            appendSystemMessage(`Stream command: persona set to ${nextPersona.name}.`);
+            break;
+          }
+
+          const modelId = resolveBundledModelId(command.selector, BUNDLED_VRM_MODELS);
+          if (!modelId) {
+            appendSystemMessage(`Stream command failed: unknown character "${command.selector}".`);
+            return;
+          }
+          void handleLoadBundledModel(modelId).catch((error) => {
+            console.error('[StreamBot] Character command failed:', error);
+            appendSystemMessage(`Stream command failed: could not load character ${modelId}.`);
+          });
           break;
         }
         case 'list-vrms':

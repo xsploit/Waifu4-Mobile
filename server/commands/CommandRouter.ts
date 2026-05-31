@@ -84,6 +84,24 @@ export class CommandRouter {
         });
         this.reply(`LLM model set to ${command.model}.`);
         break;
+      case 'list-personas':
+        this.options.emit({ type: 'overlay:command', payload: { action: 'list-personas' } });
+        this.reply('Asked overlay to list personas.');
+        break;
+      case 'set-persona':
+        this.options.emit({
+          type: 'overlay:command',
+          payload: { action: 'set-persona', persona: command.selector },
+        });
+        this.reply(`Switching persona to ${command.selector}.`);
+        break;
+      case 'set-character':
+        this.options.emit({
+          type: 'overlay:command',
+          payload: { action: 'set-character', selector: command.selector },
+        });
+        this.reply(`Switching character to ${command.selector}.`);
+        break;
       case 'list-vrms':
         this.options.emit({ type: 'overlay:command', payload: { action: 'list-vrms' } });
         this.reply('Asked overlay to list bundled VRMs in its console.');

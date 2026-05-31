@@ -64,6 +64,9 @@ describe('CommandParser', () => {
     const commands = [
       parseStreamCommand(message('!yw llm gpt-4.1'), options),
       parseStreamCommand(message('!yw state reset'), options),
+      parseStreamCommand(message('!yw personas'), options),
+      parseStreamCommand(message('!yw persona hikari'), options),
+      parseStreamCommand(message('!yw character sachi'), options),
       parseStreamCommand(message('!yw vrm riko-final-fixed-v2'), options),
       parseStreamCommand(message('!yw camera close'), options),
       parseStreamCommand(message('!yw anim dance'), options),
@@ -78,6 +81,9 @@ describe('CommandParser', () => {
     ).toEqual([
       'set-ai-model',
       'reset-ai-state',
+      'list-personas',
+      'set-persona',
+      'set-character',
       'set-vrm',
       'set-camera-view',
       'play-animation',

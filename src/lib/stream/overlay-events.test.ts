@@ -24,6 +24,25 @@ describe('overlay socket activation', () => {
 });
 
 describe('overlay server events', () => {
+  it('accepts persona and character overlay commands from the backend runtime', () => {
+    expect(
+      parseOverlayServerEvent(
+        JSON.stringify({ type: 'overlay:command', payload: { action: 'set-persona', persona: 'hikari' } }),
+      ),
+    ).toMatchObject({
+      payload: { action: 'set-persona', persona: 'hikari' },
+      type: 'overlay:command',
+    });
+    expect(
+      parseOverlayServerEvent(
+        JSON.stringify({ type: 'overlay:command', payload: { action: 'set-character', selector: 'sachi' } }),
+      ),
+    ).toMatchObject({
+      payload: { action: 'set-character', selector: 'sachi' },
+      type: 'overlay:command',
+    });
+  });
+
   it('accepts Twitch membership events from the backend runtime', () => {
     expect(
       parseOverlayServerEvent(

@@ -8,6 +8,9 @@ export type StreamCommand =
   | { kind: 'reset-ai-state' }
   | { kind: 'channel'; channel: string }
   | { kind: 'set-ai-model'; model: string }
+  | { kind: 'list-personas' }
+  | { kind: 'set-persona'; selector: string }
+  | { kind: 'set-character'; selector: string }
   | { kind: 'list-vrms' }
   | { kind: 'set-vrm'; model: string }
   | { kind: 'set-camera-view'; mode: 'full-body' | 'half-body' }
@@ -33,7 +36,7 @@ export type CommandParserOptions = {
 };
 
 const HELP_TEXT = [
-  'Commands: help, status, state, resetstate, refresh, channel <name>, llm <model>, vrm <id>, vrms, camera full|half|close, anim <name|index>, anims, anim start|stop|next|random, anim speed <n>, anim duration <sec>, tts on|off, autospeak on|off, say <text>, chat on|off.',
+  'Commands: help, status, state, resetstate, refresh, channel <name>, persona <name>, personas, character <name>, llm <model>, vrm <id>, vrms, camera full|half|close, anim <name|index>, anims, anim start|stop|next|random, anim speed <n>, anim duration <sec>, tts on|off, autospeak on|off, say <text>, chat on|off.',
 ].join(' ');
 
 function normalizeLogin(value: string) {
@@ -140,9 +143,28 @@ export function parseStreamCommand(
       command: { kind: 'set-ai-model', model: rest },
     };
   }
+  if (['personas', 'personalities', 'profiles'].includes(verb)) {
+    return { matched: true, authorized: true, commandText, command: { kind: 'list-personas' } };
+  }
+  if (['persona', 'personality', 'profile'].includes(verb) && rest) {
+    return {
+      matched: true,
+      authorized: true,
+      commandText,
+      command: { kind: 'set-persona', selector: rest },
+    };
+  }
+  if (['character', 'char'].includes(verb) && rest) {
+    return {
+      matched: true,
+      authorized: true,
+      commandText,
+      command: { kind: 'set-character', selector: rest },
+    };
+  }
   if (verb === 'vrms')
     return { matched: true, authorized: true, commandText, command: { kind: 'list-vrms' } };
-  if (['vrm', 'avatar', 'character'].includes(verb) && rest) {
+  if (['vrm', 'avatar'].includes(verb) && rest) {
     return {
       matched: true,
       authorized: true,

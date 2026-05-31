@@ -88,4 +88,25 @@ describe('CommandRouter', () => {
       }),
     );
   });
+
+  it('routes persona and character commands to the overlay command surface', () => {
+    const { events, router } = createRouter(false);
+
+    router.handleMessage(message('!yw personas'));
+    router.handleMessage(message('!yw persona hikari'));
+    router.handleMessage(message('!yw character sachi'));
+
+    expect(events).toContainEqual({
+      type: 'overlay:command',
+      payload: { action: 'list-personas' },
+    });
+    expect(events).toContainEqual({
+      type: 'overlay:command',
+      payload: { action: 'set-persona', persona: 'hikari' },
+    });
+    expect(events).toContainEqual({
+      type: 'overlay:command',
+      payload: { action: 'set-character', selector: 'sachi' },
+    });
+  });
 });
