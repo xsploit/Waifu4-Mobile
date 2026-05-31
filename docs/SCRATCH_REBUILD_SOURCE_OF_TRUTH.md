@@ -42,14 +42,14 @@ EXCLUDE not part of this rebuild path
 | Public assets | COPIED | `public/cdn-assets` is present in the rebuild. |
 | Direct frontend shell | DONE | Old `src/App.tsx`, `src/components`, and `src/style.css` promoted as the active frontend. Patch only backend/TTS/build seams; do not reshape the UI. |
 | Settings/storage compatibility foundation | COPIED | Active `src/lib` now has old menu/chat/product/twitch/VRM sequencer types, defaults, backup parsing, key vault, queue helpers, Piper browser support, and focused tests. Piper may still be parked or dropped after the TTS seam audit. |
-| Twitch backend transcription/frame foundation | COPIED | Old IRC parser/source and stream transcriber copied; `/twitch/transcribe-sample` and `/twitch/capture-frame` are wired to current backend key headers/env. |
+| Twitch backend transcription/frame foundation | COPIED | Old IRC parser/source and stream transcriber copied as optional backend plumbing; `/twitch/transcribe-sample` and `/twitch/capture-frame` are wired to current backend key headers/env. Frontend direct IRC remains the primary public chat intake. |
 | VRM loader/model/animation foundation | COPIED | Old `loadVrm`, custom VRM library, postprocessing, animation retargeting, sequencer, lipsync helpers, manifests, and tests are active. |
 | Direct VRM stage/settings surface | DONE | Old direct `VrmStage`, settings tabs, chat overlay, and menu shell are now the active frontend surface. Mouth/TTS ownership is patched through backend Fish live bridge audio events plus the copied `wlipsync` playback tap. |
 | Animation idle sequencing | DONE | Main autoplay now defaults to shuffle and uses an unweighted non-repeating random bag. The old per-animation chance control is removed from the active Animation tab. |
 | POML dynamic prompt renderer | DONE | Old vendored `pomljs` renderer copied into the backend, template reads are cached, and `/ai/poml/render` is exposed behind the `/api` proxy for the direct frontend. Provider/model prompt caching is a later optimization. |
 | Fish live bridge frontend seam | DONE | `/ai/chat` now accepts the copied frontend `ttsBridge` shape, pushes visible LLM deltas into one Fish realtime text stream, and emits SSE audio chunks back to the direct frontend. |
 | Embedding lane controls | DONE | Memory settings expose local Transformers-first/provider/auto modes, provider embedding fallback, and provider-metadata-filtered embedding model picking while still allowing a typed custom model ID. |
-| Twitch command/overlay/scheduler foundation | ADAPT | Old server command parser/router, overlay socket, chat scheduler/message filters, mock Twitch source, and tests are copied into `server/*` and patched for the rebuild imports. Overlay socket is attached to the backend `/ws`; command/scheduler runtime wiring is still next. |
+| Twitch command/overlay/scheduler foundation | ADAPT | Old server command parser/router, overlay socket, chat scheduler/message filters, mock Twitch source, and tests are copied into `server/*` and patched for the rebuild imports. Overlay socket is attached to the backend `/ws`; frontend direct IRC intake is active and covered for anonymous connect/PING/tagged `PRIVMSG`; command/scheduler backend runtime wiring is still next. |
 
 ### Old Code Audit Snapshot
 
@@ -60,9 +60,9 @@ EXCLUDE not part of this rebuild path
 | `src/lib/grillo` schemas/tools/context | 48 | Active copy | Backend worker and frontend schema/context libs copied; verify non-blocking chat context integration. |
 | `src/lib/product` backup/key vault/account | 9 | Active copy | Backup/key vault/account files copied; wire into active UI next. |
 | `src/lib/tts` manager/Piper/remote | 8 | Parked shim only | New TTS exists, old manager not active; Piper worker still PARKED. |
-| `src/lib/twitch` direct IRC/transcription helpers | 4 | Active copy | Direct IRC and stream transcription helpers copied; backend endpoints still needed. |
+| `src/lib/twitch` direct IRC/transcription helpers | 4 | Active copy | Direct browser IRC and stream transcription helpers copied. Direct IRC is the primary public chat intake and is covered for anonymous `justinfan` connect, PING/PONG, and tagged `PRIVMSG` parsing; transcription/frame endpoints are wired through the local backend. |
 | `src/lib/vrm` loader/animation/sequencer/custom library | 9 | Active copy/adapt | Loader/custom library/postprocessing/animation/sequencer copied; active `VrmStage` copied/adapted and mounted. Expression blend still needs REBUILD. |
-| `server/src/twitch` IRC/transcriber | 5 | Partial active copy | IRC parser/source and stream transcriber copied; transcription/frame routes wired; full IRC runtime lifecycle still needs integration. |
+| `server/src/twitch` IRC/transcriber | 5 | Partial active copy | IRC parser/source and stream transcriber copied; transcription/frame routes wired. Backend IRC runtime is optional/fallback plumbing, not the primary frontend chat intake. |
 | `server/src/commands` command parser/router | 3 | COPIED | Parser/router copied to `server/commands`; runtime wiring still needed. |
 | `server/src/overlay` socket/events | 2 | Partial active copy | Overlay socket copied to `server/overlay` and attached to backend `/ws`; command/scheduler broadcasts still need runtime wiring. |
 | `server/src/scheduler` queue/scheduler/filtering | 3 | COPIED | Chat scheduler and message filters copied to `server/scheduler`; adapt to the new chat provider next. |

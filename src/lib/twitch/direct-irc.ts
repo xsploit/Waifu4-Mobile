@@ -41,12 +41,22 @@ function splitFrames(data: string) {
     .filter(Boolean);
 }
 
+function unescapeTagValue(value: string) {
+  return value
+    .replace(/\\s/g, ' ')
+    .replace(/\\:/g, ';')
+    .replace(/\\r/g, '\r')
+    .replace(/\\n/g, '\n')
+    .replace(/\\\\/g, '\\');
+}
+
 function parseTags(raw: string) {
   const tags: Record<string, string> = {};
   raw.split(';').forEach((part) => {
-    const [key, value = ''] = part.split('=');
+    const separatorIndex = part.indexOf('=');
+    const key = separatorIndex === -1 ? part : part.slice(0, separatorIndex);
     if (key) {
-      tags[key] = value;
+      tags[key] = separatorIndex === -1 ? '' : unescapeTagValue(part.slice(separatorIndex + 1));
     }
   });
   return tags;
