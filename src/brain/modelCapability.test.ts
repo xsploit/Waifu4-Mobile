@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   isChatModel,
+  isEmbeddingModel,
   parseOpenRouterModels,
   parseVercelGatewayModels,
   selectReplyFormat,
@@ -23,13 +24,18 @@ const SAMPLE = {
       top_provider: { supported_parameters: ['temperature'] },
     },
     { id: 'no/params-model' },
+    {
+      id: 'openai/text-embedding-3-small',
+      architecture: { input_modalities: ['text'] },
+      type: 'embedding',
+    },
   ],
 };
 
 describe('parseOpenRouterModels', () => {
   it('derives supportsStructuredOutputs from union of model + top_provider params', () => {
     const models = parseOpenRouterModels(SAMPLE);
-    expect(models).toHaveLength(3);
+    expect(models).toHaveLength(4);
     expect(models[0]).toMatchObject({
       contextWindow: 128000,
       id: 'openai/gpt-4o-mini',
@@ -44,6 +50,11 @@ describe('parseOpenRouterModels', () => {
       supportedParameters: [],
       supportsStructuredOutputs: false,
       tags: [],
+    });
+    expect(models[3]).toMatchObject({
+      id: 'openai/text-embedding-3-small',
+      supportsStructuredOutputs: false,
+      type: 'embedding',
     });
   });
 
@@ -165,6 +176,40 @@ describe('model capability helpers', () => {
         supportedParameters: [],
         supportsStructuredOutputs: true,
         tags: ['text'],
+      }),
+    ).toBe(false);
+  });
+
+  it('detects embedding models from provider type, tags, and ids', () => {
+    expect(
+      isEmbeddingModel({
+        id: 'openai/text-embedding-3-small',
+        supportedParameters: [],
+        supportsStructuredOutputs: false,
+        type: 'embedding',
+      }),
+    ).toBe(true);
+    expect(
+      isEmbeddingModel({
+        id: 'vendor/custom-model',
+        supportedParameters: [],
+        supportsStructuredOutputs: false,
+        tags: ['text-embedding'],
+      }),
+    ).toBe(true);
+    expect(
+      isEmbeddingModel({
+        id: 'openai/text-embedding-3-large',
+        supportedParameters: [],
+        supportsStructuredOutputs: false,
+      }),
+    ).toBe(true);
+    expect(
+      isEmbeddingModel({
+        id: 'openai/gpt-4o-mini',
+        supportedParameters: [],
+        supportsStructuredOutputs: true,
+        type: 'language',
       }),
     ).toBe(false);
   });

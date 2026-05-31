@@ -366,6 +366,7 @@ export function SettingsPanel({
     ) : activeTab === 'context' ? (
       <ContextTab
         aiSettings={aiSettings}
+        availableModelMetadata={availableModelMetadata}
         availableModels={availableModels}
         backendGrilloTickBusy={backendGrilloTickBusy}
         chatDraftLength={chatDraftLength}

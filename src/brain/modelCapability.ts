@@ -17,6 +17,7 @@ export type ProviderModelInfo = {
 };
 
 const STRUCTURED_PARAM = 'structured_outputs';
+const EMBEDDING_TAGS = new Set(['embed', 'embedding', 'embeddings', 'text-embedding']);
 const IMAGE_INPUT_TAGS = new Set(['image', 'image-input', 'vision']);
 
 function asStringArray(value: unknown): string[] {
@@ -49,6 +50,7 @@ export function parseOpenRouterModels(payload: unknown): ProviderModelInfo[] {
       name?: unknown;
       supported_parameters?: unknown;
       top_provider?: { max_completion_tokens?: unknown; supported_parameters?: unknown };
+      type?: unknown;
     };
     if (typeof e.id !== 'string') {
       continue;
@@ -68,6 +70,7 @@ export function parseOpenRouterModels(payload: unknown): ProviderModelInfo[] {
       supportedParameters: [...params],
       supportsStructuredOutputs: params.has(STRUCTURED_PARAM),
       tags: inputModalities,
+      ...(typeof e.type === 'string' ? { type: e.type } : {}),
     });
   }
   return models;
@@ -135,6 +138,22 @@ export function selectReplyFormat(
 
 export function isChatModel(info?: ProviderModelInfo | null) {
   return !info?.type || info.type === 'language';
+}
+
+export function isEmbeddingModel(info?: ProviderModelInfo | null) {
+  if (!info) {
+    return false;
+  }
+  const type = info.type?.toLowerCase();
+  if (type === 'embedding' || type === 'embeddings') {
+    return true;
+  }
+  const tags = info.tags ?? [];
+  if (tags.some((tag) => EMBEDDING_TAGS.has(tag.toLowerCase()))) {
+    return true;
+  }
+  const id = info.id.toLowerCase();
+  return id.includes('embedding') || /(^|[/_.-])embed([/_.-]|$)/.test(id);
 }
 
 export function supportsImageInput(info?: ProviderModelInfo | null) {

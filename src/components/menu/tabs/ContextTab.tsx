@@ -3,6 +3,7 @@ import {
   DEFAULT_LOCAL_EMBEDDING_MODEL,
   DEFAULT_OPENROUTER_EMBEDDING_MODEL,
 } from '../../../lib/chat/defaults';
+import { isEmbeddingModel, type ProviderModelInfo } from '../../../brain/modelCapability';
 import type { GrilloMemoryState } from '../../../lib/chat/grillo-memory';
 import type {
   LadybugGrilloRuntimeStatus,
@@ -19,6 +20,7 @@ import type { AiSettings, RelationshipMemory } from '../../../lib/chat/types';
 
 type ContextTabProps = {
   aiSettings: AiSettings;
+  availableModelMetadata: ReadonlyMap<string, ProviderModelInfo>;
   availableModels: string[];
   backendGrilloTickBusy: boolean;
   chatDraftLength: number;
@@ -53,6 +55,7 @@ type ContextTabProps = {
 
 export function ContextTab({
   aiSettings,
+  availableModelMetadata,
   availableModels,
   backendGrilloTickBusy,
   chatDraftLength,
@@ -129,6 +132,17 @@ export function ContextTab({
       ? Array.from(new Set([...availableModels, selectedMemoryModel]))
       : availableModels,
   );
+  const providerEmbeddingModelIds = Array.from(availableModelMetadata.values())
+    .filter(isEmbeddingModel)
+    .map((model) => model.id)
+    .sort((left, right) => left.localeCompare(right));
+  const providerEmbeddingPickerOptions = Array.from(
+    new Set([
+      ...providerEmbeddingModelIds,
+      aiSettings.embeddingModel.trim(),
+      DEFAULT_OPENROUTER_EMBEDDING_MODEL,
+    ]),
+  ).filter(Boolean);
   const latestWorkerTrace = memoryGraphSummary?.recent.traces?.[0] ?? null;
   const latestGrilloActivity = memoryGraphSummary?.recent.activities?.[0] ?? null;
 
@@ -184,17 +198,33 @@ export function ContextTab({
           <span>Embedding model (provider)</span>
           <input
             className="input-tech compact-input"
+            list="provider-embedding-model-options"
             onChange={(event) =>
               setAiSettings((current) => ({
                 ...current,
-                embeddingModel: event.target.value.trim() || DEFAULT_OPENROUTER_EMBEDDING_MODEL,
+                embeddingModel: event.target.value,
               }))
             }
             spellCheck={false}
             type="text"
             value={aiSettings.embeddingModel}
           />
+          <datalist id="provider-embedding-model-options">
+            {providerEmbeddingPickerOptions.map((model) => (
+              <option key={model} value={model} />
+            ))}
+          </datalist>
         </label>
+        <div className="status-copy">
+          Provider embedding catalog:{' '}
+          <strong>
+            {providerEmbeddingModelIds.length > 0
+              ? `${providerEmbeddingModelIds.length} embedding model${
+                  providerEmbeddingModelIds.length === 1 ? '' : 's'
+                }`
+              : 'none reported; custom ID allowed'}
+          </strong>
+        </div>
         <label className="setting-row">
           <span>Embedding model (browser/local)</span>
           <input

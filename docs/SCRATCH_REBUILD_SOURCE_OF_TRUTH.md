@@ -47,6 +47,7 @@ EXCLUDE not part of this rebuild path
 | Direct VRM stage/settings surface | DONE | Old direct `VrmStage`, settings tabs, chat overlay, and menu shell are now the active frontend surface. Mouth/TTS ownership is patched through backend Fish live bridge audio events plus the copied `wlipsync` playback tap. |
 | POML dynamic prompt renderer | DONE | Old vendored `pomljs` renderer copied into the backend, template reads are cached, and `/ai/poml/render` is exposed behind the `/api` proxy for the direct frontend. Provider/model prompt caching is a later optimization. |
 | Fish live bridge frontend seam | DONE | `/ai/chat` now accepts the copied frontend `ttsBridge` shape, pushes visible LLM deltas into one Fish realtime text stream, and emits SSE audio chunks back to the direct frontend. |
+| Embedding lane controls | DONE | Memory settings expose local Transformers-first/provider/auto modes, provider embedding fallback, and provider-metadata-filtered embedding model picking while still allowing a typed custom model ID. |
 
 ### Old Code Audit Snapshot
 
@@ -79,6 +80,7 @@ EXCLUDE not part of this rebuild path
 
 4. **Rebuild animation/emotion safely**
    Keep old user-facing animation controls, presets, telemetry, and sequencer concepts. Do not blindly copy the old expression weight behavior. Build a new expression mixer with priority rules: mouth visemes win for `aa/ih/ou/ee/oh`; emotion/animation expressions can blend around them; debug panels must show final mouth and expression weights.
+   Near-term TODO: use the three copied talk-safe clips (`Sachi Casual Talk`, `Sachi Talk 1`, `Sachi Talk 2`) as the first TTS talk-animation pool, then add more clips only after auditioning them.
 
 5. **Restore Twitch live input stack**
    Copy/adapt server IRC parser/source, direct frontend IRC helper, mock Twitch source, Twitch AI queue, command parser/router, scheduler, and overlay event socket. Twitch includes whispers/message modes where supported by the old stack.
@@ -103,7 +105,8 @@ EXCLUDE not part of this rebuild path
    Bring back command-driven camera/VRM/animation/TTS controls, overlay socket events, and browser-source behavior after the active frontend and Twitch backend seams exist.
 
 11. **Park or reintroduce Piper deliberately**
-     Keep old Piper assets/settings visible only if it helps compatibility. Reintroduce browser Piper only after Fish/Inworld/avatar parity is stable, or drop it if the product no longer needs offline/browser TTS.
+      Keep old Piper assets/settings visible only if it helps compatibility. Reintroduce browser Piper only after Fish/Inworld/avatar parity is stable, or drop it if the product no longer needs offline/browser TTS.
+      Back-burner TODO: if Piper returns, test it through the same playback-state and talk-animation hooks instead of creating a Piper-only avatar path.
 
 ### Copy Policy Going Forward
 

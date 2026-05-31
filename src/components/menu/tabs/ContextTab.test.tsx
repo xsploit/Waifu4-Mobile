@@ -9,6 +9,19 @@ describe('ContextTab', () => {
     const html = renderToStaticMarkup(
       <ContextTab
         aiSettings={createDefaultAiSettings()}
+        availableModelMetadata={
+          new Map([
+            [
+              'openai/text-embedding-3-small',
+              {
+                id: 'openai/text-embedding-3-small',
+                supportedParameters: [],
+                supportsStructuredOutputs: false,
+                type: 'embedding',
+              },
+            ],
+          ])
+        }
         availableModels={['gpt-5-nano']}
         backendGrilloTickBusy={false}
         chatDraftLength={0}
@@ -281,6 +294,8 @@ describe('ContextTab', () => {
     expect(html).toContain('Chat lane: vercel-gateway / openai/gpt-5-nano');
     expect(html).toContain('GRILLO lane: vercel-gateway / openai/gpt-5-nano / max tool rounds 15');
     expect(html).toContain('Embedding lane: browser');
+    expect(html).toContain('Provider embedding catalog:');
+    expect(html).toContain('1 embedding model');
     expect(html).toContain('Turn cadence: 2/7 current scope / 2 all scopes / 1 chat messages');
     expect(html).toContain('GRILLO Trace Inspector');
     expect(html).toContain('Last worker prompt');
@@ -333,6 +348,7 @@ describe('ContextTab', () => {
           ...createDefaultAiSettings(),
           memoryAgentModel: 'gpt-5-nano',
         }}
+        availableModelMetadata={new Map()}
         availableModels={['gpt-5-mini', 'o1-pro-2025-03-19']}
         backendGrilloTickBusy={false}
         chatDraftLength={0}
