@@ -56,6 +56,26 @@ describe('remote TTS proxy compatibility', () => {
     });
   });
 
+  it('clamps Fish chunk length to the rebuilt backend range', () => {
+    expect(
+      createRemoteTtsProxyRequest({
+        provider: 'fish-speech',
+        text: 'hello',
+        streamingMode: 'live-bridge',
+        chunkLength: 50,
+      }),
+    ).toMatchObject({ chunkLength: 100 });
+
+    expect(
+      createRemoteTtsProxyRequest({
+        provider: 'fish-speech',
+        text: 'hello',
+        streamingMode: 'live-bridge',
+        chunkLength: 999.4,
+      }),
+    ).toMatchObject({ chunkLength: 300 });
+  });
+
   it('maps copied Inworld frontend requests onto the rebuilt backend stream schema', () => {
     expect(
       createRemoteTtsProxyRequest({
@@ -87,6 +107,28 @@ describe('remote TTS proxy compatibility', () => {
       maxBufferDelayMs: 250,
       autoMode: true,
     });
+  });
+
+  it('clamps Inworld buffering controls to the rebuilt backend range', () => {
+    expect(
+      createRemoteTtsProxyRequest({
+        provider: 'inworld',
+        text: 'hello',
+        streamingMode: 'full-response',
+        bufferCharThreshold: -50,
+        maxBufferDelayMs: -1,
+      }),
+    ).toMatchObject({ bufferCharThreshold: 1, maxBufferDelayMs: 0 });
+
+    expect(
+      createRemoteTtsProxyRequest({
+        provider: 'inworld',
+        text: 'hello',
+        streamingMode: 'full-response',
+        bufferCharThreshold: 2000.6,
+        maxBufferDelayMs: 20000.4,
+      }),
+    ).toMatchObject({ bufferCharThreshold: 1000, maxBufferDelayMs: 10000 });
   });
 
   it('decodes rebuilt backend audio events that send format instead of mimeType', async () => {

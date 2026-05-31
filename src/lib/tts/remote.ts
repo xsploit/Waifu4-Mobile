@@ -186,6 +186,13 @@ function normalizeFishBackend(value: string | undefined) {
   return undefined;
 }
 
+function clampInteger(value: number | undefined, min: number, max: number): number | undefined {
+  if (typeof value !== 'number' || !Number.isFinite(value)) {
+    return undefined;
+  }
+  return Math.max(min, Math.min(max, Math.round(value)));
+}
+
 export function createRemoteTtsProxyRequest(request: RemoteTtsRequest): RemoteTtsProxyRequest {
   if (request.provider === 'inworld') {
     return {
@@ -198,8 +205,8 @@ export function createRemoteTtsProxyRequest(request: RemoteTtsRequest): RemoteTt
       timestampType: request.timestampType,
       timestampTransportStrategy: request.timestampTransportStrategy,
       deliveryMode: request.deliveryMode,
-      bufferCharThreshold: request.bufferCharThreshold,
-      maxBufferDelayMs: request.maxBufferDelayMs,
+      bufferCharThreshold: clampInteger(request.bufferCharThreshold, 1, 1000),
+      maxBufferDelayMs: clampInteger(request.maxBufferDelayMs, 0, 10000),
       autoMode: request.autoMode,
     };
   }
@@ -214,7 +221,7 @@ export function createRemoteTtsProxyRequest(request: RemoteTtsRequest): RemoteTt
     sampleRate: request.sampleRate ?? 44100,
     latency: request.latency,
     conditionOnPreviousChunks: request.conditionOnPreviousChunks,
-    chunkLength: request.chunkLength,
+    chunkLength: clampInteger(request.chunkLength, 100, 300),
   };
 }
 
