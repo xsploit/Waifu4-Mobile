@@ -7,6 +7,8 @@ release/
 .DS_Store
 coverage/
 .lean-ctx/
+.webwaifu4/
+.codex-artifacts/
 art/
 public/assets/*
 !public/assets/

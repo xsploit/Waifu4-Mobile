@@ -15,6 +15,10 @@ export type RemoteTtsRequest = {
   latency?: FishSpeechLatency;
   conditionOnPreviousChunks?: boolean;
   chunkLength?: number;
+  minBufferChars?: number;
+  maxBufferChars?: number;
+  softBufferChars?: number;
+  chunkingStrategy?: 'app' | 'python-safe' | 'eager';
   deliveryMode?: InworldDeliveryMode;
   bufferCharThreshold?: number;
 };
@@ -23,6 +27,8 @@ export type RemoteTtsAudioChunk = {
   audioBlob: Blob;
   mimeType: string;
   sampleRate?: number | null;
+  speechTiming?: unknown;
+  timestamps?: unknown;
 };
 
 export type RemoteTtsVoice = {
@@ -57,12 +63,32 @@ export type RemoteTtsProxyOptions = {
   providerApiKey?: string | null;
 };
 
-type RemoteTtsStreamEvent =
+export type RemoteTtsProxyRequest = {
+  backend?: 's1' | 's2-pro';
+  bufferCharThreshold?: number;
+  chunkLength?: number;
+  conditionOnPreviousChunks?: boolean;
+  deliveryMode?: InworldDeliveryMode;
+  fishTransport?: 'websocket' | 'timestamp-sse';
+  format?: 'pcm' | 'mp3' | 'wav' | 'opus';
+  inworldModelId?: string;
+  inworldTransport?: 'http' | 'websocket';
+  latency?: FishSpeechLatency;
+  provider: 'fish' | 'inworld';
+  sampleRate?: number;
+  text: string;
+  voiceId?: string;
+};
+
+export type RemoteTtsStreamEvent =
   | {
       type: 'audio';
       audio: string;
+      format?: string;
       mimeType?: string;
       sampleRate?: number;
+      speechTiming?: unknown;
+      timestamps?: unknown;
     }
   | {
       type: 'done';
@@ -74,7 +100,7 @@ type RemoteTtsStreamEvent =
       error?: string;
     };
 
-function parseRemoteTtsStreamEvent(line: string): RemoteTtsStreamEvent {
+export function parseRemoteTtsStreamEvent(line: string): RemoteTtsStreamEvent {
   try {
     return JSON.parse(line) as RemoteTtsStreamEvent;
   } catch {
@@ -117,6 +143,77 @@ function base64ToBytes(value: string) {
   return bytes;
 }
 
+function getRemoteAudioMimeType(event: Extract<RemoteTtsStreamEvent, { type: 'audio' }>) {
+  if (event.mimeType) {
+    return event.mimeType;
+  }
+  switch (event.format) {
+    case 'pcm':
+      return 'audio/pcm';
+    case 'wav':
+      return 'audio/wav';
+    case 'opus':
+      return 'audio/ogg; codecs=opus';
+    case 'mp3':
+    default:
+      return 'audio/mpeg';
+  }
+}
+
+function normalizeFishBackend(value: string | undefined) {
+  const model = value?.trim().toLowerCase();
+  if (model === 's1') {
+    return 's1' as const;
+  }
+  if (model === 's2' || model === 's2-pro') {
+    return 's2-pro' as const;
+  }
+  return undefined;
+}
+
+export function createRemoteTtsProxyRequest(request: RemoteTtsRequest): RemoteTtsProxyRequest {
+  if (request.provider === 'inworld') {
+    return {
+      provider: 'inworld',
+      text: request.text,
+      voiceId: request.voiceId,
+      inworldModelId: request.modelId,
+      inworldTransport: 'http',
+      deliveryMode: request.deliveryMode,
+      bufferCharThreshold: request.bufferCharThreshold,
+    };
+  }
+
+  return {
+    provider: 'fish',
+    text: request.text,
+    voiceId: request.voiceId,
+    backend: normalizeFishBackend(request.modelId),
+    fishTransport: 'websocket',
+    format: 'pcm',
+    sampleRate: 44100,
+    latency: request.latency,
+    conditionOnPreviousChunks: request.conditionOnPreviousChunks,
+    chunkLength: request.chunkLength,
+  };
+}
+
+export function remoteTtsStreamEventToAudioChunk(
+  event: RemoteTtsStreamEvent,
+): RemoteTtsAudioChunk | null {
+  if (event.type !== 'audio') {
+    return null;
+  }
+  const mimeType = getRemoteAudioMimeType(event);
+  return {
+    audioBlob: new Blob([base64ToBytes(event.audio)], { type: mimeType }),
+    mimeType,
+    sampleRate: event.sampleRate ?? null,
+    speechTiming: event.speechTiming,
+    timestamps: event.timestamps,
+  };
+}
+
 function fileToBase64(file: File) {
   return new Promise<string>((resolve, reject) => {
     const reader = new FileReader();
@@ -153,12 +250,10 @@ export function createRemoteTtsStream(
 
   const handleEvent = (event: RemoteTtsStreamEvent) => {
     if (event.type === 'audio') {
-      const mimeType = event.mimeType || 'audio/mpeg';
-      queue.push({
-        audioBlob: new Blob([base64ToBytes(event.audio)], { type: mimeType }),
-        mimeType,
-        sampleRate: event.sampleRate ?? null,
-      });
+      const chunk = remoteTtsStreamEventToAudioChunk(event);
+      if (chunk) {
+        queue.push(chunk);
+      }
       wake();
       return;
     }
@@ -179,7 +274,7 @@ export function createRemoteTtsStream(
       const response = await fetch(getTtsProxyUrl('/tts/stream'), {
         method: 'POST',
         headers: buildRemoteTtsHeaders(options),
-        body: JSON.stringify(request),
+        body: JSON.stringify(createRemoteTtsProxyRequest(request)),
         signal,
       });
       if (!response.ok) {

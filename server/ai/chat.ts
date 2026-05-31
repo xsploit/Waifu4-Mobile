@@ -1,8 +1,14 @@
 import type { Request, Response } from 'express';
 import { z } from 'zod';
 import { formatSseEvent } from '../../src/shared/sse';
+import {
+  createLiveSpeechTextBridge,
+  normalizeLiveTtsBridge,
+  waitForLiveTtsBridge,
+} from './liveTtsBridge';
 import { completeChat, streamChat } from './llmGateway';
 import { readProviderKeys } from './providerKeys';
+import { streamFishTtsTextStream } from '../tts/FishTtsStream';
 
 const providerSchema = z.enum(['vercel-gateway', 'openrouter-responses']);
 const replyFormatSchema = z.enum(['structured', 'text']);
@@ -25,6 +31,7 @@ const chatRequestInputSchema = z.object({
   temperature: z.number().min(0).max(2).optional(),
   maxTokens: z.number().int().positive().optional(),
   stream: z.boolean().default(true),
+  ttsBridge: z.unknown().optional(),
 });
 
 function normalizeChatRequest(input: z.infer<typeof chatRequestInputSchema>) {
@@ -88,13 +95,62 @@ export async function handleChat(req: Request, res: Response): Promise<void> {
     Connection: 'keep-alive',
   });
 
-  const send = (event: string, data: Record<string, unknown>) =>
+  const send = (event: string, data: Record<string, unknown>) => {
+    if (res.writableEnded || res.destroyed) {
+      return;
+    }
     res.write(formatSseEvent(event, { type: event, ...data }));
+  };
   const controller = new AbortController();
   // Cancel on real client disconnect. Must be res 'close', NOT req 'close' —
   // req 'close' fires as soon as the request body is read (immediately for a
   // small POST), which would abort the stream before the model replies.
   res.on('close', () => controller.abort());
+
+  const bridgeRequest = normalizeLiveTtsBridge(parsed.data.ttsBridge);
+  const bridge = bridgeRequest && keys.ttsKey ? createLiveSpeechTextBridge(bridgeRequest) : null;
+  if (bridgeRequest && !keys.ttsKey) {
+    send('tts-error', {
+      ok: false,
+      error: 'Fish Speech live bridge provider key is not configured.',
+    });
+  }
+  let bridgeFinalizationTimedOut = false;
+  const bridgeDone = bridge
+    ? streamFishTtsTextStream(
+        {
+          apiKey: keys.ttsKey!,
+          text: '',
+          voiceId: bridgeRequest?.voiceId,
+          backend: bridgeRequest?.backend,
+          format: 'pcm',
+          sampleRate: 44100,
+          chunkLength: bridgeRequest?.chunkLength,
+          latency: bridgeRequest?.latency,
+          conditionOnPreviousChunks: bridgeRequest?.conditionOnPreviousChunks,
+          signal: controller.signal,
+        },
+        bridge.stream,
+        (chunk) =>
+          send('audio', {
+            audio: Buffer.from(chunk).toString('base64'),
+            mimeType: 'audio/pcm',
+            sampleRate: 44100,
+          }),
+      ).then(
+        () => undefined,
+        (err) => {
+          const message = err instanceof Error ? err.message : String(err);
+          if (bridgeFinalizationTimedOut && message === 'Live TTS bridge finalization timed out.') {
+            return;
+          }
+          if (controller.signal.aborted) {
+            return;
+          }
+          send('tts-error', { ok: false, error: message });
+        },
+      )
+    : null;
 
   try {
     const result = await streamChat(
@@ -104,10 +160,30 @@ export async function handleChat(req: Request, res: Response): Promise<void> {
         byokOpenAiKey: keys.byokOpenAiKey,
         signal: controller.signal,
       },
-      (text) => send('delta', { delta: text, text }),
+      (text) => {
+        send('delta', { delta: text, text });
+        bridge?.push(text);
+      },
     );
+    bridge?.close();
+    if (bridgeDone) {
+      const bridgeFinished = await waitForLiveTtsBridge(bridgeDone, () => {
+        bridgeFinalizationTimedOut = true;
+        bridge?.fail(new Error('Live TTS bridge finalization timed out.'));
+      });
+      if (!bridgeFinished) {
+        send('tts-error', {
+          ok: false,
+          error: 'Live TTS bridge finalization timed out.',
+        });
+      }
+    }
     send('done', { ok: true, text: result.visibleText, meta: result.metadata });
   } catch (err) {
+    bridge?.fail(err instanceof Error ? err : new Error(String(err)));
+    if (bridgeDone) {
+      await waitForLiveTtsBridge(bridgeDone, () => undefined);
+    }
     send('error', { ok: false, error: err instanceof Error ? err.message : String(err) });
   } finally {
     res.end();

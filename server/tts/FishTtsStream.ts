@@ -34,6 +34,8 @@ export type FishStreamStats = {
   visemes?: number;
 };
 
+export type FishTextStream = AsyncIterable<string>;
+
 type FishTimestampSegment = {
   text: string;
   start: number;
@@ -81,16 +83,7 @@ export async function streamFishTts(
   req: FishStreamRequest,
   onAudio: (chunk: Uint8Array) => void,
 ): Promise<FishStreamStats> {
-  const format: FishFormat = req.format ?? 'pcm';
-  const started = Date.now();
-  let firstAudioAt: number | null = null;
-  let chunks = 0;
-  let bytes = 0;
-
-  const client = new FishAudioClient({ apiKey: req.apiKey });
-
-  // This slice speaks a given string; the LLM->TTS delta bridge is a later slice.
-  async function* textStream(): AsyncIterable<string> {
+  async function* textStream(): FishTextStream {
     if (req.textSegments?.length) {
       for (const segment of req.textSegments) {
         if (segment) {
@@ -101,6 +94,22 @@ export async function streamFishTts(
     }
     yield req.text;
   }
+
+  return streamFishTtsTextStream(req, textStream(), onAudio);
+}
+
+export async function streamFishTtsTextStream(
+  req: FishStreamRequest,
+  textStream: FishTextStream,
+  onAudio: (chunk: Uint8Array) => void,
+): Promise<FishStreamStats> {
+  const format: FishFormat = req.format ?? 'pcm';
+  const started = Date.now();
+  let firstAudioAt: number | null = null;
+  let chunks = 0;
+  let bytes = 0;
+
+  const client = new FishAudioClient({ apiKey: req.apiKey });
 
   // condition_on_previous_chunks isn't in the 0.1.0 TTSRequest type but the wire
   // protocol forwards it (prosody continuity across chunks — keep true).
@@ -119,7 +128,7 @@ export async function streamFishTts(
   // 'model' header accepts it — cast so S2 (our default, D9) works.
   const connection = await client.textToSpeech.convertRealtime(
     request as Parameters<typeof client.textToSpeech.convertRealtime>[0],
-    textStream(),
+    textStream,
     (req.backend ?? 's2-pro') as unknown as Parameters<
       typeof client.textToSpeech.convertRealtime
     >[2],

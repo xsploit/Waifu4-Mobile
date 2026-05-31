@@ -35,7 +35,7 @@ EXCLUDE not part of this rebuild path
 | --- | --- | --- |
 | Local backend boundary | DONE | `server/index.ts`, request-scoped keys, `/ai/chat`, `/tts/stream`. |
 | LLM main brain | DONE | SSE visible `delta`, structured/text lanes, no raw JSON to speech, OpenRouter/Vercel gateway support. |
-| TTS core | DONE | Fish realtime/current, Fish timestamp SSE, Inworld HTTP/WebSocket, benchmark mode, unified timing metadata. |
+| TTS core | DONE | Fish realtime/current, Fish timestamp SSE, Inworld HTTP/WebSocket, benchmark mode, unified timing metadata. Copied frontend remote TTS requests are adapted to the rebuilt `/tts/stream` schema. |
 | Mouth core | DONE | `wlipsync` live path works from the playback audio source; provider timing is normalized for future captions/flaps. |
 | GRILLO/Ladybug backend worker | DONE | Old services/tests copied, strict compile seams patched, routes wired under `/memory`, committed as `d8702d9`. |
 | Source-of-truth doc | DONE | Imported into this repo and annotated by this overlay. |
@@ -44,8 +44,9 @@ EXCLUDE not part of this rebuild path
 | Settings/storage compatibility foundation | COPIED | Active `src/lib` now has old menu/chat/product/twitch/VRM sequencer types, defaults, backup parsing, key vault, queue helpers, Piper browser support, and focused tests. Piper may still be parked or dropped after the TTS seam audit. |
 | Twitch backend transcription/frame foundation | COPIED | Old IRC parser/source and stream transcriber copied; `/twitch/transcribe-sample` and `/twitch/capture-frame` are wired to current backend key headers/env. |
 | VRM loader/model/animation foundation | COPIED | Old `loadVrm`, custom VRM library, postprocessing, animation retargeting, sequencer, lipsync helpers, manifests, and tests are active. |
-| Direct VRM stage/settings surface | DONE | Old direct `VrmStage`, settings tabs, chat overlay, and menu shell are now the active frontend surface. Next seam audit is mouth/TTS ownership against the new realtime TTS + `wlipsync` path. |
+| Direct VRM stage/settings surface | DONE | Old direct `VrmStage`, settings tabs, chat overlay, and menu shell are now the active frontend surface. Mouth/TTS ownership is patched through backend Fish live bridge audio events plus the copied `wlipsync` playback tap. |
 | POML dynamic prompt renderer | DONE | Old vendored `pomljs` renderer copied into the backend, template reads are cached, and `/ai/poml/render` is exposed behind the `/api` proxy for the direct frontend. Provider/model prompt caching is a later optimization. |
+| Fish live bridge frontend seam | DONE | `/ai/chat` now accepts the copied frontend `ttsBridge` shape, pushes visible LLM deltas into one Fish realtime text stream, and emits SSE audio chunks back to the direct frontend. |
 
 ### Old Code Audit Snapshot
 
