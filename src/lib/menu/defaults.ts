@@ -76,7 +76,7 @@ export function createDefaultVisualSettings(): VisualSettings {
 export function createDefaultSequencerSettings(): SequencerSettings {
   return {
     playing: true,
-    shuffle: false,
+    shuffle: true,
     loop: true,
     speed: 1,
     duration: 10,

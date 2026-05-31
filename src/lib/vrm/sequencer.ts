@@ -11,28 +11,11 @@ type BundledAnimationDefinition = {
   loopEligible?: boolean;
   purpose?: AnimationPurpose;
   tags?: string[];
-  weight?: number;
 };
 
 const SACHI_VRMA_DIR = '/assets/animations/sachi-vrma';
 const SILLY_BVH_DIR = '/assets/animations/silly-bvh';
 const SILLY_TAVERN_BVH_DIR = '/assets/animations/silly-tavern';
-const DEFAULT_ANIMATION_WEIGHTS: Record<AnimationPurpose, number> = {
-  ambient: 1.25,
-  gesture: 0.75,
-  emotion: 0.6,
-  movement: 0.18,
-  pose: 0.22,
-};
-const MOVEMENT_TAG_WEIGHT_PENALTIES: Array<{ tag: string; multiplier: number }> = [
-  { tag: 'spin', multiplier: 0.08 },
-  { tag: 'rotate', multiplier: 0.08 },
-  { tag: 'walk', multiplier: 0.08 },
-  { tag: 'airplane', multiplier: 0.05 },
-  { tag: 'standup', multiplier: 0.12 },
-  { tag: 'kneel', multiplier: 0.12 },
-  { tag: 'unknown', multiplier: 0.22 },
-];
 const UNSAFE_BASE_LOOP_TAGS = new Set([
   'airplane',
   'crouch',
@@ -513,10 +496,6 @@ function bundledAnimation(definition: BundledAnimationDefinition): AnimationEntr
     loopEligible: definition.loopEligible ?? purpose === 'ambient',
     purpose,
     tags,
-    weight: clampAnimationWeight(
-      definition.weight ??
-        getDefaultAnimationWeight(purpose, definition.experimental ?? false, tags),
-    ),
   };
 }
 
@@ -595,16 +574,10 @@ function toDisplayName(fileName: string) {
     .replace(/^/, 'Silly ');
 }
 
-type WeightedAnimationEntry = {
-  index: number;
-  weight: number;
-};
-
 export class AnimationSequencer {
   private activeEnabled: AnimationEntry[] = [];
   private activeOptions: { shuffle: boolean; loop: boolean; duration: number } | null = null;
   private activePlaylist: AnimationEntry[] = [];
-  private activeShuffleWeights: WeightedAnimationEntry[] = [];
   private timer: ReturnType<typeof setTimeout> | null = null;
   private currentIndex = -1;
   private shuffleOrder: number[] = [];
@@ -624,11 +597,8 @@ export class AnimationSequencer {
     }
 
     if (options.shuffle) {
-      this.activeShuffleWeights = this.createShuffleWeights(enabled);
-      this.shuffleOrder = this.weightedShuffle(this.activeShuffleWeights);
+      this.shuffleOrder = this.randomBag(enabled.length);
       this.shufflePosition = 0;
-    } else {
-      this.activeShuffleWeights = [];
     }
 
     this.activeEnabled = enabled;
@@ -671,7 +641,8 @@ export class AnimationSequencer {
     this.activeEnabled = [];
     this.activeOptions = null;
     this.activePlaylist = [];
-    this.activeShuffleWeights = [];
+    this.shuffleOrder = [];
+    this.shufflePosition = 0;
     if (notify) {
       this.onStop?.();
     }
@@ -692,7 +663,9 @@ export class AnimationSequencer {
           return;
         }
 
-        this.shuffleOrder = this.weightedShuffle(this.activeShuffleWeights);
+        const currentEntry = this.currentIndex >= 0 ? playlist[this.currentIndex] : undefined;
+        const currentEnabledIndex = currentEntry ? enabled.indexOf(currentEntry) : -1;
+        this.shuffleOrder = this.randomBag(enabled.length, currentEnabledIndex);
         this.shufflePosition = 0;
       }
 
@@ -745,70 +718,20 @@ export class AnimationSequencer {
     }, options.duration * 1000);
   }
 
-  private createShuffleWeights(entries: AnimationEntry[]) {
-    return entries.map((entry, index) => ({
-      index,
-      weight: clampAnimationWeight(getAnimationSelectionWeight(entry)),
-    }));
-  }
+  private randomBag(length: number, avoidFirstIndex = -1) {
+    const order = Array.from({ length }, (_, index) => index);
+    for (let i = order.length - 1; i > 0; i -= 1) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [order[i], order[j]] = [order[j]!, order[i]!];
+    }
 
-  private weightedShuffle(entries: WeightedAnimationEntry[]) {
-    const weighted = entries.slice();
-    const shuffle: number[] = [];
-    while (weighted.length > 0) {
-      const total = weighted.reduce((sum, entry) => sum + entry.weight, 0);
-      if (total <= 0) {
-        const fallback = weighted.shift();
-        if (fallback) {
-          shuffle.push(fallback.index);
-        }
-        continue;
-      }
-
-      let cursor = Math.random() * total;
-      let selectedIndex = 0;
-      for (let i = 0; i < weighted.length; i += 1) {
-        const item = weighted[i];
-        if (!item) {
-          continue;
-        }
-        cursor -= item.weight;
-        if (cursor <= 0) {
-          selectedIndex = i;
-          break;
-        }
-      }
-
-      const picked = weighted.splice(selectedIndex, 1)?.[0];
-      if (picked) {
-        shuffle.push(picked.index);
+    if (order.length > 1 && order[0] === avoidFirstIndex) {
+      const swapIndex = order.findIndex((index) => index !== avoidFirstIndex);
+      if (swapIndex > 0) {
+        [order[0], order[swapIndex]] = [order[swapIndex]!, order[0]!];
       }
     }
-    return shuffle;
+
+    return order;
   }
-}
-
-function clampAnimationWeight(value: number) {
-  return Math.min(4, Math.max(0.05, value));
-}
-
-function getDefaultAnimationWeight(
-  purpose: AnimationPurpose,
-  experimental: boolean,
-  tags: string[] = [],
-) {
-  const normalizedTags = tags.map((tag) => tag.toLowerCase());
-  const purposeBase = DEFAULT_ANIMATION_WEIGHTS[purpose] ?? 0.65;
-  const experimentalPenalty = experimental ? 0.35 : 1;
-  const tagPenalty = MOVEMENT_TAG_WEIGHT_PENALTIES.reduce((multiplier, penalty) => {
-    return normalizedTags.includes(penalty.tag) ? multiplier * penalty.multiplier : multiplier;
-  }, 1);
-  return purposeBase * experimentalPenalty * tagPenalty;
-}
-
-function getAnimationSelectionWeight(entry: AnimationEntry) {
-  return (
-    entry.weight ??
-    getDefaultAnimationWeight(entry.purpose ?? 'gesture', entry.experimental, entry.tags)
-  );
 }

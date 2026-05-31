@@ -202,24 +202,6 @@ export function AnimTab({
           </button>
         </div>
         <div className="anim-meta">
-          <div className="anim-meta-field anim-meta-field-wide">
-            <span>Chance {(entry.weight ?? 1).toFixed(2)}x</span>
-            <input
-              aria-label="Animation probability"
-              className="anim-weight"
-              max="4"
-              min="0.05"
-              onChange={(event) =>
-                updatePlaylistEntry(setSequencerSettings, index, {
-                  weight: Number(event.target.value),
-                })
-              }
-              step="0.05"
-              title={`Chance: ${(entry.weight ?? 1).toFixed(2)}`}
-              type="range"
-              value={entry.weight ?? 1}
-            />
-          </div>
           <div className="anim-meta-field">
             <span>Purpose</span>
             <select
