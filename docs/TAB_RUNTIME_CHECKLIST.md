@@ -175,6 +175,8 @@ Pass:
 - Inworld shows HTTP/WebSocket, timestamps, delivery mode, buffer controls, and auto mode.
 - Voice refresh/select/manual ID/test/speak/stop/cache controls render.
 - Benchmark can run selected providers/transports and copy results.
+- Provider word timing drives subtitles when the selected transport returns `speechTiming`; estimated subtitle timing remains the fallback.
+- Mouth movement remains owned by audio-reactive `wlipsync`, not provider phoneme/viseme metadata.
 
 Real-key verify:
 
