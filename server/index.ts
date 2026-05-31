@@ -6,6 +6,7 @@ import { handleEmbeddings } from './ai/embeddings';
 import { handleModels } from './ai/models';
 import { renderYourWifeyPomlResponse } from './ai/PomlRenderer';
 import { handleTtsStream } from './tts/stream';
+import { handleCreateTtsVoice, handleListTtsVoices } from './tts/voices';
 import { handleLocalBackupSettings } from './localBackup';
 import { createMemoryRouter } from './memory/routes';
 import { OverlaySocket } from './overlay/OverlaySocket';
@@ -52,6 +53,16 @@ app.post('/ai/poml/render', (req, res) => {
 // POST /tts/stream — NDJSON audio stream (audio / done / error).
 app.post('/tts/stream', (req, res) => {
   void handleTtsStream(req, res);
+});
+
+// GET /tts/voices — provider voice registry for TTS and Voice Lab.
+app.get('/tts/voices', (req, res) => {
+  void handleListTtsVoices(req, res);
+});
+
+// POST /tts/voices/create — provider voice cloning/creation for Voice Lab.
+app.post('/tts/voices/create', (req, res) => {
+  void handleCreateTtsVoice(req, res);
 });
 
 const server = createServer(app);
