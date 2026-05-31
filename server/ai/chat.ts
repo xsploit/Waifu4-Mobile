@@ -43,7 +43,7 @@ const chatRequestInputSchema = z.object({
   ttsBridge: z.unknown().optional(),
 });
 
-function normalizeChatRequest(input: z.infer<typeof chatRequestInputSchema>) {
+export function normalizeChatRequest(input: z.infer<typeof chatRequestInputSchema>) {
   const provider = input.provider ?? input.llmProvider;
   if (!provider) {
     throw new Error('Missing LLM provider');
