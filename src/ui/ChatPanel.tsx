@@ -139,6 +139,7 @@ export function ChatPanel() {
   const benchmarkAbortRef = useRef<AbortController | null>(null);
   const ttsQueueRef = useRef<Promise<void>>(Promise.resolve());
   const speechRunRef = useRef(0);
+  const pendingFishSegmentsRef = useRef<string[]>([]);
   const ttsTotalsRef = useRef({ segments: 0, chunks: 0, bytes: 0, firstAudioMs: null as number | null });
   const ttsTimingTotalsRef = useRef<TimingTotals>(ZERO_TIMING_TOTALS);
   const playbackRef = useRef<AudioPlayback | null>(null);
@@ -230,6 +231,7 @@ export function ChatPanel() {
     const speechRun = speechRunRef.current + 1;
     speechRunRef.current = speechRun;
     const speechBuffer = createSpeechBuffer();
+    pendingFishSegmentsRef.current = [];
     if (canStreamSpeech) {
       stopTts('starting reply audio…');
       speechRunRef.current = speechRun;
@@ -257,7 +259,11 @@ export function ChatPanel() {
           setStreaming(acc);
           if (canStreamSpeech) {
             for (const segment of speechBuffer.push(ev.text)) {
-              queueSpeechSegment(segment, speechRun);
+              if (ttsProvider === 'fish') {
+                pendingFishSegmentsRef.current.push(segment);
+              } else {
+                queueSpeechSegment(segment, speechRun);
+              }
             }
           }
         } else if (ev.type === 'done') {
@@ -267,7 +273,14 @@ export function ChatPanel() {
           setMeta(ev.meta);
           if (canStreamSpeech) {
             for (const segment of speechBuffer.flush()) {
-              queueSpeechSegment(segment, speechRun);
+              if (ttsProvider === 'fish') {
+                pendingFishSegmentsRef.current.push(segment);
+              } else {
+                queueSpeechSegment(segment, speechRun);
+              }
+            }
+            if (ttsProvider === 'fish' && pendingFishSegmentsRef.current.length > 0) {
+              void synthesizeQueuedText(message, speechRun, pendingFishSegmentsRef.current);
             }
           } else if (autoSpeak && getActiveTtsKey().trim() && message.trim()) {
             void speak(message);
@@ -298,6 +311,7 @@ export function ChatPanel() {
     ttsQueueRef.current = Promise.resolve();
     playbackRef.current?.stop();
     ttsAbortRef.current = null;
+    pendingFishSegmentsRef.current = [];
     setTtsStatus(status);
     ttsTimingTotalsRef.current = ZERO_TIMING_TOTALS;
     setTtsTimingStatus(status === 'stopped' ? 'timing=stopped' : 'timing=idle');
@@ -310,7 +324,7 @@ export function ChatPanel() {
     ttsTotalsRef.current = { segments: 0, chunks: 0, bytes: 0, firstAudioMs: null };
     ttsTimingTotalsRef.current = ZERO_TIMING_TOTALS;
     setTtsTimingStatus('timing=waiting');
-    await synthesizeQueuedText(message, runId);
+    await synthesizeQueuedText(message, runId, ttsProvider === 'fish' ? fishCompareSegments(message) : undefined);
   };
 
   const queueSpeechSegment = (message: string, runId: number) => {
@@ -325,7 +339,7 @@ export function ChatPanel() {
     void ttsQueueRef.current;
   };
 
-  const synthesizeQueuedText = async (message: string, runId: number) => {
+  const synthesizeQueuedText = async (message: string, runId: number, textSegments?: string[]) => {
     const activeTtsKey = getActiveTtsKey().trim();
     if (!activeTtsKey) {
       setError(`Enter a ${ttsProvider === 'inworld' ? 'Inworld' : 'Fish'} TTS key first.`);
@@ -354,7 +368,12 @@ export function ChatPanel() {
               bufferCharThreshold: inworldBufferCharThreshold,
               autoMode: true,
             }
-          : { provider: 'fish', text: message, voiceId: voiceId.trim() || undefined },
+          : {
+              provider: 'fish',
+              text: message,
+              textSegments: textSegments?.length ? textSegments : undefined,
+              voiceId: voiceId.trim() || undefined,
+            },
         { ttsKey: activeTtsKey },
         controller.signal,
       )) {
