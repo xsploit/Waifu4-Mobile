@@ -101,6 +101,7 @@ import {
   formatChatTurns,
   type ChatTurn,
 } from './lib/chat/chat-turn';
+import { resolveScopedConversationSnapshot } from './lib/chat/conversation-scope';
 import {
   describeTwitchAiQueueBackpressure,
   enqueueTwitchAiJobWithBackpressure,
@@ -6613,7 +6614,16 @@ function App() {
           next.personas.find((persona) => persona.id === next.activePersonaId) ??
           next.personas[0] ??
           DEFAULT_PERSONA;
-        activeChatHistoryStateKeyRef.current = getLocalConversationStateKey(nextActivePersona);
+        const nextActiveStateKey = getLocalConversationStateKey(nextActivePersona);
+        const scopedSnapshot = resolveScopedConversationSnapshot({
+          chatHistories: next.chatHistories,
+          fallbackChatHistory: next.chatHistory,
+          fallbackRelationshipMemory: next.relationshipMemory,
+          relationshipMemories: next.relationshipMemories,
+          stateKey: nextActiveStateKey,
+        });
+        activeChatHistoryStateKeyRef.current = nextActiveStateKey;
+        activeRelationshipStateKeyRef.current = nextActiveStateKey;
         await savePersistedChatState(next);
         setPersonas(next.personas);
         setActivePersonaId(next.activePersonaId);
@@ -6622,9 +6632,11 @@ function App() {
         setAiSettings(next.aiSettings);
         setChatHistories(next.chatHistories);
         chatHistoriesRef.current = next.chatHistories;
-        setChatHistory(next.chatHistories[activeChatHistoryStateKeyRef.current] ?? next.chatHistory);
-        setRelationshipMemory(next.relationshipMemory);
+        setChatHistory(scopedSnapshot.chatHistory);
+        setRelationshipMemory(scopedSnapshot.relationshipMemory);
+        relationshipMemoryRef.current = scopedSnapshot.relationshipMemory;
         setRelationshipMemories(next.relationshipMemories);
+        relationshipMemoriesRef.current = next.relationshipMemories;
         setChatInput(next.uiState.chatDraft);
         setChatLogOpen(next.uiState.chatLogOpen);
         setActiveTab(next.activeTab);

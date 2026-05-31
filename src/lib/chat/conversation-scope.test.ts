@@ -1,0 +1,66 @@
+import { describe, expect, it } from 'vitest';
+import { createDefaultRelationshipMemory } from './defaults';
+import type { ChatMessage } from './types';
+import { resolveScopedConversationSnapshot } from './conversation-scope';
+
+const fallbackHistory: ChatMessage[] = [
+  {
+    content: 'global history',
+    createdAt: 1,
+    id: 'global-user',
+    role: 'user',
+  },
+];
+
+describe('resolveScopedConversationSnapshot', () => {
+  it('uses scoped chat history and relationship memory for the active state key', () => {
+    const scopedHistory: ChatMessage[] = [
+      {
+        content: 'persona scoped history',
+        createdAt: 2,
+        id: 'scoped-user',
+        role: 'user',
+      },
+    ];
+    const scopedMemory = {
+      ...createDefaultRelationshipMemory(),
+      summary: 'persona scoped memory',
+    };
+
+    const snapshot = resolveScopedConversationSnapshot({
+      chatHistories: {
+        'local:persona:hikari': scopedHistory,
+      },
+      fallbackChatHistory: fallbackHistory,
+      fallbackRelationshipMemory: {
+        ...createDefaultRelationshipMemory(),
+        summary: 'global memory',
+      },
+      relationshipMemories: {
+        'local:persona:hikari': scopedMemory,
+      },
+      stateKey: 'local:persona:hikari',
+    });
+
+    expect(snapshot.chatHistory).toBe(scopedHistory);
+    expect(snapshot.relationshipMemory).toBe(scopedMemory);
+  });
+
+  it('falls back to legacy global chat history and memory when scoped data is absent', () => {
+    const fallbackMemory = {
+      ...createDefaultRelationshipMemory(),
+      summary: 'global memory',
+    };
+
+    const snapshot = resolveScopedConversationSnapshot({
+      chatHistories: {},
+      fallbackChatHistory: fallbackHistory,
+      fallbackRelationshipMemory: fallbackMemory,
+      relationshipMemories: {},
+      stateKey: 'local:persona:hikari',
+    });
+
+    expect(snapshot.chatHistory).toBe(fallbackHistory);
+    expect(snapshot.relationshipMemory).toBe(fallbackMemory);
+  });
+});
