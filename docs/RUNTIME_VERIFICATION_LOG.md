@@ -146,3 +146,40 @@ tts no-key guard=401
 voice list no-key guard=401
 voice create validation guard=400
 ```
+
+## 2026-05-31 Local Backup Compatibility Check
+
+Commands:
+
+```text
+npm test -- src/lib/product/local-transfer-backup.test.ts src/lib/chat/storage.test.ts
+```
+
+Result: passed. Vitest reported 17 passing tests across storage normalization and local transfer backup parsing.
+
+The current parser was also run against:
+
+```text
+C:\Users\SUBSECT\Downloads\web-waifu-4-local-backup-2026-05-30T03-03-43.json
+```
+
+Non-secret parse summary:
+
+```json
+{
+  "app": "web-waifu-4-local",
+  "activeTab": "account",
+  "providerSecrets": 6,
+  "savedVrmModels": 4,
+  "chatHistory": 36,
+  "chatHistories": 0,
+  "relationshipMemories": 3,
+  "voiceLabVoices": 1,
+  "includes": {
+    "chatHistory": true,
+    "providerSecrets": true,
+    "relationshipMemory": true,
+    "savedVrmModels": true
+  }
+}
+```
