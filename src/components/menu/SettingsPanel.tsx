@@ -158,6 +158,7 @@ type SettingsPanelProps = {
   twitchChannel: string;
   twitchConnectionLabel: string;
   twitchDirectChatEnabled: boolean;
+  twitchMembershipStatus: string;
   twitchQueueLength: number;
   twitchSettings: TwitchSettings;
   twitchStreamTranscriptCount: number;
@@ -281,6 +282,7 @@ export function SettingsPanel({
   twitchChannel,
   twitchConnectionLabel,
   twitchDirectChatEnabled,
+  twitchMembershipStatus,
   twitchQueueLength,
   twitchSettings,
   twitchStreamTranscriptCount,
@@ -364,6 +366,7 @@ export function SettingsPanel({
         chatOverlayOpen={chatOverlayOpen}
         connectionLabel={twitchConnectionLabel}
         directChatEnabled={twitchDirectChatEnabled}
+        membershipStatus={twitchMembershipStatus}
         onResetTwitchState={onResetTwitchState}
         onSetChannel={onSetTwitchChannel}
         onToggleChatOverlay={onToggleChatOverlay}

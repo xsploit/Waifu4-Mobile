@@ -13,6 +13,7 @@ type TwitchTabProps = {
   chatOverlayOpen: boolean;
   connectionLabel: string;
   directChatEnabled: boolean;
+  membershipStatus: string;
   onResetTwitchState: () => void;
   onSetChannel: (channel: string) => void;
   onToggleChatOverlay: (open: boolean) => void;
@@ -79,6 +80,7 @@ export function TwitchTab({
   chatOverlayOpen,
   connectionLabel,
   directChatEnabled,
+  membershipStatus,
   onResetTwitchState,
   onSetChannel,
   onToggleChatOverlay,
@@ -122,6 +124,9 @@ export function TwitchTab({
           </div>
           <div className="status-copy">
             Stream Mode: <strong>{twitchSettings.streamModeEnabled ? 'On' : 'Local only'}</strong>
+          </div>
+          <div className="status-copy">
+            Membership: <strong>{directChatEnabled ? membershipStatus : 'Disabled'}</strong>
           </div>
         </div>
       </div>

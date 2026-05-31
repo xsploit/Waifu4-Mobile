@@ -1903,6 +1903,7 @@ function App() {
     'Stream transcription idle.',
   );
   const [twitchStreamFrame, setTwitchStreamFrame] = useState<TwitchStreamFrame | null>(null);
+  const [twitchMembershipStatus, setTwitchMembershipStatus] = useState('Membership events idle.');
   const [twitchStreamVisionStatus, setTwitchStreamVisionStatus] = useState('Stream vision idle.');
   const [relationshipMemory, setRelationshipMemory] = useState<RelationshipMemory>(
     createDefaultRelationshipMemory,
@@ -6295,6 +6296,11 @@ function App() {
           directTwitchAiHandlerRef.current(message);
         }
       },
+      onMembership: (event) => {
+        setTwitchMembershipStatus(
+          `${event.displayName} ${event.type === 'join' ? 'joined' : 'left'} #${event.channel}.`,
+        );
+      },
       onStatus: (message, level = 'info') => {
         if (message.includes('connected to #')) {
           setTwitchConnectionLabel('Live');
@@ -6983,6 +6989,7 @@ function App() {
                 }
                 directTwitchClientRef.current?.switchChannel(cleanChannel);
                 setTwitchChannel(cleanChannel);
+                setTwitchMembershipStatus('Membership events idle.');
                 appendSystemMessage(`Twitch channel switched to #${cleanChannel}.`);
               }}
               onSpeakLastReply={handleSpeakLastReply}
@@ -7026,6 +7033,7 @@ function App() {
               twitchChannel={twitchChannel}
               twitchConnectionLabel={twitchConnectionLabel}
               twitchDirectChatEnabled={DIRECT_TWITCH_CHAT_ENABLED}
+              twitchMembershipStatus={twitchMembershipStatus}
               twitchQueueLength={twitchAiQueueRef.current.length}
               twitchSettings={twitchSettings}
               twitchStreamTranscriptCount={twitchStreamTranscripts.length}
