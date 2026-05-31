@@ -192,6 +192,21 @@ describe('model capability helpers', () => {
         type: 'embedding',
       }),
     ).toBe(false);
+    expect(
+      isChatModel({
+        id: 'openai/text-embedding-3-small',
+        supportedParameters: [],
+        supportsStructuredOutputs: false,
+      }),
+    ).toBe(false);
+    expect(
+      isChatModel({
+        id: 'vendor/custom-model',
+        supportedParameters: [],
+        supportsStructuredOutputs: false,
+        tags: ['text-embedding'],
+      }),
+    ).toBe(false);
   });
 
   it('detects image input from provider modality tags', () => {

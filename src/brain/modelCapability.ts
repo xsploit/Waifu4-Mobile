@@ -208,7 +208,13 @@ export function selectReplyFormat(
 }
 
 export function isChatModel(info?: ProviderModelInfo | null) {
-  return !info?.type || info.type === 'language';
+  if (!info) {
+    return false;
+  }
+  if (isEmbeddingModel(info)) {
+    return false;
+  }
+  return !info.type || info.type === 'language';
 }
 
 export function isEmbeddingModel(info?: ProviderModelInfo | null) {
