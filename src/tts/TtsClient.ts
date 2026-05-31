@@ -1,3 +1,5 @@
+import type { SpeechTiming } from './SpeechTimingTypes';
+
 export type TtsCredentials = {
   ttsKey: string;
 };
@@ -6,6 +8,7 @@ export type TtsStreamRequest = {
   text: string;
   textSegments?: string[];
   provider?: 'fish' | 'inworld';
+  fishTransport?: 'websocket' | 'timestamp-sse';
   voiceId?: string;
   backend?: 's1' | 's2-pro';
   format?: 'pcm' | 'mp3' | 'wav' | 'opus';
@@ -45,6 +48,19 @@ export type TtsTimestampInfo = {
     characterStartTimeSeconds?: number[];
     characterEndTimeSeconds?: number[];
   };
+  fishAlignment?: {
+    content?: string;
+    chunkSeq: number;
+    chunkAudioOffsetSec: number;
+    audioDuration?: number;
+    segments: Array<{
+      text: string;
+      start: number;
+      end: number;
+      globalStart: number;
+      globalEnd: number;
+    }>;
+  };
 };
 
 export type TtsTimingSummary = {
@@ -60,6 +76,7 @@ export type TtsAudioEvent = {
   format: 'pcm' | 'mp3' | 'wav' | 'opus';
   sampleRate?: number;
   timestamps?: TtsTimestampInfo;
+  speechTiming?: SpeechTiming;
 };
 
 export type TtsStreamEvent =
@@ -77,6 +94,10 @@ export type TtsStreamEvent =
         words?: number;
         phonemes?: number;
         visemes?: number;
+        nativeWords?: number;
+        nativePhonemes?: number;
+        nativeVisemes?: number;
+        timingSource?: string;
       };
     }
   | { type: 'error'; error: string };
@@ -87,6 +108,7 @@ type WireTtsEvent = {
   format?: unknown;
   sampleRate?: unknown;
   timestamps?: unknown;
+  speechTiming?: unknown;
   stats?: unknown;
   error?: unknown;
 };
@@ -136,6 +158,8 @@ function toTtsEvent(ev: WireTtsEvent): TtsStreamEvent | null {
       sampleRate: typeof ev.sampleRate === 'number' ? ev.sampleRate : undefined,
       timestamps:
         ev.timestamps && typeof ev.timestamps === 'object' ? (ev.timestamps as TtsTimestampInfo) : undefined,
+      speechTiming:
+        ev.speechTiming && typeof ev.speechTiming === 'object' ? (ev.speechTiming as SpeechTiming) : undefined,
     };
   }
   if (ev.type === 'done') {
@@ -153,6 +177,10 @@ function toTtsEvent(ev: WireTtsEvent): TtsStreamEvent | null {
         words: typeof stats.words === 'number' ? stats.words : undefined,
         phonemes: typeof stats.phonemes === 'number' ? stats.phonemes : undefined,
         visemes: typeof stats.visemes === 'number' ? stats.visemes : undefined,
+        nativeWords: typeof stats.nativeWords === 'number' ? stats.nativeWords : undefined,
+        nativePhonemes: typeof stats.nativePhonemes === 'number' ? stats.nativePhonemes : undefined,
+        nativeVisemes: typeof stats.nativeVisemes === 'number' ? stats.nativeVisemes : undefined,
+        timingSource: typeof stats.timingSource === 'string' ? stats.timingSource : undefined,
       },
     };
   }
@@ -177,6 +205,7 @@ export async function* streamTts(
       text: request.text,
       textSegments: request.textSegments,
       provider: request.provider ?? 'fish',
+      fishTransport: request.fishTransport,
       voiceId: request.voiceId,
       backend: request.backend ?? 's2-pro',
       format: request.format ?? 'pcm',

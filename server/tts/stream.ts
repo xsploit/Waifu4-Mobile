@@ -1,13 +1,15 @@
 import type { Request, Response } from 'express';
 import { z } from 'zod';
 import { readProviderKeys } from '../ai/providerKeys';
-import { streamFishTts } from './FishTtsStream';
+import { streamFishTimestampTts, streamFishTts } from './FishTtsStream';
 import { streamInworldTts } from './InworldTtsStream';
+import { buildSpeechTiming, createSpeechTimingAccumulator } from './SpeechTiming';
 
 const ttsRequestSchema = z.object({
   text: z.string().min(1),
   textSegments: z.array(z.string().min(1)).max(32).optional(),
   provider: z.enum(['fish', 'inworld']).optional(),
+  fishTransport: z.enum(['websocket', 'timestamp-sse']).optional(),
   voiceId: z.string().optional(),
   backend: z.enum(['s1', 's2-pro']).optional(),
   format: z.enum(['pcm', 'mp3', 'wav', 'opus']).optional(),
@@ -58,6 +60,23 @@ export async function handleTtsStream(req: Request, res: Response): Promise<void
 
   const controller = new AbortController();
   res.on('close', () => controller.abort());
+  const timing = createSpeechTimingAccumulator();
+  const sendAudio = (
+    chunk: Uint8Array,
+    meta: { format: string; sampleRate?: number; timestamps?: unknown },
+  ) => {
+    const timestamps = meta.timestamps && typeof meta.timestamps === 'object' ? meta.timestamps : undefined;
+    const speechTiming = buildSpeechTiming(timestamps);
+    timing.add(speechTiming, timestamps);
+    send({
+      type: 'audio',
+      audio: Buffer.from(chunk).toString('base64'),
+      format: meta.format,
+      sampleRate: meta.sampleRate,
+      timestamps,
+      speechTiming,
+    });
+  };
 
   try {
     const stats =
@@ -79,20 +98,36 @@ export async function handleTtsStream(req: Request, res: Response): Promise<void
               signal: controller.signal,
             },
             (chunk, meta) =>
-              send({
-                type: 'audio',
-                audio: Buffer.from(chunk).toString('base64'),
-                format: 'pcm',
-                sampleRate: meta.sampleRate,
-                timestamps: meta.timestamps,
-              }),
+              sendAudio(chunk, { format: 'pcm', sampleRate: meta.sampleRate, timestamps: meta.timestamps }),
           )
-        : await streamFishTts(
-            { ...parsed.data, apiKey: ttsKey, signal: controller.signal },
-            (chunk) =>
-              send({ type: 'audio', audio: Buffer.from(chunk).toString('base64'), format, sampleRate }),
-          );
-    send({ type: 'done', ok: true, stats });
+        : parsed.data.fishTransport === 'timestamp-sse'
+          ? await streamFishTimestampTts(
+              { ...parsed.data, apiKey: ttsKey, signal: controller.signal },
+              (chunk, meta) =>
+                sendAudio(chunk, { format, sampleRate, timestamps: meta.timestamps }),
+            )
+          : await streamFishTts(
+              { ...parsed.data, apiKey: ttsKey, signal: controller.signal },
+              (chunk) => sendAudio(chunk, { format, sampleRate }),
+            );
+    const timingSummary = timing.summary();
+    send({
+      type: 'done',
+      ok: true,
+      stats: timingSummary.timestampChunks
+        ? {
+            ...stats,
+            nativeWords: timingSummary.nativeWords,
+            nativePhonemes: timingSummary.nativePhonemes,
+            nativeVisemes: timingSummary.nativeVisemes,
+            timestampChunks: timingSummary.timestampChunks,
+            words: timingSummary.words,
+            phonemes: timingSummary.phonemes,
+            visemes: timingSummary.visemes,
+            timingSource: 'provider-words+derived-phonemes',
+          }
+        : stats,
+    });
   } catch (err) {
     send({ type: 'error', ok: false, error: err instanceof Error ? err.message : String(err) });
   } finally {

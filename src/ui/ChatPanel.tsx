@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { fetchModels, streamChat } from '../llm/LlmClient';
 import { AudioPlayback, type PlaybackSnapshot } from '../tts/AudioPlayback';
 import { streamTts, type TtsStreamEvent, type TtsTimestampInfo } from '../tts/TtsClient';
+import { summarizeSpeechTiming, type SpeechTiming } from '../tts/SpeechTimingTypes';
 import { createSpeechBuffer } from '../tts/SpeechBuffer';
 import { createWLipSyncMouth, type WLipSyncMouth } from '../lipsync/WLipSyncMouth';
 import { ZERO_MOUTH_WEIGHTS, type MouthWeights } from '../lipsync/MouthWeights';
@@ -46,6 +47,7 @@ type BenchmarkCandidate = {
   key: string;
   request: {
     provider: TtsProvider;
+    fishTransport?: 'websocket' | 'timestamp-sse';
     voiceId?: string;
     inworldTransport?: InworldTransport;
     inworldModelId?: string;
@@ -67,6 +69,8 @@ type BenchmarkResult = {
   chunks: number;
   bytes: number;
   timing: TimingTotals;
+  timestampSamples?: TtsTimestampInfo[];
+  speechTimingSamples?: SpeechTiming[];
   connectionReused?: boolean;
   error?: string;
 };
@@ -436,7 +440,13 @@ export function ChatPanel() {
     mouthFrameRef.current = window.requestAnimationFrame(tick);
   };
 
-  const summarizeTimestamps = (timestamps: TtsTimestampInfo | undefined): TimingTotals => {
+  const summarizeTimestamps = (
+    timestamps: TtsTimestampInfo | undefined,
+    speechTiming?: SpeechTiming,
+  ): TimingTotals => {
+    if (speechTiming) {
+      return summarizeSpeechTiming(speechTiming);
+    }
     const words = timestamps?.wordAlignment?.words?.length ?? 0;
     const phonemes =
       timestamps?.wordAlignment?.phoneticDetails?.reduce(
@@ -456,8 +466,8 @@ export function ChatPanel() {
     };
   };
 
-  const addTiming = (timestamps: TtsTimestampInfo | undefined) => {
-    const counts = summarizeTimestamps(timestamps);
+  const addTiming = (timestamps: TtsTimestampInfo | undefined, speechTiming?: SpeechTiming) => {
+    const counts = summarizeTimestamps(timestamps, speechTiming);
     if (!counts.timestampChunks) {
       return;
     }
@@ -619,6 +629,17 @@ export function ChatPanel() {
           sampleRate: 44100,
         },
       });
+      candidates.push({
+        id: 'fish-timestamp-sse',
+        label: 'Fish timestamp SSE',
+        key: ttsKey.trim(),
+        request: {
+          provider: 'fish',
+          fishTransport: 'timestamp-sse',
+          voiceId: voiceId.trim() || undefined,
+          sampleRate: 44100,
+        },
+      });
     }
     if (inworldKey.trim()) {
       const baseInworld = {
@@ -685,11 +706,14 @@ export function ChatPanel() {
           let chunks = 0;
           let bytes = 0;
           let connectionReused: boolean | undefined;
+          const timestampSamples: TtsTimestampInfo[] = [];
+          const speechTimingSamples: SpeechTiming[] = [];
           try {
             for await (const ev of streamTts(
               {
                 text,
                 provider: candidate.request.provider,
+                fishTransport: candidate.request.fishTransport,
                 voiceId: candidate.request.voiceId,
                 inworldTransport: candidate.request.inworldTransport,
                 inworldModelId: candidate.request.inworldModelId,
@@ -708,9 +732,15 @@ export function ChatPanel() {
                 if (ev.format !== 'pcm') {
                   throw new Error(`Unsupported audio format ${ev.format}`);
                 }
-                const counts = summarizeTimestamps(ev.timestamps);
+                if (ev.timestamps && timestampSamples.length < 3) {
+                  timestampSamples.push(ev.timestamps);
+                }
+                if (ev.speechTiming && speechTimingSamples.length < 3) {
+                  speechTimingSamples.push(ev.speechTiming);
+                }
+                const counts = summarizeTimestamps(ev.timestamps, ev.speechTiming);
                 timing = mergeTimingTotals(timing, counts);
-                addTiming(ev.timestamps);
+                addTiming(ev.timestamps, ev.speechTiming);
                 await playback.playPcmChunk(ev.audio, ev.sampleRate ?? candidate.request.sampleRate);
               } else if (ev.type === 'done') {
                 doneStats = ev.stats.firstAudioMs;
@@ -718,6 +748,14 @@ export function ChatPanel() {
                 bytes = ev.stats.bytes;
                 connectionReused = ev.stats.connectionReused;
                 if (timing.timestampChunks === 0 && ev.stats.timestampChunks !== undefined) {
+                  timing = {
+                    timestampChunks: ev.stats.timestampChunks,
+                    words: ev.stats.words ?? 0,
+                    phonemes: ev.stats.phonemes ?? 0,
+                    visemes: ev.stats.visemes ?? 0,
+                  };
+                }
+                if (ev.stats.timestampChunks !== undefined) {
                   timing = {
                     timestampChunks: ev.stats.timestampChunks,
                     words: ev.stats.words ?? 0,
@@ -742,6 +780,8 @@ export function ChatPanel() {
               chunks,
               bytes,
               timing,
+              timestampSamples: timestampSamples.length ? timestampSamples : undefined,
+              speechTimingSamples: speechTimingSamples.length ? speechTimingSamples : undefined,
               connectionReused,
             };
             results.push(result);
@@ -758,6 +798,8 @@ export function ChatPanel() {
               chunks,
               bytes,
               timing,
+              timestampSamples: timestampSamples.length ? timestampSamples : undefined,
+              speechTimingSamples: speechTimingSamples.length ? speechTimingSamples : undefined,
               error: err instanceof Error ? err.message : String(err),
             };
             results.push(result);
@@ -837,7 +879,7 @@ export function ChatPanel() {
         setTtsStatus(`error: unsupported audio format ${ev.format}`);
         return;
       }
-      addTiming(ev.timestamps);
+      addTiming(ev.timestamps, ev.speechTiming);
       await playback.playPcmChunk(ev.audio, ev.sampleRate ?? 44100);
     } else if (ev.type === 'done') {
       const firstAudioMs = ttsTotalsRef.current.firstAudioMs ?? ev.stats.firstAudioMs;
@@ -847,7 +889,7 @@ export function ChatPanel() {
         bytes: ttsTotalsRef.current.bytes + ev.stats.bytes,
         firstAudioMs,
       };
-      if (ev.stats.timestampChunks !== undefined && ttsTimingTotalsRef.current.timestampChunks === 0) {
+      if (ev.stats.timestampChunks !== undefined) {
         ttsTimingTotalsRef.current = {
           timestampChunks: ev.stats.timestampChunks,
           words: ev.stats.words ?? ttsTimingTotalsRef.current.words,
