@@ -45,7 +45,7 @@ Verified against the active `SettingsPanel` tab registry and each mounted tab co
 | Emotion Log | `EmotionTelemetryTab` | `LIVE` | Mounted with assistant emotion events and live VRM telemetry snapshot. |
 | Character | `CharacterTab` | `LIVE` | Mounted with persona save/delete/activate callbacks; persona scoping is owned by `App.tsx`. |
 | Voice Lab | `VoiceLabTab` | `LIVE / VERIFY` | Mounted with saved voices, persona bindings, current voice binding, and provider voice creation callback. Fish/Inworld live listing/cloning still needs real Account-tab key verification. |
-| AI | `AiTab` | `LIVE` | Mounted with model list, metadata map, health refresh, and `aiSettings`; metadata tags drive chat picker/capability display. |
+| AI | `AiTab` | `LIVE / VERIFY` | Mounted with model list, metadata map, health refresh, `aiSettings`, and main-chat Tavily tool controls; metadata tags drive chat picker/capability display. Real Tavily-key runtime verification remains. |
 | Twitch | `TwitchTab` | `LIVE / PRIMARY` | Mounted with frontend direct IRC status, channel switch, queue/status, stream ASR, and frame/vision settings. Backend Twitch runtime remains optional/fallback. |
 | Memory | `ContextTab` | `LIVE` | Mounted with chat reset, GRILLO/Ladybug controls, memory debug, and provider-metadata-filtered embedding controls. |
 | TTS | `TtsTab` | `LIVE` | Mounted with Fish/Inworld/Piper settings, voice refresh/select/test/speak/stop/cache, and browser benchmark callbacks. Piper remains parked/back-burner. |
@@ -204,7 +204,7 @@ Verification item:
 
 ## AI
 
-Status: `LIVE / PARTIAL`.
+Status: `LIVE / VERIFY`.
 
 Purpose:
 
@@ -219,16 +219,17 @@ State/seams:
 - Model metadata comes from backend `/ai/models`.
 - Chat uses rebuilt backend `/ai/chat`.
 
-Current gap:
+Main assistant tools:
 
-- Tool settings (`toolChoiceMode`, `maxToolRounds`) and the Account-tab Tavily key surface are present, but main assistant `/ai/chat` does not yet execute AI SDK tools. Current live tool execution is GRILLO/Ladybug memory-worker tooling only. Restoring main assistant web/tool calls is LLM-adjacent and needs a deliberate implementation slice.
-- Adaptation map for that slice:
-  - Keep the existing browser header path: Account Tavily key -> `x-yourwifey-tavily-provider-key`.
-  - Extend backend `readProviderKeys` to read the Tavily request key/env fallback.
-  - Reuse the copied `src/lib/grillo/chat-tools.ts` Tavily tool definitions or extract their shared schema/execute helpers; do not duplicate a second Tavily schema by hand.
-  - Add AI SDK `tools`, `toolChoice`, and bounded `maxSteps`/round handling in `server/ai/llmGateway.ts` for main chat only.
-  - For OpenRouter, set `require_parameters=true` when tools are attached, same as structured-output special parameters.
-  - Keep memory-scope tool behavior separate; GRILLO/Ladybug worker tools are not the main assistant tool lane.
+- Tool settings (`toolChoiceMode`, `maxToolRounds`) and the Account-tab Tavily key surface are wired into `/ai/chat`.
+- Main assistant Tavily tools use AI SDK tools with bounded step handling in `server/ai/llmGateway.ts`.
+- Tavily schema/request mapping is shared through `src/lib/grillo/tavily-tool-definitions.ts` so GRILLO worker tools and main-chat tools do not drift.
+- OpenRouter sets `require_parameters=true` when tools are attached, same as structured-output special parameters.
+- Memory-scope tool behavior remains separate; GRILLO/Ladybug worker tools are not the main assistant tool lane.
+
+Verification item:
+
+- Test a real Account-tab Tavily key in main chat with both OpenRouter and Vercel Gateway models.
 
 Constraint:
 

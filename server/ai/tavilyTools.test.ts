@@ -28,20 +28,20 @@ describe('Tavily tools', () => {
     );
 
     expect(result).toEqual({ answer: 'ok', results: [] });
-    expect(fetchMock).toHaveBeenCalledWith('https://api.tavily.com/search', {
-      method: 'POST',
-      headers: {
-        Authorization: 'Bearer tvly-test-key',
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        query: 'latest WebGPU news',
-        search_depth: 'advanced',
-        max_results: 5,
-        include_answer: true,
-        include_images: false,
-        include_raw_content: false,
-      }),
+    const [url, init] = fetchMock.mock.calls[0] as unknown as [string, RequestInit];
+    expect(url).toBe('https://api.tavily.com/search');
+    expect(init.method).toBe('POST');
+    expect(init.headers).toEqual({
+      Authorization: 'Bearer tvly-test-key',
+      'Content-Type': 'application/json',
+    });
+    expect(JSON.parse(String(init.body))).toEqual({
+      query: 'latest WebGPU news',
+      max_results: 5,
+      search_depth: 'advanced',
+      include_answer: true,
+      include_images: false,
+      include_raw_content: false,
     });
   });
 });

@@ -1,5 +1,14 @@
 // @ts-nocheck
 import { z } from "zod";
+import {
+  tavilyCrawlInputSchema,
+  tavilyExtractInputSchema,
+  tavilySearchInputSchema,
+  tavilyToolDescriptions,
+  toTavilyCrawlRequest,
+  toTavilyExtractRequest,
+  toTavilySearchRequest,
+} from "./tavily-tool-definitions";
 
 export interface ToolContext {
   userId: string;
@@ -346,26 +355,12 @@ export function buildCoreTools(
   if (ctx.tavilySearch) {
     registerTool(
       "core.tavily_search",
-      "Search the web for factual or recent information. Use this first to discover relevant pages and links.",
-      z.object({
-        query: z.string().describe("Search query to run."),
-        search_depth: z.enum(["basic", "advanced"]).default("advanced").describe("Search depth; advanced is slower but broader."),
-        max_results: z.number().int().min(1).max(10).default(5).describe("Number of results to return (1-10)."),
-      }),
+      tavilyToolDescriptions.search,
+      tavilySearchInputSchema,
       20_000,
       async (args) => {
-        const { query, search_depth, max_results } = args as {
-          query: string;
-          search_depth: "basic" | "advanced";
-          max_results: number;
-        };
         return runWithTimeout("core.tavily_search", 20_000, () => ctx.tavilySearch!({
-          query,
-          max_results: max_results ?? 5,
-          search_depth: search_depth ?? "advanced",
-          include_answer: true,
-          include_images: false,
-          include_raw_content: false,
+          ...toTavilySearchRequest(tavilySearchInputSchema.parse(args)),
         }));
       },
     );
@@ -374,22 +369,12 @@ export function buildCoreTools(
   if (ctx.tavilyExtract) {
     registerTool(
       "core.tavily_extract",
-      "Extract cleaned page content from specific URLs. Use after tavily_search when you need deeper details from selected links.",
-      z.object({
-        urls: z.array(z.string()).min(1).max(20).describe("One or more URLs to extract."),
-        extract_depth: z.enum(["basic", "advanced"]).default("basic").describe("Extraction depth; advanced may return richer content."),
-        max_results: z.number().int().min(1).max(10).default(5).describe("Maximum extracted items to return in tool output."),
-      }),
+      tavilyToolDescriptions.extract,
+      tavilyExtractInputSchema,
       20_000,
       async (args) => {
-        const { urls, extract_depth } = args as {
-          urls: string[];
-          extract_depth: "basic" | "advanced";
-        };
         return runWithTimeout("core.tavily_extract", 20_000, () => ctx.tavilyExtract!({
-          urls,
-          extract_depth: extract_depth ?? "basic",
-          include_images: false,
+          ...toTavilyExtractRequest(tavilyExtractInputSchema.parse(args)),
         }));
       },
     );
@@ -398,24 +383,12 @@ export function buildCoreTools(
   if (ctx.tavilyCrawl) {
     registerTool(
       "core.tavily_crawl",
-      "Crawl a site from a starting URL and return discovered page content. Use this for broader multi-page collection.",
-      z.object({
-        url: z.string().describe("Starting URL to crawl."),
-        extract_depth: z.enum(["basic", "advanced"]).default("basic").describe("Content depth for crawled pages."),
-        max_results: z.number().int().min(1).max(30).default(10).describe("Maximum crawled items to return in tool output."),
-      }),
+      tavilyToolDescriptions.crawl,
+      tavilyCrawlInputSchema,
       25_000,
       async (args) => {
-        const { url, extract_depth, max_results } = args as {
-          url: string;
-          extract_depth: "basic" | "advanced";
-          max_results: number;
-        };
         return runWithTimeout("core.tavily_crawl", 25_000, () => ctx.tavilyCrawl!({
-          url,
-          max_results: max_results ?? 10,
-          crawl_depth: (extract_depth ?? "basic") as "basic" | "advanced",
-          include_images: false,
+          ...toTavilyCrawlRequest(tavilyCrawlInputSchema.parse(args)),
         }));
       },
     );
