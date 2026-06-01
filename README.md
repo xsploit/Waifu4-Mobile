@@ -61,7 +61,7 @@ backup restore, while keeping the original frontend look and tab workflow.
       <h3 align="center">Brain</h3>
       <ul>
         <li>OpenRouter Responses and Vercel Gateway chat lanes.</li>
-        <li>OpenRouter provider routing controls per model instead of one generic GPT-style dropdown.</li>
+        <li>OpenRouter Routing modes: Auto, Fastest latency, Highest throughput / Nitro, and Pinned provider slug.</li>
         <li>OpenRouter model catalog loading with provider metadata displayed in the AI tab.</li>
         <li>Structured/text reply routing from model capability metadata.</li>
         <li>OpenRouter-aware model picker metadata: tools, reasoning, vision, images, files, context, max tokens, structured outputs, and embedding tags.</li>
@@ -151,9 +151,12 @@ looks capable but then rejects the request shape at runtime.
 - **Provider-aware request lane:** OpenRouter Responses models and Vercel
   Gateway models share the same UI flow, but the request body is shaped per
   provider so compatibility fixes do not leak across lanes.
-- **OpenRouter provider routing per model:** selected OpenRouter models can
-  expose routing/provider preferences so the app can choose how that specific
-  model is served instead of treating OpenRouter as a single opaque provider.
+- **OpenRouter Routing modes:** selected OpenRouter models can use Auto,
+  Fastest latency, Highest throughput / Nitro, or Pinned provider routing.
+  Fastest latency sends `provider.sort=latency`; throughput sends
+  `provider.sort=throughput`; pinned sends `provider.only` with a provider slug
+  or comma-separated slug list, with optional fallback if the pinned provider
+  fails.
 - **Structured output gating:** structured replies are only used for OpenRouter
   models that advertise structured output support. Other models use the text
   lane with metadata parsing.
@@ -179,7 +182,7 @@ looks capable but then rejects the request shape at runtime.
 | Surface | What it covers |
 | --- | --- |
 | Account | Browser-stored provider keys for OpenRouter, Vercel Gateway, Fish, Inworld, Tavily, and other providers; backend env keys are fallback only. |
-| AI | OpenRouter provider routing per model, model catalog refresh, OpenRouter capability badges, structured/text lane selection, POML prompt configuration, tool toggles, and streaming reply settings. |
+| AI | OpenRouter Routing modes, model catalog refresh, OpenRouter capability badges, structured/text lane selection, POML prompt configuration, tool toggles, and streaming reply settings. |
 | TTS | Per-provider mode selection for Fish WebSocket, Fish Timestamp SSE, Inworld HTTP, Inworld WebSocket, Early Chunks, latency controls, timestamp controls, continuity controls, and audible benchmark comparison. |
 | Avatar | VRM loading/saving, stage controls, animation categories, expression resolution, talking/idle animation hooks, mouth ownership, and emotion telemetry. |
 | Twitch | Frontend direct IRC, local/Twitch queue intake, command handling, membership/event reactions, transcription hooks, and video-frame context for vision models. |
@@ -194,7 +197,7 @@ looks capable but then rejects the request shape at runtime.
   </tr>
   <tr>
     <td>LLM</td>
-    <td>OpenRouter Responses, Vercel Gateway, streamed text, OpenRouter provider routing per model, structured/text lane gating, provider-specific request shaping.</td>
+    <td>OpenRouter Responses, Vercel Gateway, streamed text, OpenRouter Auto/latency/throughput/pinned-provider routing, structured/text lane gating, provider-specific request shaping.</td>
   </tr>
   <tr>
     <td>OpenRouter Metadata</td>
