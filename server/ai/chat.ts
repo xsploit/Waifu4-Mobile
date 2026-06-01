@@ -13,7 +13,14 @@ import { streamFishTtsTextStream } from '../tts/FishTtsStream';
 
 const providerSchema = z.enum(['vercel-gateway', 'openrouter-responses']);
 const replyFormatSchema = z.enum(['structured', 'text']);
-const toolChoiceModeSchema = z.enum(['auto', 'required']);
+const toolChoiceModeSchema = z.enum(['off', 'auto', 'required']);
+const openRouterRoutingSchema = z
+  .object({
+    mode: z.enum(['auto', 'latency', 'throughput', 'pinned']),
+    providers: z.array(z.string().min(1)).optional(),
+    allowFallbacks: z.boolean().optional(),
+  })
+  .optional();
 const messageImageSchema = z.object({
   imageUrl: z.string().min(1),
   mediaType: z.string().min(1).optional(),
@@ -40,6 +47,7 @@ const chatRequestInputSchema = z.object({
   maxTokens: z.number().int().positive().optional(),
   toolChoiceMode: toolChoiceModeSchema.optional(),
   maxToolRounds: z.number().int().min(1).max(30).optional(),
+  openRouterRouting: openRouterRoutingSchema,
   stream: z.boolean().default(true),
   ttsBridge: z.unknown().optional(),
 });
@@ -60,6 +68,7 @@ export function normalizeChatRequest(input: z.infer<typeof chatRequestInputSchem
     maxTokens: input.maxTokens,
     toolChoiceMode: input.toolChoiceMode,
     maxToolRounds: input.maxToolRounds,
+    openRouterRouting: input.openRouterRouting,
     stream: input.stream,
   };
 }
@@ -151,7 +160,7 @@ export async function handleChat(req: Request, res: Response): Promise<void> {
           voiceId: bridgeRequest?.voiceId,
           backend: bridgeRequest?.backend,
           format: 'pcm',
-          sampleRate: 44100,
+          sampleRate: bridgeRequest?.sampleRate ?? 44100,
           chunkLength: bridgeRequest?.chunkLength,
           latency: bridgeRequest?.latency,
           conditionOnPreviousChunks: bridgeRequest?.conditionOnPreviousChunks,
@@ -162,7 +171,7 @@ export async function handleChat(req: Request, res: Response): Promise<void> {
           send('audio', {
             audio: Buffer.from(chunk).toString('base64'),
             mimeType: 'audio/pcm',
-            sampleRate: 44100,
+            sampleRate: bridgeRequest?.sampleRate ?? 44100,
           }),
       ).then(
         () => undefined,

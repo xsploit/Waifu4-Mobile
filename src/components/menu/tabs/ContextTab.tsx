@@ -90,6 +90,7 @@ export function ContextTab({
   const recentBlocks = [...grilloMemoryState.blocks].reverse().slice(0, 6);
   const recentCandidates = [...grilloMemoryState.candidates].reverse().slice(0, 8);
   const recentDiary = [...grilloMemoryState.diaryEntries].reverse().slice(0, 4);
+  const latestReflectiveDiary = recentDiary[0] ?? null;
   const promotedCount = grilloMemoryState.promotedCandidateIds.length;
   const hasGrilloMemory =
     grilloMemoryState.blocks.length > 0 ||
@@ -1039,7 +1040,9 @@ export function ContextTab({
         <pre className="context-preview">
           {relationshipMemory.diaryEntry
             ? relationshipMemory.diaryEntry
-            : 'No diary entry written yet.'}
+            : latestReflectiveDiary
+              ? `${latestReflectiveDiary.summary}\n\n${latestReflectiveDiary.personalThought}`
+              : 'No diary entry written yet.'}
         </pre>
       </div>
 

@@ -4,12 +4,13 @@ export const LIVE_TTS_BRIDGE_FINAL_WAIT_MS = 15_000;
 
 export type LiveTtsBridgeRequest = {
   backend?: FishBackend;
-  chunkingStrategy?: 'app' | 'python-safe' | 'eager';
+  chunkingStrategy?: 'app' | 'python-safe' | 'eager' | 'fast-phrase' | 'safe-phrase';
   chunkLength?: number;
   conditionOnPreviousChunks?: boolean;
   latency?: FishStreamRequest['latency'];
   maxBufferChars?: number;
   minBufferChars?: number;
+  sampleRate?: number;
   softBufferChars?: number;
   voiceId?: string;
 };
@@ -35,7 +36,13 @@ function normalizeNumber(value: unknown, min: number, max: number): number | und
 
 function normalizeBridgeChunkingStrategy(
   value: unknown,
-): LiveTtsBridgeRequest['chunkingStrategy'] | undefined {
+): 'app' | 'python-safe' | 'eager' | undefined {
+  if (value === 'fast-phrase') {
+    return 'app';
+  }
+  if (value === 'safe-phrase') {
+    return 'python-safe';
+  }
   return value === 'python-safe' || value === 'eager' || value === 'app' ? value : undefined;
 }
 
@@ -77,6 +84,7 @@ export function normalizeLiveTtsBridge(value: unknown): LiveTtsBridgeRequest | n
     latency: normalizeTtsLatency(source['latency']),
     maxBufferChars: normalizeNumber(source['maxBufferChars'], 16, 1000),
     minBufferChars: normalizeNumber(source['minBufferChars'], 1, 500),
+    sampleRate: normalizeNumber(source['sampleRate'], 8000, 96000),
     softBufferChars: normalizeNumber(source['softBufferChars'], 8, 1000),
     voiceId: typeof source['voiceId'] === 'string' ? source['voiceId'] : undefined,
   };
@@ -204,7 +212,7 @@ function findSoftBoundary(text: string, softLength: number, maxLength: number) {
 export function createLiveSpeechTextBridge(options: LiveTtsBridgeRequest | null = null) {
   const queue = createAsyncTextQueue();
   let pending = '';
-  const strategy = options?.chunkingStrategy ?? 'eager';
+  const strategy = normalizeBridgeChunkingStrategy(options?.chunkingStrategy) ?? 'app';
   const minLength = options?.minBufferChars ?? (strategy === 'python-safe' ? 160 : 28);
   const maxLength = options?.maxBufferChars ?? (strategy === 'python-safe' ? 240 : 180);
   const softLength = options?.softBufferChars ?? (strategy === 'python-safe' ? 160 : minLength);
@@ -224,7 +232,7 @@ export function createLiveSpeechTextBridge(options: LiveTtsBridgeRequest | null 
       let splitAt = -1;
       if (strategy === 'python-safe') {
         splitAt = findSentenceBoundary(pending);
-        if (splitAt < minLength) {
+        if (splitAt === -1) {
           splitAt = findSoftBoundary(pending, softLength, maxLength);
         }
       } else {

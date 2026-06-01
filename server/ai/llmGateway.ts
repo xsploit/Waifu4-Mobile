@@ -30,8 +30,13 @@ export type StreamChatRequest = {
   apiKey: string;
   byokOpenAiKey?: string;
   tavilyKey?: string;
-  toolChoiceMode?: 'auto' | 'required';
+  toolChoiceMode?: 'off' | 'auto' | 'required';
   maxToolRounds?: number;
+  openRouterRouting?: {
+    mode: 'auto' | 'latency' | 'throughput' | 'pinned';
+    providers?: string[];
+    allowFallbacks?: boolean;
+  };
   signal?: AbortSignal;
 };
 
@@ -45,8 +50,9 @@ export type CompleteChatRequest = {
   apiKey: string;
   byokOpenAiKey?: string;
   tavilyKey?: string;
-  toolChoiceMode?: 'auto' | 'required';
+  toolChoiceMode?: 'off' | 'auto' | 'required';
   maxToolRounds?: number;
+  openRouterRouting?: StreamChatRequest['openRouterRouting'];
   signal?: AbortSignal;
   jsonMode?: boolean;
 };
@@ -85,7 +91,7 @@ export type StreamChatResult = {
 };
 
 export function buildProviderOptions(
-  req: Pick<StreamChatRequest, 'provider' | 'model' | 'reasoningEffort' | 'byokOpenAiKey'>,
+  req: Pick<StreamChatRequest, 'provider' | 'model' | 'reasoningEffort' | 'byokOpenAiKey' | 'openRouterRouting'>,
   structured: boolean,
   hasTools = false,
 ): Record<string, unknown> | undefined {
@@ -104,8 +110,22 @@ export function buildProviderOptions(
 
   // The crown-jewel lesson: without require_parameters, OpenRouter can silently
   // route to a provider that ignores json_schema and return malformed output.
-  if (req.provider === 'openrouter-responses' && (structured || hasTools)) {
-    options.openrouter = { provider: { require_parameters: true } };
+  if (req.provider === 'openrouter-responses') {
+    const provider: Record<string, unknown> = {};
+    if (structured || hasTools) {
+      provider.require_parameters = true;
+    }
+    if (req.openRouterRouting?.mode === 'latency') {
+      provider.sort = 'latency';
+    } else if (req.openRouterRouting?.mode === 'throughput') {
+      provider.sort = 'throughput';
+    } else if (req.openRouterRouting?.mode === 'pinned' && req.openRouterRouting.providers?.length) {
+      provider.only = req.openRouterRouting.providers;
+      provider.allow_fallbacks = req.openRouterRouting.allowFallbacks ?? false;
+    }
+    if (Object.keys(provider).length > 0) {
+      options.openrouter = { provider };
+    }
   }
 
   return Object.keys(options).length > 0 ? options : undefined;
@@ -143,7 +163,7 @@ export function toModelMessages(messages: LlmMessage[]): ModelMessage[] {
 
 export async function completeChat(req: CompleteChatRequest): Promise<CompleteChatResult> {
   const model = createModel(req);
-  const tools = createTavilyTools(req.tavilyKey);
+  const tools = req.toolChoiceMode === 'off' ? undefined : createTavilyTools(req.tavilyKey);
   const providerOptions = buildProviderOptions(req, req.jsonMode === true, !!tools);
   const started = Date.now();
 
@@ -152,6 +172,7 @@ export async function completeChat(req: CompleteChatRequest): Promise<CompleteCh
     model: req.model,
     lane: req.jsonMode ? 'json' : 'text',
     messages: req.messages.length,
+    tools: Boolean(tools),
   });
 
   const result = await generateText({
@@ -192,7 +213,7 @@ export async function streamChat(
 ): Promise<StreamChatResult> {
   const structured = req.replyFormat === 'structured';
   const model = createModel(req);
-  const tools = createTavilyTools(req.tavilyKey);
+  const tools = req.toolChoiceMode === 'off' ? undefined : createTavilyTools(req.tavilyKey);
   const providerOptions = buildProviderOptions(req, structured, !!tools);
   let streamError: string | null = null;
   let deltaCount = 0;
@@ -210,6 +231,7 @@ export async function streamChat(
     model: req.model,
     lane: structured ? 'A/structured' : 'B/text',
     messages: req.messages.length,
+    tools: Boolean(tools),
     reasoning: req.provider === 'vercel-gateway' && isReasoningModel(req.model)
       ? (req.reasoningEffort ?? 'minimal')
       : 'n/a',

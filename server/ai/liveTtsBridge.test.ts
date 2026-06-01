@@ -43,4 +43,29 @@ describe('live TTS bridge', () => {
 
     await expect(done).resolves.toEqual(['The little ', 'star smiled.']);
   });
+
+  it('buffers default live bridge deltas to speakable phrase boundaries', async () => {
+    const bridge = createLiveSpeechTextBridge();
+    const done = collect(bridge.stream);
+    bridge.push('The little ');
+    bridge.push('star smiled warmly, ');
+    bridge.push('then waved.');
+    bridge.close();
+
+    await expect(done).resolves.toEqual(['The little star smiled warmly, ', 'then waved. ']);
+  });
+
+  it('supports the Fish latency-test safe phrase chunker as an added mode', async () => {
+    const bridge = createLiveSpeechTextBridge({ chunkingStrategy: 'safe-phrase' });
+    const done = collect(bridge.stream);
+    bridge.push('The little star smiled warmly, ');
+    bridge.push('then took one careful breath before saying hello to the morning. ');
+    bridge.push('She waited. ');
+    bridge.close();
+
+    await expect(done).resolves.toEqual([
+      'The little star smiled warmly, then took one careful breath before saying hello to the morning. ',
+      'She waited. ',
+    ]);
+  });
 });

@@ -1,4 +1,4 @@
-import { FishAudioClient, RealtimeEvents } from 'fish-audio';
+import { FishAudioClient, FlushEvent, RealtimeEvents } from 'fish-audio';
 import { createLogger } from '../../src/shared/logger';
 
 const log = createLogger('tts');
@@ -35,6 +35,10 @@ export type FishStreamStats = {
 };
 
 export type FishTextStream = AsyncIterable<string>;
+
+type FishRealtimeConnection = Awaited<
+  ReturnType<InstanceType<typeof FishAudioClient>['textToSpeech']['convertRealtime']>
+>;
 
 type FishTimestampSegment = {
   text: string;
@@ -108,6 +112,7 @@ export async function streamFishTtsTextStream(
   let firstAudioAt: number | null = null;
   let chunks = 0;
   let bytes = 0;
+  let connection: FishRealtimeConnection | null = null;
 
   const client = new FishAudioClient({ apiKey: req.apiKey });
 
@@ -119,16 +124,32 @@ export async function streamFishTtsTextStream(
     format,
     sample_rate: format === 'pcm' ? (req.sampleRate ?? 44100) : undefined,
     chunk_length: req.chunkLength ?? 200,
+    min_chunk_length: 20,
     latency: req.latency ?? 'balanced',
     normalize: true,
     condition_on_previous_chunks: req.conditionOnPreviousChunks ?? true,
+    prosody: {
+      speed: 1,
+      volume: 0,
+    },
   };
+
+  async function* flushedTextStream(): FishTextStream {
+    for await (const chunk of textStream) {
+      yield chunk;
+      try {
+        connection?.send(new FlushEvent());
+      } catch {
+        // The SDK closes the sender after stop; flushing is best-effort.
+      }
+    }
+  }
 
   // The 0.1.0 SDK's Backends type lags the API (no 's2-pro' yet), but the wire
   // 'model' header accepts it — cast so S2 (our default, D9) works.
-  const connection = await client.textToSpeech.convertRealtime(
+  connection = await client.textToSpeech.convertRealtime(
     request as Parameters<typeof client.textToSpeech.convertRealtime>[0],
-    textStream,
+    flushedTextStream(),
     (req.backend ?? 's2-pro') as unknown as Parameters<
       typeof client.textToSpeech.convertRealtime
     >[2],

@@ -55,6 +55,7 @@ describe('TtsManager remote PCM scheduling', () => {
         disconnect: () => {},
         gain: {
           cancelScheduledValues: () => {},
+          linearRampToValueAtTime: () => {},
           setValueAtTime: () => {},
           value: 1,
         },

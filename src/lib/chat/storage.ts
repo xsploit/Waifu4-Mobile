@@ -374,7 +374,9 @@ function normalizeAiSettings(value: unknown): AiSettings {
     source.aiTransportMode === 'http-stream' ? source.aiTransportMode : defaults.aiTransportMode;
   const openAiStateMode = defaults.openAiStateMode;
   const toolChoiceMode =
-    source.toolChoiceMode === 'required' || source.toolChoiceMode === 'auto'
+    source.toolChoiceMode === 'off' ||
+    source.toolChoiceMode === 'required' ||
+    source.toolChoiceMode === 'auto'
       ? source.toolChoiceMode
       : defaults.toolChoiceMode;
   const maxToolRounds =
@@ -470,12 +472,30 @@ function normalizeAiSettings(value: unknown): AiSettings {
   const remoteTtsMode =
     source.remoteTtsMode === 'live-bridge' ||
     source.remoteTtsMode === 'full-response' ||
+    source.remoteTtsMode === 'early-chunks' ||
     source.remoteTtsMode === 'sentence-chunks'
       ? source.remoteTtsMode
       : defaults.remoteTtsMode;
+  const fishSpeechLiveChunkingStrategy =
+    source.fishSpeechLiveChunkingStrategy === 'safe-phrase' ||
+    source.fishSpeechLiveChunkingStrategy === 'eager'
+      ? source.fishSpeechLiveChunkingStrategy
+      : defaults.fishSpeechLiveChunkingStrategy;
 
   return normalizeLlmProviderCompatibility({
     llmProvider,
+    openRouterRoutingMode:
+      source.openRouterRoutingMode === 'auto' ||
+      source.openRouterRoutingMode === 'latency' ||
+      source.openRouterRoutingMode === 'throughput' ||
+      source.openRouterRoutingMode === 'pinned'
+        ? source.openRouterRoutingMode
+        : defaults.openRouterRoutingMode,
+    openRouterProviderSlugs: String(source.openRouterProviderSlugs ?? defaults.openRouterProviderSlugs),
+    openRouterAllowFallbacks:
+      typeof source.openRouterAllowFallbacks === 'boolean'
+        ? source.openRouterAllowFallbacks
+        : defaults.openRouterAllowFallbacks,
     model: normalizedModel,
     memoryAgentModel: normalizedMemoryAgentModel || defaults.memoryAgentModel,
     memoryAgentIntervalMessages,
@@ -515,6 +535,7 @@ function normalizeAiSettings(value: unknown): AiSettings {
         ? source.fishSpeechConditionOnPreviousChunks
         : defaults.fishSpeechConditionOnPreviousChunks,
     fishSpeechChunkLength,
+    fishSpeechLiveChunkingStrategy,
     inworldVoiceId: String(source.inworldVoiceId ?? defaults.inworldVoiceId),
     inworldModelId: String(source.inworldModelId ?? defaults.inworldModelId),
     inworldTransport,

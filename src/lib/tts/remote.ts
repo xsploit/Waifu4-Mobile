@@ -1,10 +1,11 @@
 import { getDesktopBackendUrl } from '../desktop/runtime';
 
 export type RemoteTtsProvider = 'fish-speech' | 'inworld';
-export type RemoteTtsMode = 'live-bridge' | 'full-response' | 'sentence-chunks';
+export type RemoteTtsMode = 'live-bridge' | 'full-response' | 'early-chunks' | 'sentence-chunks';
 export type FishSpeechVoiceScope = 'all' | 'mine' | 'public';
 export type FishSpeechLatency = 'balanced' | 'normal';
 export type FishSpeechFormat = 'pcm' | 'mp3' | 'wav' | 'opus';
+export type FishSpeechLiveChunkingStrategy = 'app' | 'python-safe' | 'eager';
 export type InworldDeliveryMode = 'STABLE' | 'BALANCED' | 'CREATIVE' | 'EXPRESSIVE';
 export type InworldTimestampType = 'NONE' | 'WORD' | 'CHARACTER';
 export type InworldTimestampTransportStrategy = 'SYNC' | 'ASYNC';
@@ -24,7 +25,7 @@ export type RemoteTtsRequest = {
   minBufferChars?: number;
   maxBufferChars?: number;
   softBufferChars?: number;
-  chunkingStrategy?: 'app' | 'python-safe' | 'eager';
+  chunkingStrategy?: FishSpeechLiveChunkingStrategy;
   inworldTransport?: 'http' | 'websocket';
   timestampType?: InworldTimestampType;
   timestampTransportStrategy?: InworldTimestampTransportStrategy;

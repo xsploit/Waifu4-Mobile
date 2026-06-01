@@ -30,6 +30,7 @@ type BuildChatCompletionMessagesOptions = {
   semanticMemoryContext?: string;
   turnContext?: Record<string, PromptTurnContextValue>;
   ttsExpressionTagsEnabled?: boolean;
+  ttsModel?: string;
   ttsProvider?: string;
 };
 
@@ -107,6 +108,7 @@ function buildDynamicPromptState({
   turnContext,
   ttsExpressionTagsEnabled,
   ttsProvider,
+  ttsModel,
   replyLength,
 }: {
   animationCatalogContext: string;
@@ -116,6 +118,7 @@ function buildDynamicPromptState({
   semanticMemoryContext: string;
   turnContext?: Record<string, PromptTurnContextValue>;
   ttsExpressionTagsEnabled: boolean;
+  ttsModel: string;
   ttsProvider: string;
   replyLength: ReplyLengthMode;
 }) {
@@ -175,6 +178,9 @@ function buildDynamicPromptState({
     reply_length_instruction: getReplyLengthInstruction(replyLength),
     reply_length_mode: replyLength,
     trust_score: relationshipMemory.trust,
+    tts_fish_s1: ttsProvider === 'fish-speech' && ttsModel.trim().toLowerCase() === 's1',
+    tts_fish_s2: ttsProvider === 'fish-speech' && ttsModel.trim().toLowerCase() !== 's1',
+    tts_model: ttsModel.trim(),
     tts_tags_enabled: ttsExpressionTagsEnabled && ttsProvider !== 'piper',
     turn_kind: turnKind || 'unknown',
     turn_source: turnSource || 'unknown',
@@ -307,6 +313,7 @@ export async function buildChatCompletionMessages({
   semanticMemoryContext = '',
   turnContext,
   ttsExpressionTagsEnabled = false,
+  ttsModel = '',
   ttsProvider = 'piper',
 }: BuildChatCompletionMessagesOptions): Promise<CompletionMessage[]> {
   const normalizedReplyLength = normalizeReplyLengthMode(replyLength);
@@ -332,7 +339,7 @@ export async function buildChatCompletionMessages({
 
   const ttsContext =
     ttsExpressionTagsEnabled && ttsProvider !== 'piper'
-      ? 'Speech expression tags are enabled for the active TTS engine. You may add short bracketed delivery tags sparingly inside spoken dialogue when they improve performance, such as [laughs], [sighs], [whispers], [excited], [sarcastic], [nervous], or [pause]. Keep replies as natural spoken dialogue, do not explain the tags, and do not use markdown or stage directions outside those short tags.'
+      ? 'enabled'
       : '';
 
   const contextualHistory = history
@@ -369,6 +376,7 @@ export async function buildChatCompletionMessages({
       semanticMemoryContext: legacySemanticMemoryContext,
       turnContext,
       ttsExpressionTagsEnabled,
+      ttsModel,
       ttsProvider,
       replyLength: normalizedReplyLength,
     }),

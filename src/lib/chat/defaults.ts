@@ -99,6 +99,9 @@ export function createDefaultPersonaVoiceBindings(
 export function createDefaultAiSettings(): AiSettings {
   return {
     llmProvider: 'vercel-gateway',
+    openRouterRoutingMode: 'latency',
+    openRouterProviderSlugs: '',
+    openRouterAllowFallbacks: true,
     model: DEFAULT_AI_GATEWAY_MODEL,
     memoryAgentModel: DEFAULT_AI_GATEWAY_MODEL,
     memoryAgentIntervalMessages: 7,
@@ -107,7 +110,7 @@ export function createDefaultAiSettings(): AiSettings {
     embeddingModel: DEFAULT_OPENROUTER_EMBEDDING_MODEL,
     aiTransportMode: 'http-stream',
     openAiStateMode: 'stateless',
-    toolChoiceMode: 'auto',
+    toolChoiceMode: 'off',
     maxToolRounds: 15,
     replyLength: 'balanced',
     temperature: 0.85,
@@ -128,6 +131,7 @@ export function createDefaultAiSettings(): AiSettings {
     fishSpeechSampleRate: 44100,
     fishSpeechConditionOnPreviousChunks: true,
     fishSpeechChunkLength: 160,
+    fishSpeechLiveChunkingStrategy: 'fast-phrase',
     inworldVoiceId: '',
     inworldModelId: 'inworld-tts-2',
     inworldTransport: 'http',

@@ -44,6 +44,28 @@ describe('PomlRenderer', () => {
     expect(messages[0]?.content).toContain('Conditional Twitch context is enabled.');
   });
 
+  it('branches Fish delivery tag syntax in POML', async () => {
+    const s1Messages = await renderYourWifeyPomlMessages({
+      reply_metadata_instruction: '<yw-meta>{"emotion":"neutral"}</yw-meta>',
+      tts_context: 'enabled',
+      tts_fish_s1: 'true',
+      tts_fish_s2: '',
+      tts_tags_enabled: 'true',
+    });
+    const s2Messages = await renderYourWifeyPomlMessages({
+      reply_metadata_instruction: '<yw-meta>{"emotion":"neutral"}</yw-meta>',
+      tts_context: 'enabled',
+      tts_fish_s1: '',
+      tts_fish_s2: 'true',
+      tts_tags_enabled: 'true',
+    });
+
+    expect(s1Messages[0]?.content).toContain('(happy)');
+    expect(s1Messages[0]?.content).not.toContain('[soft amused tone]');
+    expect(s2Messages[0]?.content).toContain('[soft amused tone]');
+    expect(s2Messages[0]?.content).not.toContain('(happy)');
+  });
+
   it('omits patched POML condition false branches', async () => {
     const messages = await renderYourWifeyPomlMessages(
       {

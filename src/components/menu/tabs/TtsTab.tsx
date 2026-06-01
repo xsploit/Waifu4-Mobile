@@ -260,6 +260,7 @@ export function TtsTab({
               <option value="live-bridge">Fish Speech Live Bridge</option>
             ) : null}
             <option value="full-response">Stable Stream</option>
+            <option value="early-chunks">Early Chunks</option>
             <option value="sentence-chunks">Sentence Chunks</option>
           </select>
           <div className="field-hint">
@@ -374,13 +375,7 @@ export function TtsTab({
             onChange={(event) => {
               const fishSpeechTransport = event.target
                 .value as AiSettings['fishSpeechTransport'];
-              updateAiSettings(setAiSettings, {
-                fishSpeechTransport,
-                ...(fishSpeechTransport === 'timestamp-sse' &&
-                aiSettings.remoteTtsMode === 'live-bridge'
-                  ? { remoteTtsMode: 'full-response' as const }
-                  : {}),
-              });
+              updateAiSettings(setAiSettings, { fishSpeechTransport });
             }}
             value={aiSettings.fishSpeechTransport}
           >
@@ -402,17 +397,22 @@ export function TtsTab({
             <option value="wav">WAV</option>
             <option value="opus">Opus</option>
           </select>
-          <Slider
-            disabled={fishLiveBridgeActive}
-            label={`Fish Sample ${aiSettings.fishSpeechSampleRate} Hz`}
-            max={96000}
-            min={8000}
-            onInput={(value) =>
-              updateAiSettings(setAiSettings, { fishSpeechSampleRate: Math.round(value) })
+          <select
+            className="select-tech"
+            onChange={(event) =>
+              updateAiSettings(setAiSettings, {
+                fishSpeechSampleRate: Number(event.target.value),
+              })
             }
-            step={1000}
             value={aiSettings.fishSpeechSampleRate}
-          />
+          >
+            <option value={16000}>16000 Hz</option>
+            <option value={22050}>22050 Hz</option>
+            <option value={24000}>24000 Hz</option>
+            <option value={32000}>32000 Hz</option>
+            <option value={44100}>44100 Hz</option>
+            <option value={48000}>48000 Hz</option>
+          </select>
           <select
             className="select-tech"
             onChange={(event) =>
@@ -446,6 +446,22 @@ export function TtsTab({
               }
             />
           </div>
+          {fishLiveBridgeAvailable ? (
+            <select
+              className="select-tech"
+              onChange={(event) =>
+                updateAiSettings(setAiSettings, {
+                  fishSpeechLiveChunkingStrategy: event.target
+                    .value as AiSettings['fishSpeechLiveChunkingStrategy'],
+                })
+              }
+              value={aiSettings.fishSpeechLiveChunkingStrategy}
+            >
+              <option value="fast-phrase">Fast phrase</option>
+              <option value="safe-phrase">Safe phrase</option>
+              <option value="eager">Eager raw</option>
+            </select>
+          ) : null}
           <Slider
             label={`Fish Chunk ${aiSettings.fishSpeechChunkLength} chars`}
             max={300}

@@ -213,12 +213,9 @@ import {
 import type { ProviderKind } from './lib/product/byok';
 import { createBrowserProviderKeyVault } from './lib/product/provider-key-vault';
 import { getDesktopBackendUrl, type DesktopWindowMode } from './lib/desktop/runtime';
-import {
-  base64ToBlob,
-  formatLocalTransferBackupError,
-  parseLocalTransferBackup,
-} from './lib/product/local-transfer-backup';
+import { formatLocalTransferBackupError } from './lib/product/local-transfer-backup';
 import { createLocalTransferBackupBlobInWorker } from './lib/product/local-transfer-backup-export';
+import { parseLocalTransferBackupInWorker } from './lib/product/local-transfer-backup-import';
 import './style.css';
 
 type SafeAreaInsets = {
@@ -753,11 +750,18 @@ function getEffectiveRemoteTtsMode(settings: AiSettings) {
 }
 
 function shouldChunkTtsRequests(settings: AiSettings) {
-  return settings.ttsProvider === 'piper' || getEffectiveRemoteTtsMode(settings) === 'sentence-chunks';
+  const mode = getEffectiveRemoteTtsMode(settings);
+  return settings.ttsProvider === 'piper' || mode === 'early-chunks' || mode === 'sentence-chunks';
 }
 
 function createRemoteTtsRequest(text: string, settings: AiSettings): RemoteTtsRequest {
   const streamingMode = getEffectiveRemoteTtsMode(settings);
+  const fishLiveChunkingStrategy =
+    settings.fishSpeechLiveChunkingStrategy === 'safe-phrase'
+      ? 'python-safe'
+      : settings.fishSpeechLiveChunkingStrategy === 'eager'
+        ? 'eager'
+        : 'app';
   if (settings.ttsProvider === 'inworld') {
     return {
       provider: 'inworld',
@@ -789,6 +793,7 @@ function createRemoteTtsRequest(text: string, settings: AiSettings): RemoteTtsRe
     latency: settings.fishSpeechLatency,
     conditionOnPreviousChunks: settings.fishSpeechConditionOnPreviousChunks,
     chunkLength: settings.fishSpeechChunkLength,
+    chunkingStrategy: fishLiveChunkingStrategy,
   };
 }
 
@@ -844,11 +849,13 @@ async function getBrowserRemoteTtsApiKey(
 async function buildBackendProviderHeaders({
   llmProvider,
   providerKeyVaultWorkspaceId,
+  toolChoiceMode,
   ttsBridge,
 }: {
   llmProvider: AiSettings['llmProvider'];
   model?: string;
   providerKeyVaultWorkspaceId?: string;
+  toolChoiceMode?: AiSettings['toolChoiceMode'];
   ttsBridge?: RemoteTtsRequest;
 }) {
   const headers: Record<string, string> = { 'Content-Type': 'application/json' };
@@ -871,13 +878,15 @@ async function buildBackendProviderHeaders({
     headers['x-yourwifey-openai-byok-key'] = openAiByokApiKey;
   }
 
-  const tavilyApiKey = await getBrowserProviderApiKey({
-    keyName: 'tavily.apiKey',
-    provider: 'tavily',
-    providerKeyVaultWorkspaceId,
-  });
-  if (tavilyApiKey) {
-    headers['x-yourwifey-tavily-provider-key'] = tavilyApiKey;
+  if (toolChoiceMode && toolChoiceMode !== 'off') {
+    const tavilyApiKey = await getBrowserProviderApiKey({
+      keyName: 'tavily.apiKey',
+      provider: 'tavily',
+      providerKeyVaultWorkspaceId,
+    });
+    if (tavilyApiKey) {
+      headers['x-yourwifey-tavily-provider-key'] = tavilyApiKey;
+    }
   }
 
   if (ttsBridge?.provider) {
@@ -1002,6 +1011,24 @@ async function readAiProxyStream(
   };
 }
 
+function buildOpenRouterRouting(settings: Pick<AiSettings, 'llmProvider' | 'openRouterAllowFallbacks' | 'openRouterProviderSlugs' | 'openRouterRoutingMode'>) {
+  if (settings.llmProvider !== 'openrouter-responses' || settings.openRouterRoutingMode === 'auto') {
+    return undefined;
+  }
+  const providers = settings.openRouterProviderSlugs
+    .split(',')
+    .map((item) => item.trim())
+    .filter(Boolean);
+  if (settings.openRouterRoutingMode === 'pinned' && providers.length === 0) {
+    return undefined;
+  }
+  return {
+    allowFallbacks: settings.openRouterAllowFallbacks,
+    mode: settings.openRouterRoutingMode,
+    providers,
+  };
+}
+
 function readStreamChunkWithIdleTimeout(
   reader: ReadableStreamDefaultReader<Uint8Array>,
   idleTimeoutMs: number,
@@ -1056,6 +1083,7 @@ async function requestChatCompletion({
   transportMode,
   ttsBridge,
   providerKeyVaultWorkspaceId,
+  openRouterRouting,
   signal,
 }: {
   activeChatters?: number;
@@ -1076,6 +1104,7 @@ async function requestChatCompletion({
   transportMode?: AiSettings['aiTransportMode'];
   ttsBridge?: RemoteTtsRequest;
   providerKeyVaultWorkspaceId?: string;
+  openRouterRouting?: ReturnType<typeof buildOpenRouterRouting>;
   signal?: AbortSignal;
 }): Promise<AppCompletionResponse> {
   const providerDefaults = getAiProviderSwitchDefaults(llmProvider);
@@ -1084,6 +1113,7 @@ async function requestChatCompletion({
     llmProvider,
     model: safeModel,
     providerKeyVaultWorkspaceId,
+    toolChoiceMode,
     ttsBridge,
   });
   const requestBody = {
@@ -1096,6 +1126,7 @@ async function requestChatCompletion({
     mode,
     model: safeModel,
     openAiStateMode: 'stateless',
+    openRouterRouting,
     responseFormat,
     stateKey,
     stateScope,
@@ -2024,6 +2055,13 @@ function App() {
   const [ttsBusy, setTtsBusy] = useState(false);
   const [ttsStatus, setTtsStatus] = useState('Voice idle.');
   const [ttsActiveVoiceKey, setTtsActiveVoiceKey] = useState<string | null>(null);
+  const ttsLatencyTraceRef = useRef<{
+    firstAudioAt: number | null;
+    firstDeltaAt: number | null;
+    firstSpeechChunkAt: number | null;
+    label: string;
+    startedAt: number;
+  } | null>(null);
   const [hydrated, setHydrated] = useState(false);
   const [subtitleText, setSubtitleText] = useState('');
   const blobAnimationUrlsRef = useRef<Set<string>>(new Set());
@@ -2884,6 +2922,14 @@ function App() {
       const liveBridgeTts =
         canSpeak &&
         canUseFishLiveBridge(ttsRuntimeSettings);
+      const latencyTrace = {
+        firstAudioAt: null as number | null,
+        firstDeltaAt: null as number | null,
+        firstSpeechChunkAt: null as number | null,
+        label,
+        startedAt: performance.now(),
+      };
+      ttsLatencyTraceRef.current = latencyTrace;
       const metadataFilter = createAssistantReplyStreamFilter();
       let fullText = '';
       let displayText = '';
@@ -3022,6 +3068,22 @@ function App() {
           return;
         }
 
+        if (latencyTrace.firstSpeechChunkAt === null) {
+          latencyTrace.firstSpeechChunkAt = performance.now();
+          console.info('[TTS Latency] first speech chunk', {
+            chunkLength: chunk.length,
+            label,
+            mode: getEffectiveRemoteTtsMode(ttsRuntimeSettings),
+            msFromStart: Math.round(latencyTrace.firstSpeechChunkAt - latencyTrace.startedAt),
+            provider: ttsProvider,
+            transport:
+              ttsProvider === 'fish-speech'
+                ? ttsRuntimeSettings.fishSpeechTransport
+                : ttsProvider === 'inworld'
+                  ? ttsRuntimeSettings.inworldTransport
+                  : 'piper',
+          });
+        }
         queuedSpeech = true;
         const task =
           ttsProvider === 'piper'
@@ -3088,6 +3150,19 @@ function App() {
         if (!liveBridgeSink || isStale()) {
           return;
         }
+        if (latencyTrace.firstAudioAt === null) {
+          latencyTrace.firstAudioAt = performance.now();
+          console.info('[TTS Latency] first audio chunk', {
+            label,
+            mimeType: chunk.mimeType,
+            msFromFirstDelta:
+              latencyTrace.firstDeltaAt === null
+                ? null
+                : Math.round(latencyTrace.firstAudioAt - latencyTrace.firstDeltaAt),
+            msFromStart: Math.round(latencyTrace.firstAudioAt - latencyTrace.startedAt),
+            provider: ttsProvider,
+          });
+        }
         speechPromises.push(
           liveBridgeSink.push(chunk).catch((error) => {
             const message =
@@ -3107,6 +3182,13 @@ function App() {
         if (isStale()) {
           staleDeltaCount += 1;
           return;
+        }
+        if (latencyTrace.firstDeltaAt === null) {
+          latencyTrace.firstDeltaAt = performance.now();
+          console.info('[TTS Latency] first LLM delta', {
+            label,
+            msFromStart: Math.round(latencyTrace.firstDeltaAt - latencyTrace.startedAt),
+          });
         }
 
         const visibleDelta = metadataFilter.push(delta);
@@ -4040,9 +4122,10 @@ function App() {
           return;
         }
 
+        const stateKey = activeChatHistoryStateKeyRef.current || activeRelationshipStateKey;
         const nextChatHistories = {
           ...chatHistories,
-          [activeRelationshipStateKey]: chatHistory,
+          [stateKey]: chatHistory,
         };
         const nextPersistedState = {
           personas,
@@ -5238,6 +5321,13 @@ function App() {
       }
 
       recordRawChatMemoryTurns(getLocalConversationStateKey(persona), [turn]);
+      setChatHistory((current) => {
+        const userMessage = chatTurnToChatMessage(turn);
+        if (current.some((entry) => entry.id === userMessage.id)) {
+          return current;
+        }
+        return trimChatHistory([...current, userMessage]);
+      });
       const activeChatterCount = Math.max(
         1,
         pruneActiveTwitchChatters(twitchActiveChattersRef.current, Date.now()),
@@ -5909,7 +5999,9 @@ function App() {
       try {
         setAssistantReplyLock(true);
         setChatGenerating(true);
-        const semanticMemoryContext = await getSemanticMemoryContext(
+        const participantKeys = job.messages.map(getGrilloParticipantKey);
+        const preflightStartedAt = performance.now();
+        const semanticMemoryPromise = getSemanticMemoryContext(
           stateKey,
           userContent,
           providerKeyVaultWorkspaceId,
@@ -5919,23 +6011,21 @@ function App() {
           settings.embeddingModel,
           settings.embeddingLocalModel,
         );
-        const participantKeys = job.messages.map(getGrilloParticipantKey);
-        const grilloMemory = await buildGrilloMemoryPromptAdditionsFailClosedAsync(
-          {
-            participantKeys,
-            query: userContent,
-            scopeKey: stateKey,
-          },
-          (error) => {
-            console.warn('[App] Failed to load local GRILLO prompt memory', error);
-          },
-        );
-        const grilloContextPacket = await loadLadybugGrilloContextPacket(stateKey, {
+        const grilloContextPacketPromise = loadLadybugGrilloContextPacket(stateKey, {
           participantKeys,
           query: userContent,
         }).catch((error) => {
           console.warn('[App] Failed to load native GRILLO context packet', error);
           return null;
+        });
+        const [semanticMemoryContext, grilloContextPacket] = await Promise.all([
+          semanticMemoryPromise,
+          grilloContextPacketPromise,
+        ]);
+        console.info('[Chat Preflight] memory context ready', {
+          hasLadybugPacket: Boolean(grilloContextPacket),
+          ms: Math.round(performance.now() - preflightStartedAt),
+          semanticChars: semanticMemoryContext.length,
         });
         const grilloPromptMemory = grilloContextPacket
           ? {
@@ -5944,7 +6034,16 @@ function App() {
               recalledMemories: [],
               relationshipMemory: [],
             }
-          : grilloMemory;
+          : await buildGrilloMemoryPromptAdditionsFailClosedAsync(
+              {
+                participantKeys,
+                query: userContent,
+                scopeKey: stateKey,
+              },
+              (error) => {
+                console.warn('[App] Failed to load local GRILLO prompt memory', error);
+              },
+            );
         setMemoryPromptDebug({
           grilloContextPacket: grilloContextPacket
             ? {
@@ -6023,10 +6122,25 @@ function App() {
               turnKind: job.mode,
             },
             ttsExpressionTagsEnabled: settings.ttsExpressionTagsEnabled,
+            ttsModel:
+              settings.ttsProvider === 'fish-speech'
+                ? settings.fishSpeechModel
+                : settings.ttsProvider === 'inworld'
+                  ? settings.inworldModelId
+                  : '',
             ttsProvider: settings.ttsProvider,
           }),
           promptVisionFrame,
         );
+        console.info('[Chat Preflight] /ai/chat request ready', {
+          messageCount: promptMessages.length,
+          ms: Math.round(performance.now() - preflightStartedAt),
+          provider: settings.llmProvider,
+          model: selectedModel,
+          replyFormat,
+          toolChoiceMode: settings.toolChoiceMode,
+          promptChars: promptMessages.reduce((total, message) => total + message.content.length, 0),
+        });
         const response = await requestChatCompletion({
           activeChatters: job.activeChatterCount,
           mode: job.mode,
@@ -6045,6 +6159,7 @@ function App() {
           transportMode: settings.aiTransportMode,
           ttsBridge,
           providerKeyVaultWorkspaceId,
+          openRouterRouting: buildOpenRouterRouting(settings),
           signal: chatAbortController.signal,
         });
         if (response.meta) {
@@ -6593,7 +6708,7 @@ function App() {
       chatHistory,
       chatHistories: {
         ...chatHistories,
-        [activeRelationshipStateKey]: chatHistory,
+        [activeChatHistoryStateKeyRef.current || activeRelationshipStateKey]: chatHistory,
       },
       currentBundledModelId,
       currentCustomVrmModelId,
@@ -6650,7 +6765,7 @@ function App() {
           const blob = await getSavedVrmModelBlob(model.id);
           return {
             ...model,
-            dataBuffer: await blob.arrayBuffer(),
+            dataBlob: blob,
           };
         }),
       );
@@ -6686,16 +6801,11 @@ function App() {
     async (file: File) => {
       try {
         setLocalTransferStatus(`Importing ${file.name}...`);
-        const backup = parseLocalTransferBackup(await file.text());
+        const { backup, decodedSavedVrmModels } = await parseLocalTransferBackupInWorker(file);
         const providerVault = createBrowserProviderKeyVault({
           mode: 'local-indexeddb',
           workspaceId: providerKeyVaultWorkspaceId,
         });
-
-        const decodedSavedVrmModels = backup.savedVrmModels.map((model) => ({
-          ...model,
-          blob: base64ToBlob(model.dataBase64, model.type),
-        }));
 
         await providerVault.importSecrets(backup.providerSecrets);
 
@@ -6754,16 +6864,23 @@ function App() {
           next.currentCustomVrmModelId &&
           models.some((model) => model.id === next.currentCustomVrmModelId)
         ) {
-          prepareForModelSwap();
-          const blob = await getSavedVrmModelBlob(next.currentCustomVrmModelId);
-          loadModelUrl(URL.createObjectURL(blob));
+          if (next.currentCustomVrmModelId !== currentCustomVrmModelId) {
+            prepareForModelSwap();
+            const blob = await getSavedVrmModelBlob(next.currentCustomVrmModelId);
+            loadModelUrl(URL.createObjectURL(blob));
+          }
           setCurrentBundledModelId('');
           setCurrentCustomVrmModelId(next.currentCustomVrmModelId);
         } else if (
           next.currentBundledModelId &&
           BUNDLED_VRM_MODELS.some((model) => model.id === next.currentBundledModelId)
         ) {
-          await handleLoadBundledModel(next.currentBundledModelId);
+          if (currentCustomVrmModelId || next.currentBundledModelId !== currentBundledModelId) {
+            await handleLoadBundledModel(next.currentBundledModelId);
+          } else {
+            setCurrentBundledModelId(next.currentBundledModelId);
+            setCurrentCustomVrmModelId('');
+          }
         }
 
         setSavedVrmStatus(
@@ -6780,6 +6897,8 @@ function App() {
     },
     [
       handleLoadBundledModel,
+      currentBundledModelId,
+      currentCustomVrmModelId,
       prepareForModelSwap,
       providerKeyVaultWorkspaceId,
       refreshSavedVrmModels,

@@ -20,6 +20,10 @@ const AUTO_RESUME_AUDIO =
   import.meta.env['VITE_AUTO_RESUME_AUDIO'] === 'true' ||
   (typeof window !== 'undefined' &&
     new URLSearchParams(window.location.search).get('routelet') === '1');
+const REMOTE_PCM_INITIAL_LEAD_SECONDS = 0.05;
+const REMOTE_PCM_MIN_LEAD_SECONDS = 0.02;
+const REMOTE_PCM_FADE_SECONDS = 0.006;
+const REMOTE_PCM_CROSSFADE_SECONDS = 0.004;
 const PIPER_TIMING_TICKS_PER_SECOND = 10000000;
 interface ChunkData {
   audioBlob: Blob;
@@ -530,7 +534,7 @@ export class TtsManager {
     if (this.audioContext.state === 'suspended' && canAttemptAudioResume()) {
       void this.audioContext.resume().catch(() => {});
     }
-    this.streamPlaybackEndTime = this.audioContext.currentTime;
+    this.streamPlaybackEndTime = this.audioContext.currentTime + REMOTE_PCM_INITIAL_LEAD_SECONDS;
     this.streamPlaybackStartTime = this.streamPlaybackEndTime;
     this.streamScheduledChunkCount = 0;
   }
@@ -559,20 +563,42 @@ export class TtsManager {
     }
 
     const source = this.audioContext.createBufferSource();
+    const frameGain = this.audioContext.createGain();
     source.buffer = audioBuffer;
     source.playbackRate.value = this.playbackRate;
-    source.connect(this.audioContext.destination);
-    source.connect(this.audioAnalyser);
+    source.connect(frameGain);
+    frameGain.connect(this.audioAnalyser);
     if (this.lipsyncNode) {
-      source.connect(this.lipsyncNode);
+      frameGain.connect(this.lipsyncNode);
     }
+    this.ensureAnalyserConnected();
 
     const duration = audioBuffer.duration / Math.max(0.01, this.playbackRate);
-    const { startAt, endAt } = getRemotePcmChunkSchedule(
-      this.audioContext.currentTime,
-      this.streamPlaybackEndTime,
-      duration,
+    const canCrossfade =
+      this.streamScheduledChunkCount > 0 &&
+      this.streamPlaybackEndTime > this.audioContext.currentTime + REMOTE_PCM_CROSSFADE_SECONDS;
+    const overlap = canCrossfade
+      ? Math.min(REMOTE_PCM_CROSSFADE_SECONDS, Math.max(0, duration * 0.35))
+      : 0;
+    const startAt = Math.max(
+      this.streamPlaybackEndTime - overlap,
+      this.audioContext.currentTime + REMOTE_PCM_MIN_LEAD_SECONDS,
     );
+    const endAt = startAt + duration;
+    const fadeSeconds = Math.min(REMOTE_PCM_FADE_SECONDS, Math.max(0, duration / 3));
+    const fadeInEnd = startAt + fadeSeconds;
+    const fadeOutStart = Math.max(fadeInEnd, endAt - fadeSeconds);
+    frameGain.gain.cancelScheduledValues(startAt);
+    frameGain.gain.setValueAtTime(0, startAt);
+    if (fadeSeconds > 0) {
+      frameGain.gain.linearRampToValueAtTime(1, fadeInEnd);
+      if (fadeOutStart > fadeInEnd) {
+        frameGain.gain.setValueAtTime(1, fadeOutStart);
+      }
+      frameGain.gain.linearRampToValueAtTime(0, endAt);
+    } else {
+      frameGain.gain.setValueAtTime(1, startAt);
+    }
     this.streamPlaybackEndTime = endAt;
     const timedWordBoundaries = remoteSpeechTimingToWordBoundaries(
       chunk.speechTiming,
@@ -584,13 +610,20 @@ export class TtsManager {
       this.onLipSyncData?.({ wordBoundaries: this.wordBoundaries, phonemes: null, text });
     }
     this.currentStreamSources.add(source);
+    this.currentStreamGains.add(frameGain);
     this.streamScheduledChunkCount += 1;
 
     const ended = new Promise<void>((resolve) => {
       source.onended = () => {
         this.currentStreamSources.delete(source);
+        this.currentStreamGains.delete(frameGain);
         try {
           source.disconnect();
+        } catch {
+          // ignore
+        }
+        try {
+          frameGain.disconnect();
         } catch {
           // ignore
         }

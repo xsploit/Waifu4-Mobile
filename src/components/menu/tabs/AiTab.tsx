@@ -100,6 +100,22 @@ function formatModelOption(modelId: string, metadata: ReadonlyMap<string, Provid
   return tags.length ? `${modelId} [${tags.join(', ')}]` : modelId;
 }
 
+const OPENROUTER_PROVIDER_SLUGS = [
+  'alibaba',
+  'deepseek',
+  'morph',
+  'parasail/fp8',
+  'deepinfra/fp4',
+  'digitalocean',
+  'streamlake',
+  'novita/fp8',
+  'venice',
+  'atlas-cloud/fp8',
+  'baidu/fp8',
+  'gmicloud/fp8',
+  'siliconflow/fp8',
+];
+
 export function AiTab({
   activePersonaName,
   aiProxyHealth,
@@ -139,6 +155,73 @@ export function AiTab({
           model ID from either catalog; Web Waifu owns the conversation context locally.
         </div>
       </div>
+
+      {aiSettings.llmProvider === 'openrouter-responses' ? (
+        <div className="control-group">
+          <div className="control-label">OpenRouter Routing</div>
+          <select
+            className="select-tech"
+            onChange={(event) =>
+              updateAiSettings(setAiSettings, {
+                openRouterRoutingMode: event.target.value as AiSettings['openRouterRoutingMode'],
+              })
+            }
+            value={aiSettings.openRouterRoutingMode}
+          >
+            <option value="auto">Auto</option>
+            <option value="latency">Fastest latency</option>
+            <option value="throughput">Highest throughput / Nitro</option>
+            <option value="pinned">Pinned provider</option>
+          </select>
+          {aiSettings.openRouterRoutingMode === 'pinned' ? (
+            <>
+              <select
+                className="select-tech"
+                onChange={(event) =>
+                  updateAiSettings(setAiSettings, {
+                    openRouterProviderSlugs: event.target.value,
+                  })
+                }
+                value={aiSettings.openRouterProviderSlugs}
+              >
+                <option value="">Choose provider slug</option>
+                {OPENROUTER_PROVIDER_SLUGS.map((slug) => (
+                  <option key={slug} value={slug}>
+                    {slug}
+                  </option>
+                ))}
+              </select>
+              <input
+                className="input-tech"
+                onChange={(event) =>
+                  updateAiSettings(setAiSettings, {
+                    openRouterProviderSlugs: event.target.value,
+                  })
+                }
+                placeholder="provider slug or comma list"
+                value={aiSettings.openRouterProviderSlugs}
+              />
+              <label className="toggle-row">
+                <input
+                  checked={aiSettings.openRouterAllowFallbacks}
+                  onChange={(event) =>
+                    updateAiSettings(setAiSettings, {
+                      openRouterAllowFallbacks: event.target.checked,
+                    })
+                  }
+                  type="checkbox"
+                />
+                <span>Allow fallback if pinned provider fails</span>
+              </label>
+            </>
+          ) : null}
+          <div className="field-hint">
+            Auto uses OpenRouter default routing. Fastest latency sends provider.sort=latency.
+            Throughput sends provider.sort=throughput. Pinned sends provider.only with the chosen
+            slug list.
+          </div>
+        </div>
+      ) : null}
 
       <div className="control-group">
         <div className="control-label">
@@ -245,12 +328,14 @@ export function AiTab({
           }
           value={aiSettings.toolChoiceMode}
         >
+          <option value="off">Tool Calls: Off</option>
           <option value="auto">Tool Calls: Auto</option>
           <option value="required">Tool Calls: Required</option>
         </select>
         <div className="field-hint">
-          Auto exposes tools from the first turn and lets the prompt decide. Required forces provider
-          tool choice and can loop on normal chat, so use it only for tool-call diagnostics.
+          Off keeps normal chat lean. Auto exposes tools from the first turn and lets the prompt
+          decide. Required forces provider tool choice and can loop on normal chat, so use it only
+          for tool-call diagnostics.
         </div>
         <Slider
           label={`Max tool rounds ${aiSettings.maxToolRounds}`}

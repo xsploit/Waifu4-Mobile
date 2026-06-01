@@ -19,14 +19,14 @@ function arrayBufferToBase64(buffer: ArrayBuffer): string {
   return btoa(binary);
 }
 
-self.addEventListener('message', (event: MessageEvent<WorkerRequestMessage>) => {
+self.addEventListener('message', async (event: MessageEvent<WorkerRequestMessage>) => {
   const request = event.data;
   try {
-    const savedVrmModels: LocalTransferSavedVrmModel[] = request.savedVrmModels.map(
-      ({ dataBuffer, ...model }) => ({
+    const savedVrmModels: LocalTransferSavedVrmModel[] = await Promise.all(
+      request.savedVrmModels.map(async ({ dataBlob, ...model }) => ({
         ...model,
-        dataBase64: arrayBufferToBase64(dataBuffer),
-      }),
+        dataBase64: arrayBufferToBase64(await dataBlob.arrayBuffer()),
+      })),
     );
     const backup = createLocalTransferBackup({
       providerSecrets: request.providerSecrets,

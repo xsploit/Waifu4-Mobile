@@ -141,13 +141,19 @@ Use tools only when they are available. When the current turn explicitly asks yo
 
     <if condition="{{ tts_context }}">
       <cp caption="Speech and TTS" captionStyle="header" syntax="markdown" whiteSpace="pre">
-{{ tts_context }}
+Expression tags are enabled. Use them sparingly as voice-direction cues inside spoken dialogue only.
       </cp>
     </if>
 
-    <if condition="{{ tts_tags_enabled }}">
-      <cp caption="TTS Delivery Mode" captionStyle="header">
-Expression tags are enabled. Use short bracketed delivery cues only when they make the spoken performance better.
+    <if condition="{{ tts_tags_enabled && tts_fish_s1 }}">
+      <cp caption="Fish Speech S1 Delivery Tags" captionStyle="header">
+Use fixed Fish S1 emotion tags in parentheses, such as (happy), (excited), (calm), (curious), (sarcastic), (empathetic), (worried), (nervous), (surprised), (confused), (grateful), or (optimistic). Place S1 emotion tags at the beginning of a sentence. Do not use bracket tags for S1. Do not stack more than one or two compatible emotion tags in a short reply. If the line already reads naturally, omit tags.
+      </cp>
+    </if>
+
+    <if condition="{{ tts_tags_enabled && tts_fish_s2 }}">
+      <cp caption="Fish Speech S2 Delivery Tags" captionStyle="header">
+Use square-bracket natural-language cues for Fish S2/S2-Pro, such as [happy], [soft amused tone], [excited], [calm], [curious], [sarcastic], [empathetic], [whispering], [laughing], [chuckling], [sighing], [gasping], [break], or [long-break]. Place emotion/tone tags at the start of a sentence or short phrase, not repeatedly mid-sentence. Avoid more than one or two tags in a short reply unless the tone genuinely changes. If the line already reads naturally, omit tags.
       </cp>
     </if>
 

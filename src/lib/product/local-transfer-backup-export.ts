@@ -3,7 +3,7 @@ import type { SavedVrmModelSummary } from '../menu/types';
 import type { ProviderSecretRecord } from './provider-key-vault';
 
 export type LocalTransferBackupExportVrmModel = SavedVrmModelSummary & {
-  dataBuffer: ArrayBuffer;
+  dataBlob: Blob;
 };
 
 export type LocalTransferBackupExportInput = {
@@ -81,7 +81,6 @@ export function createLocalTransferBackupBlobInWorker(
         savedVrmModels: input.savedVrmModels,
         state: input.state,
       },
-      input.savedVrmModels.map((model) => model.dataBuffer),
     );
   });
 }

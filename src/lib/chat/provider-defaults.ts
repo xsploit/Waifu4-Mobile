@@ -6,7 +6,7 @@ import type { AiSettings, LlmProvider } from './types';
 
 export type AiProviderSwitchDefaults = Pick<
   AiSettings,
-  'aiTransportMode' | 'memoryAgentModel' | 'model' | 'openAiStateMode'
+  'aiTransportMode' | 'memoryAgentModel' | 'model' | 'openAiStateMode' | 'openRouterAllowFallbacks' | 'openRouterProviderSlugs' | 'openRouterRoutingMode'
 >;
 
 export function getAiProviderSwitchDefaults(llmProvider: LlmProvider): AiProviderSwitchDefaults {
@@ -16,6 +16,9 @@ export function getAiProviderSwitchDefaults(llmProvider: LlmProvider): AiProvide
       memoryAgentModel: DEFAULT_OPENROUTER_MODEL,
       model: DEFAULT_OPENROUTER_MODEL,
       openAiStateMode: 'stateless',
+      openRouterAllowFallbacks: true,
+      openRouterProviderSlugs: '',
+      openRouterRoutingMode: 'latency',
     };
   }
   return {
@@ -23,6 +26,9 @@ export function getAiProviderSwitchDefaults(llmProvider: LlmProvider): AiProvide
     memoryAgentModel: DEFAULT_AI_GATEWAY_MODEL,
     model: DEFAULT_AI_GATEWAY_MODEL,
     openAiStateMode: 'stateless',
+    openRouterAllowFallbacks: true,
+    openRouterProviderSlugs: '',
+    openRouterRoutingMode: 'latency',
   };
 }
 
