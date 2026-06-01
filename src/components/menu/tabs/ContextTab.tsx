@@ -18,6 +18,42 @@ import type {
 import { filterSafeProviderModels } from '../../../lib/chat/provider-defaults';
 import type { AiSettings, RelationshipMemory } from '../../../lib/chat/types';
 
+function stringifyContextValue(value: unknown): string {
+  if (typeof value === 'string') {
+    return value.trim();
+  }
+  if (!value) {
+    return '';
+  }
+  if (typeof value === 'number' || typeof value === 'boolean') {
+    return String(value);
+  }
+  if (typeof value === 'object') {
+    const record = value as Record<string, unknown>;
+    const summary = stringifyContextValue(record.summary);
+    const personalThought = stringifyContextValue(
+      record.personalThought ?? record.personal_thought ?? record.thought,
+    );
+    const text = stringifyContextValue(record.text ?? record.entry ?? record.content);
+    const emotion = stringifyContextValue(record.emotion ?? record.mood);
+    const lines = [
+      summary,
+      personalThought,
+      text,
+      emotion ? `Emotion: ${emotion}` : '',
+    ].filter(Boolean);
+    if (lines.length > 0) {
+      return lines.join('\n\n');
+    }
+    try {
+      return JSON.stringify(value, null, 2);
+    } catch {
+      return String(value);
+    }
+  }
+  return String(value);
+}
+
 type ContextTabProps = {
   aiSettings: AiSettings;
   availableModelMetadata: ReadonlyMap<string, ProviderModelInfo>;
@@ -91,6 +127,14 @@ export function ContextTab({
   const recentCandidates = [...grilloMemoryState.candidates].reverse().slice(0, 8);
   const recentDiary = [...grilloMemoryState.diaryEntries].reverse().slice(0, 4);
   const latestReflectiveDiary = recentDiary[0] ?? null;
+  const latestReflectionSnapshot =
+    stringifyContextValue(relationshipMemory.diaryEntry) ||
+    (latestReflectiveDiary
+      ? [latestReflectiveDiary.summary, latestReflectiveDiary.personalThought]
+          .map(stringifyContextValue)
+          .filter(Boolean)
+          .join('\n\n')
+      : '');
   const promotedCount = grilloMemoryState.promotedCandidateIds.length;
   const hasGrilloMemory =
     grilloMemoryState.blocks.length > 0 ||
@@ -1038,11 +1082,7 @@ export function ContextTab({
       <div className="control-group">
         <div className="control-label">Latest Reflection Snapshot</div>
         <pre className="context-preview">
-          {relationshipMemory.diaryEntry
-            ? relationshipMemory.diaryEntry
-            : latestReflectiveDiary
-              ? `${latestReflectiveDiary.summary}\n\n${latestReflectiveDiary.personalThought}`
-              : 'No diary entry written yet.'}
+          {latestReflectionSnapshot || 'No diary entry written yet.'}
         </pre>
       </div>
 

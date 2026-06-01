@@ -1,5 +1,10 @@
 import { describe, expect, it } from 'vitest';
-import { getOverlayEmptyState, sanitizeOverlayLabel, sanitizeOverlayText } from './ChatLog';
+import {
+  getOverlayEmptyState,
+  getVisibleOverlayHistory,
+  sanitizeOverlayLabel,
+  sanitizeOverlayText,
+} from './ChatLog';
 
 describe('chat overlay copy', () => {
   it('describes the unified Twitch and local chat path when empty and expanded', () => {
@@ -9,7 +14,7 @@ describe('chat overlay copy', () => {
         isGenerating: false,
         open: true,
       }),
-    ).toBe('No live messages yet. Twitch #SubSect and local test messages will appear here.');
+    ).toBe('No chat messages yet. Twitch #SubSect and local messages will appear here.');
   });
 
   it('uses a compact empty state while the overlay is collapsed', () => {
@@ -37,5 +42,35 @@ describe('chat overlay copy', () => {
     expect(sanitizeOverlayText('see http://localhost:8787/path and sk-test_1234567890abcdef')).toBe(
       'see [local] and [key]',
     );
+  });
+
+  it('keeps older messages visible while expanded and only expires collapsed overlay messages', () => {
+    const now = Date.now();
+    const history = [
+      {
+        message: {
+          content: 'old',
+          createdAt: now - 120000,
+          id: 'old',
+          role: 'user' as const,
+        },
+      },
+      {
+        message: {
+          content: 'new',
+          createdAt: now - 1000,
+          id: 'new',
+          role: 'assistant' as const,
+        },
+      },
+    ];
+
+    expect(getVisibleOverlayHistory(history, now, true).map(({ message }) => message.id)).toEqual([
+      'old',
+      'new',
+    ]);
+    expect(getVisibleOverlayHistory(history, now, false).map(({ message }) => message.id)).toEqual([
+      'new',
+    ]);
   });
 });

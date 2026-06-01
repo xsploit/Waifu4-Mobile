@@ -18,6 +18,7 @@ type ChatLogProps = {
 const MESSAGE_VISIBLE_MS = 70000;
 const MESSAGE_FADE_MS = 16000;
 const MESSAGE_TICK_MS = 1000;
+const EXPANDED_HISTORY_LIMIT = 80;
 
 type MessageStyle = CSSProperties & {
   '--msg-opacity'?: string;
@@ -103,7 +104,19 @@ export function getOverlayEmptyState({
   }
 
   const channelLabel = `#${sanitizeOverlayLabel(channelName || 'subsect')}`;
-  return `No live messages yet. Twitch ${channelLabel} and local test messages will appear here.`;
+  return `No chat messages yet. Twitch ${channelLabel} and local messages will appear here.`;
+}
+
+export function getVisibleOverlayHistory<T extends { message: ChatMessage }>(
+  history: T[],
+  now: number,
+  open: boolean,
+) {
+  if (open) {
+    return history.slice(-EXPANDED_HISTORY_LIMIT);
+  }
+
+  return history.filter(({ message }) => now - message.createdAt <= MESSAGE_VISIBLE_MS).slice(-6);
 }
 
 export const ChatLog = memo(function ChatLog({
@@ -132,10 +145,7 @@ export const ChatLog = memo(function ChatLog({
         .filter(({ displayContent, message }) => isBroadcastMessage(message, displayContent)),
     [displayOverrides, history],
   );
-  const liveHistory = broadcastHistory.filter(
-    ({ message }) => now - message.createdAt <= MESSAGE_VISIBLE_MS,
-  );
-  const visibleHistory = open ? liveHistory.slice(-18) : liveHistory.slice(-6);
+  const visibleHistory = getVisibleOverlayHistory(broadcastHistory, now, open);
   const latestVisibleMessage = visibleHistory[visibleHistory.length - 1];
   const latestVisibleMessageKey = latestVisibleMessage
     ? `${latestVisibleMessage.message.id}:${latestVisibleMessage.displayContent.length}`
@@ -234,7 +244,7 @@ export const ChatLog = memo(function ChatLog({
           <button className="log-btn" onClick={onClear} type="button">
             Clear
           </button>
-          <span className="log-count">{liveHistory.length}</span>
+          <span className="log-count">{visibleHistory.length}</span>
         </div>
       </div>
       <div className="log-deco" />
@@ -251,7 +261,7 @@ export const ChatLog = memo(function ChatLog({
           const ageMs = Math.max(0, now - message.createdAt);
           const remainingMs = MESSAGE_VISIBLE_MS - ageMs;
           const fadeRatio =
-            remainingMs < MESSAGE_FADE_MS ? clamp(remainingMs / MESSAGE_FADE_MS, 0, 1) : 1;
+            open || remainingMs >= MESSAGE_FADE_MS ? 1 : clamp(remainingMs / MESSAGE_FADE_MS, 0, 1);
           const style: MessageStyle = {
             '--msg-lift': `${Math.round((1 - fadeRatio) * 8)}px`,
             '--msg-opacity': String(clamp(0.18 + fadeRatio * 0.82, 0.18, 1)),
