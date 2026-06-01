@@ -57,38 +57,66 @@ function serializeTurnMetadataContext({
   const timezone = Intl.DateTimeFormat().resolvedOptions().timeZone || 'unknown';
   const lastUserMessage = [...history].reverse().find((message) => message.role === 'user');
   const affectState = normalizeAffectState(relationshipMemory.affectState);
-  const metadata: Record<string, PromptTurnContextValue> = {
-    currentTimeIso: now.toISOString(),
-    localTime: now.toLocaleString(undefined, {
+  const source = readTurnContextValue(turnContext, 'source') || 'unknown';
+  const turnKind = readTurnContextValue(turnContext, 'turnKind') || 'unknown';
+  const speaker =
+    readTurnContextValue(turnContext, 'displayName') ||
+    readTurnContextValue(turnContext, 'speaker') ||
+    readTurnContextValue(turnContext, 'login') ||
+    persona?.userNickname.trim() ||
+    'current user';
+  const isLocal = readTurnContextBoolean(turnContext, 'isLocal') || source === 'local';
+  const isTrustedController = readTurnContextBoolean(turnContext, 'isTrustedController');
+  const isBroadcaster = readTurnContextBoolean(turnContext, 'targetIsBroadcaster');
+  const isMod = readTurnContextBoolean(turnContext, 'targetIsMod');
+  const firstTimeChatter = readTurnContextBoolean(turnContext, 'firstTimeChatter');
+  const targetRole =
+    isLocal || isTrustedController
+      ? 'local controller'
+      : isBroadcaster
+        ? 'broadcaster'
+        : isMod
+          ? 'moderator'
+          : source === 'twitch'
+            ? 'Twitch viewer'
+            : 'speaker';
+  const localTime = now.toLocaleString(undefined, {
       dateStyle: 'medium',
       timeStyle: 'medium',
       timeZone: timezone === 'unknown' ? undefined : timezone,
-    }),
-    memoryStage: relationshipMemory.relationshipStage,
-    privateDiary: diaryContext ? 'included' : relationshipMemory.diaryEntry ? 'withheld' : 'none',
-    personaId: persona?.id,
-    personaName: persona?.name,
-    relationshipMood: relationshipMemory.mood,
-    affectArousal: affectState.arousal.toFixed(2),
-    affectDominance: affectState.dominance.toFixed(2),
-    affectLabel: affectState.label,
-    affectValence: affectState.valence.toFixed(2),
-    semanticMemory: semanticMemoryContext.trim() ? 'present' : 'absent',
-    timezone,
-    ttsExpressionTags: ttsExpressionTagsEnabled,
-    ttsProvider,
-    ...turnContext,
-  };
+    });
 
-  if (lastUserMessage) {
-    metadata['lastUserMessageAtIso'] = new Date(lastUserMessage.createdAt).toISOString();
-  }
+  const lines = [
+    'Current scene:',
+    formatSceneLine('local time', `${localTime} (${timezone})`),
+    formatSceneLine('active persona', persona?.name || 'Web Waifu 4'),
+    formatSceneLine('speaker', speaker),
+    formatSceneLine('speaker role', targetRole),
+    formatSceneLine('conversation source', source === 'local' ? 'local one-on-one chat' : source),
+    formatSceneLine('response shape', turnKind === 'batch' ? 'busy chat batch' : 'direct reply'),
+    firstTimeChatter ? '- speaker note: first message seen from this chatter this session' : '',
+    readTurnContextBoolean(turnContext, 'streamVisionAttached')
+      ? '- visual context: a recent stream frame is attached'
+      : '',
+    source === 'twitch'
+      ? formatSceneLine('active chatters', readTurnContextValue(turnContext, 'activeChatters'))
+      : '',
+    turnKind === 'batch'
+      ? formatSceneLine('messages in batch', readTurnContextValue(turnContext, 'batchMessages'))
+      : '',
+    formatSceneLine('relationship', `${relationshipMemory.relationshipStage}; ${relationshipMemory.mood}`),
+    formatSceneLine('emotional stance', describeAffectForPrompt(affectState)),
+    semanticMemoryContext.trim() ? '- memory: relevant recalled memory is available' : '',
+    diaryContext ? '- private continuity: diary context is available; use quietly' : '',
+    lastUserMessage
+      ? formatSceneLine('last user message time', new Date(lastUserMessage.createdAt).toLocaleString())
+      : '',
+    ttsExpressionTagsEnabled && ttsProvider !== 'piper'
+      ? '- speech: expression tags may be used sparingly when they improve delivery'
+      : '',
+  ].filter(Boolean);
 
-  const cleanMetadata = Object.fromEntries(
-    Object.entries(metadata).filter(([, value]) => value !== undefined && value !== null),
-  );
-
-  return `Turn metadata: ${JSON.stringify(cleanMetadata)}`;
+  return lines.join('\n');
 }
 
 function readTurnContextValue(
@@ -97,6 +125,35 @@ function readTurnContextValue(
 ) {
   const value = turnContext?.[key];
   return value === undefined || value === null ? '' : String(value).trim();
+}
+
+function readTurnContextBoolean(
+  turnContext: Record<string, PromptTurnContextValue> | undefined,
+  key: string,
+) {
+  const value = turnContext?.[key];
+  return value === true || value === 'true' || value === 1 || value === '1';
+}
+
+function formatSceneLine(label: string, value: PromptTurnContextValue) {
+  if (value === undefined || value === null || value === '') {
+    return '';
+  }
+  return `- ${label}: ${value}`;
+}
+
+function describeAffectForPrompt(affectState: ReturnType<typeof normalizeAffectState>) {
+  const valence =
+    affectState.valence > 0.22 ? 'positive' : affectState.valence < -0.22 ? 'negative' : 'neutral';
+  const arousal =
+    affectState.arousal > 0.5 ? 'high energy' : affectState.arousal < 0.2 ? 'low energy' : 'steady';
+  const dominance =
+    affectState.dominance > 0.25
+      ? 'confident'
+      : affectState.dominance < -0.25
+        ? 'deferential'
+        : 'balanced';
+  return `${affectState.label}; ${valence}, ${arousal}, ${dominance}`;
 }
 
 function buildDynamicPromptState({
@@ -125,6 +182,13 @@ function buildDynamicPromptState({
   const turnSource = readTurnContextValue(turnContext, 'source');
   const turnKind = readTurnContextValue(turnContext, 'turnKind');
   const conversationScope = readTurnContextValue(turnContext, 'conversationScope');
+  const isLocalTurn = turnSource === 'local';
+  const isTwitchTurn = turnSource === 'twitch';
+  const isBatchTurn = turnKind === 'batch';
+  const isTrustedController = readTurnContextBoolean(turnContext, 'isTrustedController');
+  const targetIsBroadcaster = readTurnContextBoolean(turnContext, 'targetIsBroadcaster');
+  const targetIsMod = readTurnContextBoolean(turnContext, 'targetIsMod');
+  const firstTimeChatter = readTurnContextBoolean(turnContext, 'firstTimeChatter');
   const currentSpeaker =
     readTurnContextValue(turnContext, 'displayName') ||
     readTurnContextValue(turnContext, 'speaker') ||
@@ -146,6 +210,7 @@ function buildDynamicPromptState({
     affect_arousal: affectState.arousal.toFixed(2),
     affect_dominance: affectState.dominance.toFixed(2),
     affect_label: affectState.label,
+    affect_summary: describeAffectForPrompt(affectState),
     affect_valence: affectState.valence.toFixed(2),
     close_relationship: relationshipStage === 'close',
     conversation_scope: conversationScope || 'chat',
@@ -162,9 +227,11 @@ function buildDynamicPromptState({
     high_trust: relationshipMemory.trust >= 12,
     irritation_score: relationshipMemory.irritation,
     irritated_state: relationshipMood === 'annoyed' || relationshipMemory.irritation >= 10,
-    is_batch_turn: turnKind === 'batch',
-    is_local_turn: turnSource === 'local',
-    is_twitch_turn: turnSource === 'twitch',
+    first_time_chatter: firstTimeChatter,
+    is_batch_turn: isBatchTurn,
+    is_direct_turn: turnKind === 'direct',
+    is_local_turn: isLocalTurn,
+    is_twitch_turn: isTwitchTurn,
     jealous_state: relationshipMemory.jealousy >= 8,
     jealousy_score: relationshipMemory.jealousy,
     last_action_tag: relationshipMemory.lastActionTag,
@@ -182,6 +249,19 @@ function buildDynamicPromptState({
     tts_fish_s2: ttsProvider === 'fish-speech' && ttsModel.trim().toLowerCase() !== 's1',
     tts_model: ttsModel.trim(),
     tts_tags_enabled: ttsExpressionTagsEnabled && ttsProvider !== 'piper',
+    target_is_broadcaster: targetIsBroadcaster,
+    target_is_mod: targetIsMod,
+    target_is_trusted_controller: isTrustedController,
+    target_role:
+      isLocalTurn || isTrustedController
+        ? 'local controller'
+        : targetIsBroadcaster
+          ? 'broadcaster'
+          : targetIsMod
+            ? 'moderator'
+            : isTwitchTurn
+              ? 'viewer'
+              : 'speaker',
     turn_kind: turnKind || 'unknown',
     turn_source: turnSource || 'unknown',
     user_nickname: persona?.userNickname.trim() || '',

@@ -98,7 +98,6 @@ import {
   chatTurnToChatMessage,
   createLocalChatTurn,
   createTwitchChatTurn,
-  formatChatTurnMetadata,
   formatChatTurns,
   type ChatTurn,
 } from './lib/chat/chat-turn';
@@ -1773,7 +1772,6 @@ function buildChatAiPrompt(
   persona: PersonaProfile | null,
   channel: string,
   replyLength: AiSettings['replyLength'],
-  twitchSettings: TwitchSettings,
 ) {
   const personaName = persona?.name ?? DEFAULT_PERSONA.name;
   const channelName = normalizeStateKeyPart(channel, DIRECT_TWITCH_CHANNEL || 'subsect');
@@ -1781,10 +1779,6 @@ function buildChatAiPrompt(
     .map((tag) => `@${tag}`)
     .join(', ');
   const localControllerNickname = persona?.userNickname.trim();
-  const batchSize = getTwitchBatchSize(job.activeChatterCount, twitchSettings);
-  const batchWaitSeconds = Math.round(
-    getTwitchBatchWaitMs(job.activeChatterCount, twitchSettings) / 1000,
-  );
   const isTwitchTurn = job.messages.some((turn) => turn.source === 'twitch');
   const identityContext = [
     `Current chat room: ${isTwitchTurn ? `#${channelName}` : 'local chat box'}.`,
@@ -1796,7 +1790,7 @@ function buildChatAiPrompt(
         ? `The local controller/stream owner nickname is "${localControllerNickname}", but Twitch messages can come from other participants.`
         : `The local controller nickname is "${localControllerNickname}". Talk to them directly in second person.`
       : null,
-    'Do not assume the current speaker is the local controller unless metadata says trustedController=true, local=true, broadcaster=true, or mod=true.',
+    'Do not assume the current speaker is the local controller unless speaker context says they are local, trusted, the broadcaster, or a moderator.',
   ]
     .filter((value): value is string => Boolean(value))
     .join('\n');
@@ -1805,32 +1799,31 @@ function buildChatAiPrompt(
     const [target] = job.messages;
     const sourceLabel = target?.source === 'local' ? 'Local chat' : 'Live Twitch chat';
     return [
-      `${sourceLabel} mode: direct queue for ${personaName}.`,
+      `${sourceLabel}: direct message for ${personaName}.`,
       identityContext,
       `Approx active chatters in the last two minutes: ${job.activeChatterCount}.`,
-      `Intake policy: active chatters are at or below ${twitchSettings.directChatterLimit}, so Twitch messages ${twitchSettings.mentionRequiredUnderThreshold ? 'need @mentions' : 'can enter directly'} and local turns are queued for a direct reply.`,
-      `Current queued message:\n${formatChatTurns(job.messages, 1)}`,
-      target ? `Target message metadata: ${formatChatTurnMetadata(target)}` : null,
+      `Current message:\n${formatChatTurns(job.messages, 1)}`,
       target?.isBroadcaster
-        ? 'The tagged viewer is the broadcaster/channel owner.'
+        ? 'Speaker context: the target is the broadcaster/channel owner.'
         : target?.isLocal
-          ? 'The target is the local chat box participant/controller. Reply directly to them, not to an audience.'
-          : 'The tagged viewer is a Twitch chatter; reply to that display name, not the local controller nickname.',
+          ? 'Speaker context: the target is the local chat box participant/controller. Reply directly to them, not to an audience.'
+          : target?.isMod
+            ? 'Speaker context: the target is a Twitch moderator; reply to that display name, not the local controller nickname.'
+            : 'Speaker context: the target is a Twitch chatter; reply to that display name, not the local controller nickname.',
       job.firstTimeChatter
         ? 'This is the first message seen from this viewer in this browser session; greet them naturally.'
         : null,
       getTurnReplyLengthInstruction(replyLength, 'direct'),
-      'Do not mention command syntax, queues, batching, or system internals.',
+      'Do not mention command syntax, routing, queues, batching, or system internals.',
     ]
       .filter((value): value is string => Boolean(value))
       .join('\n\n');
   }
 
   return [
-    `Live chat mode: balanced batch for ${personaName}.`,
+    `Live Twitch chat: busy group conversation for ${personaName}.`,
     identityContext,
     `Approx active chatters in the last two minutes: ${job.activeChatterCount}.`,
-    `Intake policy: active chatters are above ${twitchSettings.directChatterLimit}, so @mention gating is disabled; summarize every ${batchSize} messages or after about ${batchWaitSeconds} seconds, whichever fires first.`,
     'The chat is busy, so answer the overall energy or strongest shared topic instead of replying to every line.',
     getTurnReplyLengthInstruction(replyLength, 'batch'),
     `Current batch:\n${formatChatTurns(job.messages, 30)}`,
@@ -5953,7 +5946,6 @@ function App() {
         persona,
         channel,
         settings.replyLength,
-        currentTwitchSettings,
       );
       const streamTranscriptContext = formatTwitchStreamTranscriptContext(
         twitchStreamTranscriptsRef.current,
@@ -6101,19 +6093,12 @@ function App() {
               currentTurnText: userContent,
               displayName: targetMessage?.displayName ?? '',
               firstTimeChatter: job.firstTimeChatter ?? false,
-              intakePolicy:
-                job.mode === 'direct'
-                  ? `activeChatters <= ${currentTwitchSettings.directChatterLimit}; ${currentTwitchSettings.mentionRequiredUnderThreshold ? '@mentions required' : '@mentions optional'}; local turns enabled; direct queued reply`
-                  : `activeChatters > ${currentTwitchSettings.directChatterLimit}; @mentions disabled; batch every ${getTwitchBatchSize(job.activeChatterCount, currentTwitchSettings)} messages or ${Math.round(
-                      getTwitchBatchWaitMs(job.activeChatterCount, currentTwitchSettings) / 1000,
-                    )} seconds`,
               isLocal: targetMessage?.isLocal ?? false,
               isTrustedController: targetMessage?.isTrustedController ?? false,
               login: targetMessage?.login ?? '',
               localControllerNickname: currentTwitchSettings.localDisplayName || 'not configured',
               source: targetMessage?.source ?? 'twitch',
-              stateKey,
-              streamVisionContext: promptVisionFrame ? 'attached' : 'not-attached',
+              streamVisionAttached: Boolean(promptVisionFrame),
               targetBadges: targetMessage?.badges.join('/') ?? '',
               targetIsBroadcaster: targetMessage?.isBroadcaster ?? false,
               targetIsMod: targetMessage?.isMod ?? false,
