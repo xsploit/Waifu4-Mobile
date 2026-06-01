@@ -270,6 +270,23 @@ describe('SettingsPanel tab smoke', () => {
     expect(html).toContain('1 embedding model');
   });
 
+  it('renders object-shaped diary snapshots as readable text', () => {
+    const props = createProps('context');
+    props.relationshipMemory = {
+      ...props.relationshipMemory,
+      diaryEntry: {
+        personal_thought: 'This pattern should affect future replies.',
+        summary: 'Subsect iterated until the welcome message was clean.',
+      } as unknown as string,
+    };
+
+    const html = renderToStaticMarkup(<SettingsPanel {...props} />);
+
+    expect(html).toContain('Subsect iterated until the welcome message was clean.');
+    expect(html).toContain('This pattern should affect future replies.');
+    expect(html).not.toContain('[object Object]');
+  });
+
   it('keeps Voice Lab provider creation, catalog, and persona binding controls mounted', () => {
     const props = createProps('voice-lab');
     props.remoteTtsVoices = [
