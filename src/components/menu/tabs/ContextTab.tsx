@@ -20,7 +20,8 @@ import type { AiSettings, RelationshipMemory } from '../../../lib/chat/types';
 
 function stringifyContextValue(value: unknown): string {
   if (typeof value === 'string') {
-    return value.trim();
+    const text = value.trim();
+    return text === '[object Object]' ? '' : text;
   }
   if (!value) {
     return '';

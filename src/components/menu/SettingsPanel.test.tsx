@@ -287,6 +287,19 @@ describe('SettingsPanel tab smoke', () => {
     expect(html).not.toContain('[object Object]');
   });
 
+  it('does not render stale object-object diary snapshots', () => {
+    const props = createProps('context');
+    props.relationshipMemory = {
+      ...props.relationshipMemory,
+      diaryEntry: '[object Object]',
+    };
+
+    const html = renderToStaticMarkup(<SettingsPanel {...props} />);
+
+    expect(html).toContain('No diary entry written yet.');
+    expect(html).not.toContain('[object Object]');
+  });
+
   it('keeps Voice Lab provider creation, catalog, and persona binding controls mounted', () => {
     const props = createProps('voice-lab');
     props.remoteTtsVoices = [

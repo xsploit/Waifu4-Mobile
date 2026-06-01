@@ -125,10 +125,47 @@ export function normalizeRelationshipActionTag(value: unknown): RelationshipActi
 }
 
 export function sanitizeDiaryEntry(value: unknown) {
-  return String(value ?? '')
+  return stringifyMemoryText(value)
     .replace(/\s+/g, ' ')
     .trim()
     .slice(0, MAX_DIARY_CHARS);
+}
+
+export function stringifyMemoryText(value: unknown): string {
+  if (typeof value === 'string') {
+    const text = value.trim();
+    return text === '[object Object]' ? '' : value;
+  }
+  if (value === undefined || value === null) {
+    return '';
+  }
+  if (typeof value === 'number' || typeof value === 'boolean') {
+    return String(value);
+  }
+  if (typeof value === 'object') {
+    const record = value as Record<string, unknown>;
+    const prioritized = [
+      record.summary,
+      record.personalThought,
+      record.personal_thought,
+      record.thought,
+      record.text,
+      record.entry,
+      record.content,
+    ]
+      .map(stringifyMemoryText)
+      .map((text) => text.trim())
+      .filter(Boolean);
+    if (prioritized.length > 0) {
+      return prioritized.join(' ');
+    }
+    try {
+      return JSON.stringify(value);
+    } catch {
+      return '';
+    }
+  }
+  return String(value);
 }
 
 export function deriveRelationshipStage(memory: Pick<
