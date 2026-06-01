@@ -61,8 +61,10 @@ backup restore, while keeping the original frontend look and tab workflow.
       <h3 align="center">Brain</h3>
       <ul>
         <li>OpenRouter Responses and Vercel Gateway chat lanes.</li>
+        <li>OpenRouter model catalog loading with provider metadata displayed in the AI tab.</li>
         <li>Structured/text reply routing from model capability metadata.</li>
         <li>OpenRouter-aware model picker metadata: tools, reasoning, vision, images, files, context, max tokens, structured outputs, and embedding tags.</li>
+        <li>Defensive compatibility routing so models without structured outputs can stay on the text lane instead of failing JSON/schema requests.</li>
         <li>POML-backed dynamic prompt rendering.</li>
         <li>Main chat Tavily tools through Account-tab keys.</li>
         <li>Visible streamed deltas with metadata kept out of spoken text.</li>
@@ -129,6 +131,57 @@ backup restore, while keeping the original frontend look and tab workflow.
 
 <h2 align="center" id="provider-and-model-support">Provider and Model Support</h2>
 
+<p align="center">
+  The rebuild treats provider metadata as runtime safety data, not just labels.
+  Model capabilities decide what the UI shows and which request shape the backend
+  should use.
+</p>
+
+### OpenRouter-Focused Compatibility
+
+OpenRouter is a first-class lane in the rebuild. The app loads model metadata
+and uses it to avoid the old failure mode where a model is selected because it
+looks capable but then rejects the request shape at runtime.
+
+- **Catalog-first model loading:** the AI tab can load OpenRouter's model list,
+  keep useful metadata beside each model, and use that metadata to annotate the
+  picker instead of treating every model as a generic chat endpoint.
+- **Provider-aware request lane:** OpenRouter Responses models and Vercel
+  Gateway models share the same UI flow, but the request body is shaped per
+  provider so compatibility fixes do not leak across lanes.
+- **Structured output gating:** structured replies are only used for OpenRouter
+  models that advertise structured output support. Other models use the text
+  lane with metadata parsing.
+- **Capability tags:** the picker surfaces useful model traits such as tools,
+  reasoning, vision/image input, file input, context length, max tokens,
+  implicit caching, and embedding-model eligibility.
+- **Vision and file readiness:** model metadata is tracked so image/video-frame
+  context and future file-input surfaces can avoid unsupported models before the
+  request is sent.
+- **Tool compatibility:** main-chat Tavily tool requests are kept separate from
+  memory-worker tools and shaped for OpenRouter's stricter tool parameter rules.
+- **Embedding filtering:** embedding model selection can use provider metadata
+  while still supporting browser-local Transformers embeddings.
+- **Reasoning-aware memory backlog:** reasoning-capable models are detected now;
+  the next step is using provider-safe reasoning summaries as memory signals
+  without storing hidden chain-of-thought.
+- **Defensive fallback:** unknown or incomplete metadata falls back toward
+  plain text/meta parsing rather than forcing schema or tool modes that can
+  trigger provider validation errors.
+
+### High-Level Feature Surface
+
+| Surface | What it covers |
+| --- | --- |
+| Account | Browser-stored provider keys for OpenRouter, Vercel Gateway, Fish, Inworld, Tavily, and other providers; backend env keys are fallback only. |
+| AI | Provider/model selection, model catalog refresh, OpenRouter capability badges, structured/text lane selection, POML prompt configuration, tool toggles, and streaming reply settings. |
+| TTS | Fish WebSocket, Fish Timestamp SSE, Inworld HTTP, Inworld WebSocket, Early Chunks, latency controls, timestamp controls, continuity controls, and audible benchmark comparison. |
+| Avatar | VRM loading/saving, stage controls, animation categories, expression resolution, talking/idle animation hooks, mouth ownership, and emotion telemetry. |
+| Twitch | Frontend direct IRC, local/Twitch queue intake, command handling, membership/event reactions, transcription hooks, and video-frame context for vision models. |
+| Memory | LadybugDB, GRILLO worker passes, relationship profile, candidate memories, diary/reflection, semantic/vector records, embeddings, graph view, activity logs, and worker traces. |
+| Voice Lab | Provider voice catalogs, persona voice binding, voice creation surfaces, and backup/restore of voice settings. |
+| Local Backup | Import/export of settings, provider keys, personas, chat scopes, saved VRMs, relationship memory, and voice lab data with worker-backed large-file handling. |
+
 <table align="center">
   <tr>
     <th>Area</th>
@@ -136,11 +189,27 @@ backup restore, while keeping the original frontend look and tab workflow.
   </tr>
   <tr>
     <td>LLM</td>
-    <td>OpenRouter Responses, Vercel Gateway, streamed text, structured/text lane gating, model metadata tags.</td>
+    <td>OpenRouter Responses, Vercel Gateway, streamed text, structured/text lane gating, provider-specific request shaping.</td>
+  </tr>
+  <tr>
+    <td>OpenRouter Metadata</td>
+    <td>Model picker tags for structured outputs, tools, reasoning, implicit cache, vision/image input, file input, context length, max tokens, and embedding eligibility.</td>
+  </tr>
+  <tr>
+    <td>Structured Output Safety</td>
+    <td>Models that advertise structured output support can use the structured lane; unsupported or unknown OpenRouter models fall back to text/meta parsing to avoid provider errors.</td>
+  </tr>
+  <tr>
+    <td>Embedding Models</td>
+    <td>Embedding picker can filter provider catalogs by metadata while preserving browser-local Transformers embeddings as the local-first default.</td>
+  </tr>
+  <tr>
+    <td>Reasoning Models</td>
+    <td>Reasoning-capable models are tagged. Future memory work will capture provider-safe reasoning summaries as memory signals when available, without storing hidden chain-of-thought.</td>
   </tr>
   <tr>
     <td>Tools</td>
-    <td>Main chat Tavily search/extract/crawl path plus GRILLO worker tools.</td>
+    <td>Main chat Tavily search/extract/crawl path plus GRILLO worker tools. OpenRouter tool requests are shaped for stricter provider compatibility.</td>
   </tr>
   <tr>
     <td>TTS</td>
