@@ -990,6 +990,17 @@ function normalizeVisualSettings(value: unknown): VisualSettings {
   ) {
     next.sceneBackgroundMode = source.sceneBackgroundMode;
   }
+  if (
+    source.toonShaderPreset === 'original' ||
+    source.toonShaderPreset === 'soft-mtoon' ||
+    source.toonShaderPreset === 'hard-anime' ||
+    source.toonShaderPreset === 'nilo-urp' ||
+    source.toonShaderPreset === 'pastel-vtuber' ||
+    source.toonShaderPreset === 'high-contrast' ||
+    source.toonShaderPreset === 'custom'
+  ) {
+    next.toonShaderPreset = source.toonShaderPreset;
+  }
   next.sceneBackgroundImage = normalizeBoundedString(
     source.sceneBackgroundImage,
     defaults.sceneBackgroundImage,

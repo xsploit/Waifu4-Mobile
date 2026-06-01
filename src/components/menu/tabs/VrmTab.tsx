@@ -3,6 +3,7 @@ import type { Dispatch, SetStateAction } from 'react';
 import type {
   BundledVrmOption,
   SavedVrmModelSummary,
+  ToonShaderPreset,
   VisualSettings,
 } from '../../../lib/menu/types';
 import { Slider } from '../ui/Slider';
@@ -32,6 +33,149 @@ function updateVisualSettings(
     ...current,
     ...patch,
   }));
+}
+
+const TOON_SHADER_PRESET_LABELS: Record<ToonShaderPreset, string> = {
+  original: 'Original VRM',
+  'soft-mtoon': 'Soft MToon',
+  'hard-anime': 'Hard Anime',
+  'nilo-urp': 'Nilo / URP-ish',
+  'pastel-vtuber': 'Pastel VTuber',
+  'high-contrast': 'High Contrast Cel',
+  custom: 'Custom',
+};
+
+const TOON_SHADER_PRESETS: Record<Exclude<ToonShaderPreset, 'custom'>, Partial<VisualSettings>> = {
+  original: {
+    toonShaderPreset: 'original',
+    mtoonTuning: false,
+  },
+  'soft-mtoon': {
+    toonShaderPreset: 'soft-mtoon',
+    outline: true,
+    outlineAlpha: 0.65,
+    outlineColor: '#211719',
+    outlineThickness: 0.0025,
+    mtoonTuning: true,
+    mtoonGiEqualization: 0.85,
+    mtoonRimColor: '#fff4ee',
+    mtoonRimFresnel: 4.2,
+    mtoonRimLift: 0.08,
+    mtoonRimLightingMix: 0.65,
+    mtoonShadeColor: '#9b8790',
+    mtoonShadeShift: -0.12,
+    mtoonToony: 0.72,
+    keyLight: 0.72,
+    fillLight: 0.36,
+    rimLight: 0.32,
+    hemiLight: 0.42,
+    ambientLight: 0.38,
+  },
+  'hard-anime': {
+    toonShaderPreset: 'hard-anime',
+    outline: true,
+    outlineAlpha: 0.9,
+    outlineColor: '#050505',
+    outlineThickness: 0.0045,
+    mtoonTuning: true,
+    mtoonGiEqualization: 1,
+    mtoonRimColor: '#ffffff',
+    mtoonRimFresnel: 6.5,
+    mtoonRimLift: 0.02,
+    mtoonRimLightingMix: 0.85,
+    mtoonShadeColor: '#6f6774',
+    mtoonShadeShift: -0.28,
+    mtoonToony: 0.96,
+    keyLight: 0.95,
+    fillLight: 0.18,
+    rimLight: 0.5,
+    hemiLight: 0.28,
+    ambientLight: 0.24,
+  },
+  'nilo-urp': {
+    toonShaderPreset: 'nilo-urp',
+    outline: true,
+    outlineAlpha: 0.88,
+    outlineColor: '#141016',
+    outlineThickness: 0.0038,
+    mtoonTuning: true,
+    mtoonGiEqualization: 0.95,
+    mtoonRimColor: '#f4fbff',
+    mtoonRimFresnel: 5.8,
+    mtoonRimLift: 0.04,
+    mtoonRimLightingMix: 0.78,
+    mtoonShadeColor: '#766a7f',
+    mtoonShadeShift: -0.22,
+    mtoonToony: 0.9,
+    keyLight: 0.9,
+    fillLight: 0.24,
+    rimLight: 0.48,
+    hemiLight: 0.32,
+    ambientLight: 0.28,
+  },
+  'pastel-vtuber': {
+    toonShaderPreset: 'pastel-vtuber',
+    outline: true,
+    outlineAlpha: 0.5,
+    outlineColor: '#6d5268',
+    outlineThickness: 0.002,
+    mtoonTuning: true,
+    mtoonGiEqualization: 0.7,
+    mtoonRimColor: '#ffeef7',
+    mtoonRimFresnel: 3.4,
+    mtoonRimLift: 0.16,
+    mtoonRimLightingMix: 0.55,
+    mtoonShadeColor: '#c0a6b8',
+    mtoonShadeShift: -0.06,
+    mtoonToony: 0.62,
+    keyLight: 0.62,
+    fillLight: 0.5,
+    rimLight: 0.25,
+    hemiLight: 0.55,
+    ambientLight: 0.48,
+  },
+  'high-contrast': {
+    toonShaderPreset: 'high-contrast',
+    outline: true,
+    outlineAlpha: 1,
+    outlineColor: '#000000',
+    outlineThickness: 0.006,
+    mtoonTuning: true,
+    mtoonGiEqualization: 1,
+    mtoonRimColor: '#ffffff',
+    mtoonRimFresnel: 8,
+    mtoonRimLift: 0,
+    mtoonRimLightingMix: 1,
+    mtoonShadeColor: '#4f4a59',
+    mtoonShadeShift: -0.38,
+    mtoonToony: 1,
+    keyLight: 1,
+    fillLight: 0.08,
+    rimLight: 0.65,
+    hemiLight: 0.18,
+    ambientLight: 0.18,
+  },
+};
+
+function applyToonShaderPreset(
+  setVisualSettings: Dispatch<SetStateAction<VisualSettings>>,
+  preset: ToonShaderPreset,
+) {
+  if (preset === 'custom') {
+    updateVisualSettings(setVisualSettings, { toonShaderPreset: 'custom' });
+    return;
+  }
+  updateVisualSettings(setVisualSettings, TOON_SHADER_PRESETS[preset]);
+}
+
+function updateCustomShaderSettings(
+  setVisualSettings: Dispatch<SetStateAction<VisualSettings>>,
+  patch: Partial<VisualSettings>,
+) {
+  updateVisualSettings(setVisualSettings, {
+    ...patch,
+    toonShaderPreset: 'custom',
+  });
 }
 
 function ColorField({
@@ -448,23 +592,46 @@ export function VrmTab({
 
       <div className="control-group">
         <div className="control-label">Model Shading</div>
+        <select
+          className="select-tech"
+          onChange={(event) =>
+            applyToonShaderPreset(setVisualSettings, event.target.value as ToonShaderPreset)
+          }
+          value={visualSettings.toonShaderPreset}
+        >
+          {(Object.keys(TOON_SHADER_PRESET_LABELS) as ToonShaderPreset[]).map((preset) => (
+            <option key={preset} value={preset}>
+              {TOON_SHADER_PRESET_LABELS[preset]}
+            </option>
+          ))}
+        </select>
+        <div className="field-hint">
+          Presets retune MToon, rim, outline, and lighting controls without replacing the VRM
+          material.
+        </div>
         <div className="toggle-row">
           <span>Anime Outlines</span>
           <Toggle
             checked={visualSettings.outline}
-            onChange={(checked) => updateVisualSettings(setVisualSettings, { outline: checked })}
+            onChange={(checked) =>
+              updateCustomShaderSettings(setVisualSettings, { outline: checked })
+            }
           />
         </div>
         <ColorField
           label="Outline Color"
-          onChange={(value) => updateVisualSettings(setVisualSettings, { outlineColor: value })}
+          onChange={(value) =>
+            updateCustomShaderSettings(setVisualSettings, { outlineColor: value })
+          }
           value={visualSettings.outlineColor}
         />
         <Slider
           label="Outline Size"
           max={0.02}
           min={0.0005}
-          onInput={(value) => updateVisualSettings(setVisualSettings, { outlineThickness: value })}
+          onInput={(value) =>
+            updateCustomShaderSettings(setVisualSettings, { outlineThickness: value })
+          }
           step={0.0005}
           value={visualSettings.outlineThickness}
         />
@@ -472,7 +639,9 @@ export function VrmTab({
           label="Outline Alpha"
           max={1}
           min={0}
-          onInput={(value) => updateVisualSettings(setVisualSettings, { outlineAlpha: value })}
+          onInput={(value) =>
+            updateCustomShaderSettings(setVisualSettings, { outlineAlpha: value })
+          }
           step={0.05}
           value={visualSettings.outlineAlpha}
         />
@@ -560,20 +729,24 @@ export function VrmTab({
           <Toggle
             checked={visualSettings.mtoonTuning}
             onChange={(checked) =>
-              updateVisualSettings(setVisualSettings, { mtoonTuning: checked })
+              updateCustomShaderSettings(setVisualSettings, { mtoonTuning: checked })
             }
           />
         </div>
         <ColorField
           label="Shade Color"
-          onChange={(value) => updateVisualSettings(setVisualSettings, { mtoonShadeColor: value })}
+          onChange={(value) =>
+            updateCustomShaderSettings(setVisualSettings, { mtoonShadeColor: value })
+          }
           value={visualSettings.mtoonShadeColor}
         />
         <Slider
           label="Shade Shift"
           max={1}
           min={-1}
-          onInput={(value) => updateVisualSettings(setVisualSettings, { mtoonShadeShift: value })}
+          onInput={(value) =>
+            updateCustomShaderSettings(setVisualSettings, { mtoonShadeShift: value })
+          }
           step={0.05}
           value={visualSettings.mtoonShadeShift}
         />
@@ -581,7 +754,7 @@ export function VrmTab({
           label="Toony"
           max={1}
           min={0}
-          onInput={(value) => updateVisualSettings(setVisualSettings, { mtoonToony: value })}
+          onInput={(value) => updateCustomShaderSettings(setVisualSettings, { mtoonToony: value })}
           step={0.05}
           value={visualSettings.mtoonToony}
         />
@@ -590,21 +763,25 @@ export function VrmTab({
           max={1}
           min={0}
           onInput={(value) =>
-            updateVisualSettings(setVisualSettings, { mtoonGiEqualization: value })
+            updateCustomShaderSettings(setVisualSettings, { mtoonGiEqualization: value })
           }
           step={0.05}
           value={visualSettings.mtoonGiEqualization}
         />
         <ColorField
           label="Rim Color"
-          onChange={(value) => updateVisualSettings(setVisualSettings, { mtoonRimColor: value })}
+          onChange={(value) =>
+            updateCustomShaderSettings(setVisualSettings, { mtoonRimColor: value })
+          }
           value={visualSettings.mtoonRimColor}
         />
         <Slider
           label="Rim Lift"
           max={1}
           min={0}
-          onInput={(value) => updateVisualSettings(setVisualSettings, { mtoonRimLift: value })}
+          onInput={(value) =>
+            updateCustomShaderSettings(setVisualSettings, { mtoonRimLift: value })
+          }
           step={0.05}
           value={visualSettings.mtoonRimLift}
         />
@@ -612,7 +789,9 @@ export function VrmTab({
           label="Rim Power"
           max={10}
           min={0.1}
-          onInput={(value) => updateVisualSettings(setVisualSettings, { mtoonRimFresnel: value })}
+          onInput={(value) =>
+            updateCustomShaderSettings(setVisualSettings, { mtoonRimFresnel: value })
+          }
           step={0.1}
           value={visualSettings.mtoonRimFresnel}
         />
@@ -621,7 +800,7 @@ export function VrmTab({
           max={1}
           min={0}
           onInput={(value) =>
-            updateVisualSettings(setVisualSettings, { mtoonRimLightingMix: value })
+            updateCustomShaderSettings(setVisualSettings, { mtoonRimLightingMix: value })
           }
           step={0.05}
           value={visualSettings.mtoonRimLightingMix}

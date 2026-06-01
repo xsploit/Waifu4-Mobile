@@ -17,6 +17,15 @@ export type CameraRigMode = 'locked' | 'custom';
 
 export type SceneBackgroundMode = 'persona' | 'custom' | 'chroma' | 'transparent';
 
+export type ToonShaderPreset =
+  | 'original'
+  | 'soft-mtoon'
+  | 'hard-anime'
+  | 'nilo-urp'
+  | 'pastel-vtuber'
+  | 'high-contrast'
+  | 'custom';
+
 export type BundledVrmOption = {
   id: string;
   label: string;
@@ -88,6 +97,7 @@ export type VisualSettings = {
   armClipGuardStrength: number;
   armClipTorsoRadius: number;
   crossfadeDuration: number;
+  toonShaderPreset: ToonShaderPreset;
   outline: boolean;
   outlineAlpha: number;
   outlineColor: string;

@@ -41,6 +41,7 @@ export function createDefaultVisualSettings(): VisualSettings {
     armClipGuardStrength: 0.75,
     armClipTorsoRadius: 0.24,
     crossfadeDuration: 1,
+    toonShaderPreset: 'original',
     outline: true,
     outlineAlpha: 0.8,
     outlineColor: '#000000',

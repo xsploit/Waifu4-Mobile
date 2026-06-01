@@ -207,6 +207,19 @@ describe('SettingsPanel tab smoke', () => {
     expect(html).toContain('tavily_search');
   });
 
+  it('keeps toon shader presets mounted on the avatar tab', () => {
+    const html = renderToStaticMarkup(<SettingsPanel {...createProps('vrm')} />);
+
+    expect(html).toContain('Model Shading');
+    expect(html).toContain('Original VRM');
+    expect(html).toContain('Soft MToon');
+    expect(html).toContain('Hard Anime');
+    expect(html).toContain('Nilo / URP-ish');
+    expect(html).toContain('Pastel VTuber');
+    expect(html).toContain('High Contrast Cel');
+    expect(html).toContain('Presets retune MToon');
+  });
+
   it('keeps Twitch direct IRC, ASR, queue, and stream vision controls mounted', () => {
     const props = createProps('twitch');
     props.twitchSettings = {
