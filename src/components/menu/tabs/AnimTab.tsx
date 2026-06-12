@@ -94,6 +94,23 @@ function updatePlaylistEntry(
   }));
 }
 
+function parseAnimationTags(value: string) {
+  return Array.from(
+    new Set(
+      value
+        .split(',')
+        .map((tag) =>
+          tag
+            .trim()
+            .toLowerCase()
+            .replace(/[^a-z0-9]+/g, '-')
+            .replace(/^-+|-+$/g, ''),
+        )
+        .filter(Boolean),
+    ),
+  ).slice(0, 12);
+}
+
 function setAnimationGroupEnabled(
   setSequencerSettings: Dispatch<SetStateAction<SequencerSettings>>,
   groupId: AnimationGroupId,
@@ -232,6 +249,33 @@ export function AnimTab({
               type="button"
             >
               {entry.loopEligible !== false ? 'Loop' : 'Trigger'}
+            </button>
+          </div>
+          <div className="anim-meta-field anim-meta-field-wide">
+            <span>Tags</span>
+            <input
+              className="input-tech"
+              onChange={(event) =>
+                updatePlaylistEntry(setSequencerSettings, index, {
+                  tags: parseAnimationTags(event.target.value),
+                })
+              }
+              placeholder="idle, talk, happy, subtle"
+              value={(entry.tags ?? []).join(', ')}
+            />
+          </div>
+          <div className="anim-meta-field">
+            <span>Review</span>
+            <button
+              className={`loop-chip ${entry.experimental ? 'on' : ''}`}
+              onClick={() =>
+                updatePlaylistEntry(setSequencerSettings, index, {
+                  experimental: !entry.experimental,
+                })
+              }
+              type="button"
+            >
+              {entry.experimental ? 'Experimental' : 'Stable'}
             </button>
           </div>
         </div>

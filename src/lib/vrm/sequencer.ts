@@ -31,6 +31,38 @@ const UNSAFE_BASE_LOOP_TAGS = new Set([
   'walk',
 ]);
 
+const TAG_ALIASES: Record<string, string> = {
+  amusement: 'amused',
+  annoyance: 'annoyed',
+  attention: 'attention',
+  confusion: 'confused',
+  curiosity: 'curious',
+  excitement: 'excited',
+  gratitude: 'grateful',
+  joy: 'happy',
+  nervousness: 'nervous',
+  optimism: 'optimistic',
+  pride: 'proud',
+  realization: 'surprised',
+  relief: 'caring',
+};
+
+const TAG_ENRICHMENT: Array<[RegExp, string[]]> = [
+  [/\b(idle|neutral|stand|hima|waiting)\b/i, ['idle', 'listen', 'subtle']],
+  [/\b(talk|zatu|ruru)\b/i, ['talk', 'casual', 'upper-body']],
+  [/\b(wave|greeting)\b/i, ['wave', 'greeting', 'friendly']],
+  [/\b(point|attention|explain)\b/i, ['point', 'explain', 'attention']],
+  [/\b(happy|joy|amused|amusement)\b/i, ['happy', 'amused']],
+  [/\b(caring|gratitude|approval|relief)\b/i, ['caring', 'grateful']],
+  [/\b(curious|curiosity|thinking|hima|realization)\b/i, ['curious', 'thinking']],
+  [/\b(confused|confusion)\b/i, ['confused']],
+  [/\b(surprise|surprised|attention)\b/i, ['surprised']],
+  [/\b(annoyed|annoyance|anger|disapproval)\b/i, ['annoyed']],
+  [/\b(nervous|nervousness|embarrass|shy|skirt)\b/i, ['nervous', 'shy']],
+  [/\b(walk|standup|rotate|spin|airplane)\b/i, ['big-motion', 'unsafe-loop', 'locomotion']],
+  [/\b(sit|kneel|pose|lay|lying|crouch)\b/i, ['floor', 'pose', 'unsafe-loop']],
+];
+
 const LEGACY_ANIMATIONS: BundledAnimationDefinition[] = [
   {
     id: 'idle',
@@ -485,7 +517,7 @@ const SILLY_TAVERN_ANIMATIONS: Array<[file: string, name: string]> =
 
 function bundledAnimation(definition: BundledAnimationDefinition): AnimationEntry {
   const purpose = definition.purpose ?? 'gesture';
-  const tags = definition.tags ?? [];
+  const tags = enrichAnimationTags(definition.tags ?? [], `${definition.id} ${definition.name}`);
   return {
     id: definition.id,
     name: definition.name,
@@ -511,15 +543,16 @@ function classifySillyAnimation(
     .replace(/^-+|-+$/g, '')
     .toLowerCase()}`;
   const lower = `${file} ${name}`.toLowerCase();
-  const tags = lower
+  const baseTags = lower
     .replace(/\.[^.]+/g, ' ')
     .split(/[^a-z0-9]+/g)
     .filter((tag) => tag.length >= 3 && tag !== 'bvh' && tag !== 'silly');
+  const tags = enrichAnimationTags(baseTags, lower);
   const tagSet = new Set(tags);
   const isAmbient = tagSet.has('neutral') || tagSet.has('idle');
   const isMovement = tagSet.has('walk') || tagSet.has('standup') || tagSet.has('kneel');
   const isPose = tagSet.has('sit') || tagSet.has('kneel') || tagSet.has('pose');
-  const isGreeting = tagSet.has('greeting');
+  const isGreeting = tagSet.has('greeting') || tagSet.has('wave');
   const isUnknown = tags.includes('unknown');
 
   return {
@@ -531,8 +564,32 @@ function classifySillyAnimation(
     experimental: true,
     loopEligible: isAmbient && !isMovement && !isPose,
     purpose: isMovement ? 'movement' : isPose ? 'pose' : isGreeting ? 'gesture' : 'emotion',
-    tags: isGreeting ? [...tags, 'greeting', 'wave'] : tags,
+    tags,
   };
+}
+
+function enrichAnimationTags(inputTags: string[], text: string) {
+  const tags = new Set<string>();
+  for (const tag of inputTags) {
+    const normalized = normalizeAnimationTag(tag);
+    if (normalized) {
+      tags.add(TAG_ALIASES[normalized] ?? normalized);
+    }
+  }
+  for (const [pattern, additions] of TAG_ENRICHMENT) {
+    if (pattern.test(text)) {
+      additions.forEach((tag) => tags.add(tag));
+    }
+  }
+  return Array.from(tags).slice(0, 12);
+}
+
+function normalizeAnimationTag(value: string) {
+  return value
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '');
 }
 
 export const DEFAULT_ANIMATIONS: AnimationEntry[] = [

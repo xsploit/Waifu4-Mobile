@@ -208,7 +208,33 @@ export function buildReplyMetadataInstruction() {
 }
 
 export function buildAnimationCatalogInstruction(_playlist: AnimationEntry[]) {
-  return '';
+  const entries = _playlist.filter(
+    (entry) => entry.enabled && !entry.experimental && entry.purpose && entry.tags?.length,
+  );
+  if (entries.length === 0) {
+    return '';
+  }
+
+  const groups = new Map<string, AnimationEntry[]>();
+  for (const entry of entries) {
+    const purpose = entry.purpose ?? 'gesture';
+    groups.set(purpose, [...(groups.get(purpose) ?? []), entry]);
+  }
+
+  const lines = [
+    'Available avatar motion cues. Use these only to choose matching emotion metadata; do not name animations in the spoken reply.',
+  ];
+  for (const [purpose, groupEntries] of groups) {
+    const compact = groupEntries
+      .slice(0, 12)
+      .map((entry) => {
+        const mode = entry.loopEligible === false ? 'trigger' : 'loop';
+        return `${entry.name} (${mode}; ${(entry.tags ?? []).slice(0, 5).join(', ')})`;
+      })
+      .join('; ');
+    lines.push(`- ${purpose}: ${compact}`);
+  }
+  return lines.join('\n');
 }
 
 export function stripAssistantReplyMetadata(text: string): AssistantReplyParseResult {

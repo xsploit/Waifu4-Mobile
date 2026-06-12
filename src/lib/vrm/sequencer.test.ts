@@ -61,6 +61,16 @@ describe('animation sequencer catalog', () => {
     expect(isBaseLoopAnimation(thinking!)).toBe(false);
   });
 
+  it('enriches catalog tags for AI-safe animation selection', () => {
+    const talk = DEFAULT_ANIMATIONS.find((entry) => entry.id === 'sachi-ruru01');
+    const greeting = DEFAULT_ANIMATIONS.find((entry) => entry.id === 'silly-action-greeting');
+    const walk = DEFAULT_ANIMATIONS.find((entry) => entry.id === 'sachi-unwalk1');
+
+    expect(talk?.tags).toEqual(expect.arrayContaining(['talk', 'casual', 'upper-body']));
+    expect(greeting?.tags).toEqual(expect.arrayContaining(['wave', 'greeting', 'friendly']));
+    expect(walk?.tags).toEqual(expect.arrayContaining(['unsafe-loop', 'locomotion']));
+  });
+
   it('shuffles autoplay as a non-repeating random bag without animation weights', () => {
     vi.useFakeTimers();
     const randomValues = [0.99, 0.99, 0.5, 0.1];
