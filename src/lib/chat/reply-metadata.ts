@@ -418,7 +418,11 @@ export function resolveAnimationIndexForReplyMetadata(
     })
     .filter((candidate) => candidate.score > 0 && candidate.semanticScore > 0);
 
-  candidates.sort((a, b) => {
+  const rankedCandidates = candidates.some((candidate) => !candidate.entry.experimental)
+    ? candidates.filter((candidate) => !candidate.entry.experimental)
+    : candidates;
+
+  rankedCandidates.sort((a, b) => {
     const aStable = a.entry.experimental ? 0 : 1;
     const bStable = b.entry.experimental ? 0 : 1;
     if (a.score !== b.score) return b.score - a.score;
@@ -427,7 +431,7 @@ export function resolveAnimationIndexForReplyMetadata(
     return a.index - b.index;
   });
 
-  return candidates[0]?.index ?? -1;
+  return rankedCandidates[0]?.index ?? -1;
 }
 
 export function resolveFacialExpressionForReplyMetadata(metadata: AssistantReplyMetadata | null) {

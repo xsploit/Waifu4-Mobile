@@ -310,4 +310,48 @@ describe('assistant reply metadata', () => {
 
     expect(resolveAnimationIndexForReplyMetadata(metadata('grateful'), playlist)).toBe(1);
   });
+
+  it('prefers stable animation entries over experimental matches', () => {
+    const playlist: AnimationEntry[] = [
+      {
+        enabled: true,
+        experimental: true,
+        format: 'vrma',
+        id: 'experimental-gratitude',
+        name: 'Experimental gratitude',
+        purpose: 'emotion',
+        tags: ['gratitude'],
+        url: '/experimental.vrma',
+      },
+      {
+        enabled: true,
+        experimental: false,
+        format: 'vrma',
+        id: 'stable-caring',
+        name: 'Stable caring reaction',
+        purpose: 'emotion',
+        tags: ['caring', 'gratitude'],
+        url: '/stable.vrma',
+      },
+    ];
+
+    expect(resolveAnimationIndexForReplyMetadata(metadata('grateful'), playlist)).toBe(1);
+  });
+
+  it('falls back to experimental animation entries when no stable match exists', () => {
+    const playlist: AnimationEntry[] = [
+      {
+        enabled: true,
+        experimental: true,
+        format: 'vrma',
+        id: 'experimental-confusion',
+        name: 'Experimental confusion',
+        purpose: 'emotion',
+        tags: ['confusion'],
+        url: '/experimental.vrma',
+      },
+    ];
+
+    expect(resolveAnimationIndexForReplyMetadata(metadata('confused'), playlist)).toBe(0);
+  });
 });
