@@ -1,4 +1,4 @@
-import type { Dispatch, SetStateAction } from 'react';
+import { useMemo, useState, type Dispatch, type SetStateAction } from 'react';
 import type {
   AnimationEntry,
   AnimationPurpose,
@@ -111,6 +111,36 @@ function parseAnimationTags(value: string) {
   ).slice(0, 12);
 }
 
+function getAnimationSearchText(entry: AnimationEntry) {
+  return [
+    entry.id,
+    entry.name,
+    entry.url,
+    entry.format,
+    entry.purpose,
+    entry.loopEligible === false ? 'trigger' : 'loop',
+    entry.experimental ? 'experimental review' : 'stable',
+    ...(entry.tags ?? []),
+  ]
+    .filter(Boolean)
+    .join(' ')
+    .toLowerCase();
+}
+
+function buildAnimationCatalogSnapshot(playlist: AnimationEntry[]) {
+  return playlist.map((entry) => ({
+    enabled: entry.enabled,
+    experimental: entry.experimental,
+    format: entry.format ?? 'unknown',
+    id: entry.id,
+    loopEligible: entry.loopEligible !== false,
+    name: entry.name,
+    purpose: entry.purpose ?? 'gesture',
+    tags: entry.tags ?? [],
+    url: entry.url,
+  }));
+}
+
 function setAnimationGroupEnabled(
   setSequencerSettings: Dispatch<SetStateAction<SequencerSettings>>,
   groupId: AnimationGroupId,
@@ -140,11 +170,33 @@ export function AnimTab({
   setSequencerSettings,
   sequencerSettings,
 }: AnimTabProps) {
+  const [animationFilter, setAnimationFilter] = useState('');
+  const [catalogCopyStatus, setCatalogCopyStatus] = useState('');
   const playlistWithIndexes = sequencerSettings.playlist.map((entry, index) => ({ entry, index }));
+  const normalizedAnimationFilter = animationFilter.trim().toLowerCase();
+  const filteredPlaylistWithIndexes = normalizedAnimationFilter
+    ? playlistWithIndexes.filter(({ entry }) =>
+        getAnimationSearchText(entry).includes(normalizedAnimationFilter),
+      )
+    : playlistWithIndexes;
   const groupedAnimations = ANIMATION_GROUPS.map((group) => ({
     ...group,
-    entries: playlistWithIndexes.filter(({ entry }) => getAnimationGroupId(entry) === group.id),
+    entries: filteredPlaylistWithIndexes.filter(({ entry }) => getAnimationGroupId(entry) === group.id),
   })).filter((group) => group.entries.length > 0);
+  const tagSummary = useMemo(() => {
+    const counts = new Map<string, number>();
+    for (const entry of sequencerSettings.playlist) {
+      for (const tag of entry.tags ?? []) {
+        counts.set(tag, (counts.get(tag) ?? 0) + 1);
+      }
+    }
+    return [...counts.entries()]
+      .sort((left, right) => right[1] - left[1] || left[0].localeCompare(right[0]))
+      .slice(0, 12);
+  }, [sequencerSettings.playlist]);
+  const stableAiCatalogCount = sequencerSettings.playlist.filter(
+    (entry) => entry.enabled && !entry.experimental && entry.purpose && entry.tags?.length,
+  ).length;
   const currentEntry =
     sequencerSettings.currentIndex >= 0
       ? sequencerSettings.playlist[sequencerSettings.currentIndex]
@@ -283,6 +335,16 @@ export function AnimTab({
     );
   };
 
+  const copyAnimationCatalog = async () => {
+    const text = JSON.stringify(buildAnimationCatalogSnapshot(sequencerSettings.playlist), null, 2);
+    try {
+      await navigator.clipboard.writeText(text);
+      setCatalogCopyStatus('copied catalog');
+    } catch {
+      setCatalogCopyStatus('copy failed');
+    }
+  };
+
   return (
     <>
       <div className="controls">
@@ -365,6 +427,36 @@ export function AnimTab({
         </span>
       </div>
 
+      <div className="anim-catalog-tools">
+        <div className="anim-catalog-search">
+          <span>Filter</span>
+          <input
+            className="input-tech"
+            onChange={(event) => setAnimationFilter(event.target.value)}
+            placeholder="name, tag, purpose, format, path"
+            value={animationFilter}
+          />
+        </div>
+        <button className="btn-xs" onClick={() => void copyAnimationCatalog()} type="button">
+          Copy Catalog JSON
+        </button>
+        <span>
+          {filteredPlaylistWithIndexes.length}/{sequencerSettings.playlist.length} shown
+        </span>
+        <span>{stableAiCatalogCount} AI-visible</span>
+        {catalogCopyStatus ? <span>{catalogCopyStatus}</span> : null}
+      </div>
+
+      {tagSummary.length ? (
+        <div className="anim-tag-summary">
+          {tagSummary.map(([tag, count]) => (
+            <span key={tag}>
+              {tag} <strong>{count}</strong>
+            </span>
+          ))}
+        </div>
+      ) : null}
+
       <div className={`anim-current ${currentEntry ? 'active' : ''}`}>
         <span className="anim-current-label">Now Playing</span>
         <strong>{currentEntry?.name ?? 'None'}</strong>
@@ -431,7 +523,8 @@ export function AnimTab({
       </div>
 
       <div className="playlist">
-        {groupedAnimations.map((group) => {
+        {groupedAnimations.length ? (
+          groupedAnimations.map((group) => {
           const enabled = group.entries.filter(({ entry }) => entry.enabled).length;
           return (
             <section className="anim-group" key={group.id}>
@@ -476,7 +569,10 @@ export function AnimTab({
               </div>
             </section>
           );
-        })}
+          })
+        ) : (
+          <div className="empty-state">No animations match the current filter.</div>
+        )}
       </div>
     </>
   );

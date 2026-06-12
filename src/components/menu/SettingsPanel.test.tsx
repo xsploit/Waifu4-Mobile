@@ -220,6 +220,15 @@ describe('SettingsPanel tab smoke', () => {
     expect(html).toContain('Presets retune MToon');
   });
 
+  it('keeps animation catalog curator controls mounted', () => {
+    const html = renderToStaticMarkup(<SettingsPanel {...createProps('anim')} />);
+
+    expect(html).toContain('Filter');
+    expect(html).toContain('Copy Catalog JSON');
+    expect(html).toContain('AI-visible');
+    expect(html).toContain('idle');
+  });
+
   it('keeps Twitch direct IRC, ASR, queue, and stream vision controls mounted', () => {
     const props = createProps('twitch');
     props.twitchSettings = {
