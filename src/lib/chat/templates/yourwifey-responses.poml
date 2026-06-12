@@ -65,6 +65,9 @@ Use tools only when they are available. When the current turn explicitly asks yo
         <item>speaker: {{ current_speaker || "current user" }}</item>
         <item>speaker_role: {{ target_role || "speaker" }}</item>
         <item>conversation_scope: {{ conversation_scope || "chat" }}</item>
+        <if condition="{{ runtime_situation }}">
+          <item>runtime_situation: {{ runtime_situation }}</item>
+        </if>
         <item>reply_length: {{ reply_length_mode || "balanced" }}</item>
         <item>relationship_stage: {{ relationship_stage || "new" }}</item>
         <item>relationship_mood: {{ relationship_mood || "guarded" }}</item>
@@ -76,6 +79,10 @@ Use tools only when they are available. When the current turn explicitly asks yo
     <cp caption="Conditional Conversation Mode" captionStyle="header">
       <if condition="{{ is_twitch_turn }}">
         <p>Twitch mode is active. Reply to the target viewer or batch naturally from the supplied transcript. Do not assume every chatter is the local controller.</p>
+      </if>
+
+      <if condition="{{ runtime_situation }}">
+        <p>Current runtime situation override: {{ runtime_situation }}</p>
       </if>
 
       <if condition="{{ is_batch_turn }}">

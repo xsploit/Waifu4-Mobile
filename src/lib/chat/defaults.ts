@@ -112,6 +112,7 @@ export function createDefaultAiSettings(): AiSettings {
     openAiStateMode: 'stateless',
     toolChoiceMode: 'off',
     maxToolRounds: 15,
+    runtimeSituation: '',
     replyLength: 'balanced',
     temperature: 0.85,
     maxTokens: 300,

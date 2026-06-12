@@ -70,6 +70,7 @@ function serializeTurnMetadataContext({
   const isBroadcaster = readTurnContextBoolean(turnContext, 'targetIsBroadcaster');
   const isMod = readTurnContextBoolean(turnContext, 'targetIsMod');
   const firstTimeChatter = readTurnContextBoolean(turnContext, 'firstTimeChatter');
+  const runtimeSituation = readTurnContextValue(turnContext, 'runtimeSituation');
   const targetRole =
     isLocal || isTrustedController
       ? 'local controller'
@@ -93,6 +94,7 @@ function serializeTurnMetadataContext({
     formatSceneLine('speaker', speaker),
     formatSceneLine('speaker role', targetRole),
     formatSceneLine('conversation source', source === 'local' ? 'local one-on-one chat' : source),
+    formatSceneLine('runtime situation', runtimeSituation),
     formatSceneLine('response shape', turnKind === 'batch' ? 'busy chat batch' : 'direct reply'),
     firstTimeChatter ? '- speaker note: first message seen from this chatter this session' : '',
     readTurnContextBoolean(turnContext, 'streamVisionAttached')
@@ -196,6 +198,7 @@ function buildDynamicPromptState({
     readTurnContextValue(turnContext, 'user') ||
     persona?.userNickname.trim() ||
     'current user';
+  const runtimeSituation = readTurnContextValue(turnContext, 'runtimeSituation');
   const relationshipMood = relationshipMemory.mood;
   const relationshipStage = relationshipMemory.relationshipStage;
   const affectState = normalizeAffectState(relationshipMemory.affectState);
@@ -214,6 +217,7 @@ function buildDynamicPromptState({
     affect_valence: affectState.valence.toFixed(2),
     close_relationship: relationshipStage === 'close',
     conversation_scope: conversationScope || 'chat',
+    runtime_situation: runtimeSituation,
     current_speaker: currentSpeaker,
     familiar_relationship: relationshipStage === 'familiar',
     guard_score: relationshipMemory.guard,

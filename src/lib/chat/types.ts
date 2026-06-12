@@ -60,6 +60,7 @@ export type AiSettings = {
   openAiStateMode: OpenAiStateMode;
   toolChoiceMode: ToolChoiceMode;
   maxToolRounds: number;
+  runtimeSituation: string;
   replyLength: ReplyLengthMode;
   temperature: number;
   maxTokens: number;

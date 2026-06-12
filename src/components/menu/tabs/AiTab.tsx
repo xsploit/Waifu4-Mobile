@@ -402,9 +402,20 @@ export function AiTab({
         <div className="status-copy">
           Active persona: <strong>{activePersonaName}</strong>
         </div>
+        <textarea
+          className="input-tech"
+          onChange={(event) =>
+            updateAiSettings(setAiSettings, {
+              runtimeSituation: event.target.value,
+            })
+          }
+          placeholder="Current situation, e.g. You are reading another Twitch channel, but nobody there can see or hear you. Only Subsect can hear you locally."
+          rows={5}
+          value={aiSettings.runtimeSituation}
+        />
         <div className="field-hint">
-          Prompt context now comes from persona, memory, Twitch/local chat turns, tools, TTS, and
-          animation state. External host launch/share params are no longer injected.
+          Runtime Situation is injected into the current-scene prompt every turn. Use it for the
+          current setup, not permanent character facts.
         </div>
       </div>
     </>

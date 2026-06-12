@@ -291,7 +291,7 @@ const BUNDLED_VRM_MODELS: BundledVrmOption[] = [
   },
   {
     id: 'hikkyc2',
-    label: 'Hikari / Hikky C',
+    label: 'Hikari / Cool Hikky',
     assetPath: 'models/hikkyc2.vrm',
   },
   {
@@ -6098,6 +6098,7 @@ function App() {
               login: targetMessage?.login ?? '',
               localControllerNickname: currentTwitchSettings.localDisplayName || 'not configured',
               source: targetMessage?.source ?? 'twitch',
+              runtimeSituation: settings.runtimeSituation.trim().slice(0, 2000),
               streamVisionAttached: Boolean(promptVisionFrame),
               targetBadges: targetMessage?.badges.join('/') ?? '',
               targetIsBroadcaster: targetMessage?.isBroadcaster ?? false,
@@ -6890,6 +6891,7 @@ function App() {
       savedVrmStatus,
     ],
   );
+
   return (
     <div
       className={`shell ${productShellActive ? 'product-shell-mode' : ''} ${
