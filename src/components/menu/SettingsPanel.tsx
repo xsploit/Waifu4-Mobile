@@ -30,6 +30,9 @@ import type { TtsBenchmarkResult } from '../../lib/tts/benchmark';
 import type {
   CreatedRemoteTtsVoice,
   CreateRemoteTtsVoiceRequest,
+  DesignRemoteTtsVoiceRequest,
+  DesignRemoteTtsVoiceResult,
+  PublishDesignedRemoteTtsVoiceRequest,
   RemoteTtsProvider,
   RemoteTtsVoice,
 } from '../../lib/tts/remote';
@@ -103,6 +106,12 @@ type SettingsPanelProps = {
   onApplyPersonaVoice: (personaId: string) => void;
   onCreateVoiceLabProviderVoice: (
     request: CreateRemoteTtsVoiceRequest,
+  ) => Promise<CreatedRemoteTtsVoice>;
+  onDesignVoiceLabProviderVoice: (
+    request: DesignRemoteTtsVoiceRequest,
+  ) => Promise<DesignRemoteTtsVoiceResult>;
+  onPublishDesignedVoiceLabProviderVoice: (
+    request: PublishDesignedRemoteTtsVoiceRequest,
   ) => Promise<CreatedRemoteTtsVoice>;
   onDeleteVoiceLabVoice: (voiceId: string) => void;
   onResetContext: () => void;
@@ -230,6 +239,8 @@ export function SettingsPanel({
   onApplyPersonaVoice,
   onCreateVoiceLabProviderVoice,
   onDeleteVoiceLabVoice,
+  onDesignVoiceLabProviderVoice,
+  onPublishDesignedVoiceLabProviderVoice,
   onResetContext,
   onResetTwitchState,
   onRunBackendGrilloBeat,
@@ -337,6 +348,8 @@ export function SettingsPanel({
         onApplyPersonaVoice={onApplyPersonaVoice}
         onCreateProviderVoice={onCreateVoiceLabProviderVoice}
         onDeleteVoice={onDeleteVoiceLabVoice}
+        onDesignProviderVoice={onDesignVoiceLabProviderVoice}
+        onPublishDesignedVoice={onPublishDesignedVoiceLabProviderVoice}
         onRefreshRemoteVoices={onRefreshRemoteVoices}
         onSaveVoice={onSaveVoiceLabVoice}
         onUseCurrentVoiceAsPersonaDefault={onUseCurrentVoiceAsPersonaDefault}

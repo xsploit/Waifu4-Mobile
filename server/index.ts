@@ -6,7 +6,12 @@ import { handleEmbeddings } from './ai/embeddings';
 import { handleModels } from './ai/models';
 import { renderYourWifeyPomlResponse } from './ai/PomlRenderer';
 import { handleTtsStream } from './tts/stream';
-import { handleCreateTtsVoice, handleListTtsVoices } from './tts/voices';
+import {
+  handleCreateTtsVoice,
+  handleDesignTtsVoice,
+  handleListTtsVoices,
+  handlePublishDesignedTtsVoice,
+} from './tts/voices';
 import { handleLocalBackupSettings } from './localBackup';
 import { createMemoryRouter } from './memory/routes';
 import { OverlaySocket } from './overlay/OverlaySocket';
@@ -63,6 +68,14 @@ app.get('/tts/voices', (req, res) => {
 // POST /tts/voices/create — provider voice cloning/creation for Voice Lab.
 app.post('/tts/voices/create', (req, res) => {
   void handleCreateTtsVoice(req, res);
+});
+
+app.post('/tts/voices/design', (req, res) => {
+  void handleDesignTtsVoice(req, res);
+});
+
+app.post('/tts/voices/design/publish', (req, res) => {
+  void handlePublishDesignedTtsVoice(req, res);
 });
 
 const server = createServer(app);

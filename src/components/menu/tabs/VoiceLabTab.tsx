@@ -11,6 +11,10 @@ import type { PiperVoiceProfile } from '../../../lib/tts/piper';
 import type {
   CreatedRemoteTtsVoice,
   CreateRemoteTtsVoiceRequest,
+  DesignedRemoteTtsVoiceCandidate,
+  DesignRemoteTtsVoiceRequest,
+  DesignRemoteTtsVoiceResult,
+  PublishDesignedRemoteTtsVoiceRequest,
   RemoteTtsProvider,
   RemoteTtsVoice,
 } from '../../../lib/tts/remote';
@@ -21,6 +25,10 @@ type VoiceLabTabProps = {
   onApplyPersonaVoice: (personaId: string) => void;
   onDeleteVoice: (voiceId: string) => void;
   onCreateProviderVoice: (request: CreateRemoteTtsVoiceRequest) => Promise<CreatedRemoteTtsVoice>;
+  onDesignProviderVoice: (request: DesignRemoteTtsVoiceRequest) => Promise<DesignRemoteTtsVoiceResult>;
+  onPublishDesignedVoice: (
+    request: PublishDesignedRemoteTtsVoiceRequest,
+  ) => Promise<CreatedRemoteTtsVoice>;
   onRefreshRemoteVoices: (provider: RemoteTtsProvider) => void;
   onSaveVoice: (voice: VoiceLabVoice) => void;
   onUseCurrentVoiceAsPersonaDefault: (personaId: string) => void;
@@ -41,6 +49,10 @@ type VoiceDraft = Omit<VoiceLabVoice, 'createdAt' | 'id' | 'status' | 'updatedAt
 const DEFAULT_LANGUAGE = 'EN_US';
 const DEFAULT_REMOVE_BACKGROUND_NOISE = true;
 const DEFAULT_ENHANCE_AUDIO_QUALITY = true;
+const DEFAULT_DESIGN_INSTRUCTION =
+  'Warm expressive streamer voice with clear diction, natural pacing, and playful emotional range.';
+const DEFAULT_DESIGN_PREVIEW_TEXT =
+  'Hey there, I am testing a new voice for WebWaifu.';
 
 const EMPTY_DRAFT: VoiceDraft = {
   accent: '',
@@ -99,12 +111,27 @@ function sampleLabel(sample: VoiceLabSample | null) {
   return `${sample.fileName} (${sizeKb} KB)`;
 }
 
+function base64ToFile(base64: string, fileName: string, mimeType = 'audio/wav') {
+  const binary = atob(base64);
+  const bytes = new Uint8Array(binary.length);
+  for (let index = 0; index < binary.length; index += 1) {
+    bytes[index] = binary.charCodeAt(index);
+  }
+  return new File([bytes], fileName, { type: mimeType, lastModified: Date.now() });
+}
+
+function candidateAudioSrc(candidate: DesignedRemoteTtsVoiceCandidate) {
+  return candidate.audioBase64 ? `data:audio/wav;base64,${candidate.audioBase64}` : '';
+}
+
 export function VoiceLabTab({
   activePersona,
   aiSettings,
   onApplyPersonaVoice,
   onCreateProviderVoice,
   onDeleteVoice,
+  onDesignProviderVoice,
+  onPublishDesignedVoice,
   onRefreshRemoteVoices,
   onSaveVoice,
   onUseCurrentVoiceAsPersonaDefault,
@@ -132,6 +159,15 @@ export function VoiceLabTab({
   );
   const [creatingVoice, setCreatingVoice] = useState(false);
   const [creationStatus, setCreationStatus] = useState('');
+  const [designInstruction, setDesignInstruction] = useState(DEFAULT_DESIGN_INSTRUCTION);
+  const [designPreviewText, setDesignPreviewText] = useState(DEFAULT_DESIGN_PREVIEW_TEXT);
+  const [designCandidateCount, setDesignCandidateCount] = useState(2);
+  const [designedCandidates, setDesignedCandidates] = useState<DesignedRemoteTtsVoiceCandidate[]>(
+    [],
+  );
+  const [designingVoice, setDesigningVoice] = useState(false);
+  const [publishingDesignedVoice, setPublishingDesignedVoice] = useState(false);
+  const [designStatus, setDesignStatus] = useState('');
 
   useEffect(() => {
     if (activePersona?.id) {
@@ -254,6 +290,99 @@ export function VoiceLabTab({
     setEnhanceAudioQuality(DEFAULT_ENHANCE_AUDIO_QUALITY);
   };
 
+  const handleDesignProviderVoice = async () => {
+    const instruction = designInstruction.trim();
+    const previewText = designPreviewText.trim();
+    if (!instruction || !previewText) {
+      setDesignStatus('Voice design needs an instruction and preview text.');
+      return;
+    }
+
+    setDesigningVoice(true);
+    setDesignStatus(`Designing ${providerLabel(draft.provider)} voice previews...`);
+    try {
+      const result = await onDesignProviderVoice({
+        provider: draft.provider,
+        instruction,
+        previewText,
+        language: language.trim() || undefined,
+        n: Math.min(designCandidateCount, draft.provider === 'fish-speech' ? 4 : 3),
+      });
+      setDesignedCandidates(result.candidates);
+      setDesignStatus(`Designed ${result.candidates.length} ${providerLabel(draft.provider)} preview(s).`);
+    } catch (error) {
+      setDesignStatus(error instanceof Error ? error.message : 'Voice design failed.');
+    } finally {
+      setDesigningVoice(false);
+    }
+  };
+
+  const handleUseDesignedCandidate = async (candidate: DesignedRemoteTtsVoiceCandidate) => {
+    const name = draft.name.trim();
+    if (candidate.provider === 'fish-speech') {
+      if (!candidate.audioBase64) {
+        setDesignStatus('Fish design candidate did not include preview audio.');
+        return;
+      }
+      const file = base64ToFile(candidate.audioBase64, `${name || candidate.id}.wav`);
+      setSampleFile(file);
+      updateDraft({
+        description: draft.description || candidate.instruction || designInstruction.trim(),
+        modelId: draft.modelId || 's2',
+        name: name || `Fish Design ${candidate.index + 1}`,
+        provider: 'fish-speech',
+        sample: {
+          fileName: file.name,
+          lastModified: file.lastModified,
+          mimeType: file.type,
+          size: file.size,
+        },
+      });
+      setTranscription(candidate.text ?? designPreviewText);
+      setDesignStatus('Loaded Fish preview as the clone sample. Use Clone Provider Voice to save it.');
+      return;
+    }
+
+    if (!name) {
+      setDesignStatus('Name the voice before publishing an Inworld design.');
+      return;
+    }
+    if (!candidate.previewVoiceId) {
+      setDesignStatus('Inworld design candidate did not include a preview voice id.');
+      return;
+    }
+
+    setPublishingDesignedVoice(true);
+    setDesignStatus('Publishing Inworld designed voice...');
+    try {
+      const created = await onPublishDesignedVoice({
+        provider: 'inworld',
+        voiceId: candidate.previewVoiceId,
+        name,
+        description: draft.description.trim() || designInstruction.trim(),
+        tags: tags
+          .split(',')
+          .map((tag) => tag.trim())
+          .filter(Boolean),
+      });
+      const now = Date.now();
+      const nextDraft: VoiceDraft = {
+        ...draft,
+        modelId: created.modelId ?? (draft.modelId || 'inworld-tts-2'),
+        provider: 'inworld',
+        providerVoiceId: created.id,
+      };
+      onSaveVoice(buildVoiceFromDraft(nextDraft, now, 'ready'));
+      resetDraft();
+      setDesignedCandidates([]);
+      setDesignStatus(`Published ${created.name || name} (${created.id}).`);
+    } catch (error) {
+      setDesignStatus(error instanceof Error ? error.message : 'Designed voice publish failed.');
+    } finally {
+      setPublishingDesignedVoice(false);
+    }
+  };
+
   const handleSave = () => {
     const now = Date.now();
     const name = draft.name.trim();
@@ -374,6 +503,76 @@ export function VoiceLabTab({
           <option value="fish-speech">Fish Speech zero-shot / custom voice</option>
           <option value="inworld">Inworld custom voice</option>
         </select>
+        <div className="control-label">Voice Design</div>
+        <textarea
+          className="textarea-tech"
+          maxLength={draft.provider === 'inworld' ? 250 : 2000}
+          onChange={(event) => setDesignInstruction(event.target.value)}
+          placeholder="Describe age, accent, timbre, energy, pacing, and delivery..."
+          rows={3}
+          value={designInstruction}
+        />
+        <textarea
+          className="textarea-tech"
+          maxLength={draft.provider === 'fish-speech' ? 300 : undefined}
+          onChange={(event) => setDesignPreviewText(event.target.value)}
+          placeholder="Preview sentence the provider should speak..."
+          rows={2}
+          value={designPreviewText}
+        />
+        <div className="slider-row slider-row-compact">
+          <span>Candidates</span>
+          <input
+            max={draft.provider === 'fish-speech' ? 4 : 3}
+            min={1}
+            onChange={(event) => setDesignCandidateCount(Number(event.target.value))}
+            step={1}
+            type="range"
+            value={designCandidateCount}
+          />
+          <span className="val">{designCandidateCount}</span>
+        </div>
+        <div className="btn-row">
+          <button
+            className="btn-tech secondary"
+            disabled={designingVoice || publishingDesignedVoice}
+            onClick={handleDesignProviderVoice}
+            type="button"
+          >
+            {designingVoice ? 'Designing...' : 'Design Voice'}
+          </button>
+        </div>
+        {designStatus ? <div className="field-hint">{designStatus}</div> : null}
+        {designedCandidates.map((candidate) => (
+          <div className="memory-entry" key={`${candidate.provider}-${candidate.id}`}>
+            <div className="memory-entry-header">
+              <strong>
+                {providerLabel(candidate.provider)} candidate {candidate.index + 1}
+              </strong>
+              <span>{candidate.durationMs ? `${candidate.durationMs} ms` : candidate.id}</span>
+            </div>
+            {candidate.text ? <div className="status-copy">{candidate.text}</div> : null}
+            {candidate.audioBase64 ? (
+              <audio controls preload="metadata" src={candidateAudioSrc(candidate)} />
+            ) : null}
+            <div className="btn-row">
+              <button
+                className="btn-tech secondary"
+                disabled={publishingDesignedVoice}
+                onClick={() => {
+                  void handleUseDesignedCandidate(candidate);
+                }}
+                type="button"
+              >
+                {candidate.provider === 'fish-speech'
+                  ? 'Use As Clone Sample'
+                  : publishingDesignedVoice
+                    ? 'Publishing...'
+                    : 'Publish Designed Voice'}
+              </button>
+            </div>
+          </div>
+        ))}
         <input
           accept="audio/*"
           className="input-tech"

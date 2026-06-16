@@ -71,6 +71,44 @@ export type CreatedRemoteTtsVoice = RemoteTtsVoice & {
   status?: string;
 };
 
+export type DesignRemoteTtsVoiceRequest = {
+  provider: RemoteTtsProvider;
+  instruction: string;
+  previewText?: string;
+  language?: string;
+  n?: number;
+  speed?: number;
+  numStep?: number;
+  guidanceScale?: number;
+  instructGuidanceScale?: number;
+  seed?: number | null;
+};
+
+export type DesignedRemoteTtsVoiceCandidate = {
+  provider: RemoteTtsProvider;
+  id: string;
+  index: number;
+  audioBase64: string;
+  sampleRate?: number;
+  durationMs?: number;
+  text?: string | null;
+  instruction?: string | null;
+  language?: string | null;
+  previewVoiceId?: string;
+};
+
+export type DesignRemoteTtsVoiceResult = {
+  candidates: DesignedRemoteTtsVoiceCandidate[];
+};
+
+export type PublishDesignedRemoteTtsVoiceRequest = {
+  provider: RemoteTtsProvider;
+  voiceId: string;
+  name: string;
+  description?: string;
+  tags?: string[];
+};
+
 export type RemoteTtsProxyOptions = {
   providerApiKey?: string | null;
 };
@@ -437,6 +475,54 @@ export async function createRemoteTtsVoice(
   };
   if (!data.ok || !data.voice) {
     throw new Error(data.error || 'Remote TTS voice creation failed.');
+  }
+  return data.voice;
+}
+
+export async function designRemoteTtsVoice(
+  request: DesignRemoteTtsVoiceRequest,
+  options: RemoteTtsProxyOptions = {},
+) {
+  const response = await fetch(getTtsProxyUrl('/tts/voices/design'), {
+    method: 'POST',
+    headers: buildRemoteTtsHeaders(options),
+    body: JSON.stringify(request),
+  });
+  if (!response.ok) {
+    throw new Error(`Remote TTS voice design failed with HTTP ${response.status}.`);
+  }
+
+  const data = (await response.json()) as {
+    ok?: boolean;
+    error?: string;
+    result?: DesignRemoteTtsVoiceResult;
+  };
+  if (!data.ok || !data.result) {
+    throw new Error(data.error || 'Remote TTS voice design failed.');
+  }
+  return data.result;
+}
+
+export async function publishDesignedRemoteTtsVoice(
+  request: PublishDesignedRemoteTtsVoiceRequest,
+  options: RemoteTtsProxyOptions = {},
+) {
+  const response = await fetch(getTtsProxyUrl('/tts/voices/design/publish'), {
+    method: 'POST',
+    headers: buildRemoteTtsHeaders(options),
+    body: JSON.stringify(request),
+  });
+  if (!response.ok) {
+    throw new Error(`Remote TTS voice publish failed with HTTP ${response.status}.`);
+  }
+
+  const data = (await response.json()) as {
+    ok?: boolean;
+    error?: string;
+    voice?: CreatedRemoteTtsVoice;
+  };
+  if (!data.ok || !data.voice) {
+    throw new Error(data.error || 'Remote TTS voice publish failed.');
   }
   return data.voice;
 }

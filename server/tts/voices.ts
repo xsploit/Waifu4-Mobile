@@ -4,7 +4,10 @@ import { FishAudioClient, type ModelEntity } from 'fish-audio';
 import { z } from 'zod';
 import type {
   CreatedRemoteTtsVoice,
+  DesignRemoteTtsVoiceResult,
+  DesignedRemoteTtsVoiceCandidate,
   FishSpeechVoiceScope,
+  PublishDesignedRemoteTtsVoiceRequest,
   RemoteTtsProvider,
   RemoteTtsVoice,
 } from '../../src/lib/tts/remote';
@@ -32,6 +35,29 @@ const voiceCreateSchema = z.object({
 
 type VoiceCreateRequest = z.infer<typeof voiceCreateSchema>;
 
+const voiceDesignSchema = z.object({
+  provider: z.enum(['fish-speech', 'inworld']),
+  instruction: z.string().trim().min(1).max(2000),
+  previewText: z.string().trim().max(300).optional(),
+  language: z.string().trim().max(32).optional(),
+  n: z.number().int().min(1).max(4).optional(),
+  speed: z.number().gt(0).max(3).optional(),
+  numStep: z.number().int().min(1).max(128).optional(),
+  guidanceScale: z.number().min(0).optional(),
+  instructGuidanceScale: z.number().min(0).optional(),
+  seed: z.number().int().nullable().optional(),
+});
+
+const voiceDesignPublishSchema = z.object({
+  provider: z.enum(['fish-speech', 'inworld']),
+  voiceId: z.string().trim().min(1),
+  name: z.string().trim().min(1).max(80),
+  description: z.string().optional(),
+  tags: z.array(z.string()).optional(),
+}) satisfies z.ZodType<PublishDesignedRemoteTtsVoiceRequest>;
+
+type VoiceDesignRequest = z.infer<typeof voiceDesignSchema>;
+
 function normalizeText(value: unknown, maxLength: number) {
   return typeof value === 'string' ? value.trim().slice(0, maxLength) : '';
 }
@@ -44,6 +70,10 @@ function normalizeTags(tags: unknown) {
 function decodeSampleBase64(value: string) {
   const encoded = value.includes(',') ? value.slice(value.indexOf(',') + 1) : value;
   return Buffer.from(encoded, 'base64');
+}
+
+function normalizeResponseBase64(value: string) {
+  return value.replace(/-/g, '+').replace(/_/g, '/');
 }
 
 function fishBaseUrl() {
@@ -195,6 +225,125 @@ async function createInworldVoice(apiKey: string, request: VoiceCreateRequest) {
   return { ...mapInworldVoice(result.voice), modelId: 'inworld-tts-2', status: 'ready' };
 }
 
+async function designFishVoice(
+  apiKey: string,
+  request: VoiceDesignRequest,
+): Promise<DesignRemoteTtsVoiceResult> {
+  const response = await fetch(`${fishBaseUrl() ?? 'https://api.fish.audio'}/v1/voice-design`, {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${apiKey}`,
+      'Content-Type': 'application/json',
+      model: 'voice-design-1',
+    },
+    body: JSON.stringify({
+      instruction: request.instruction,
+      reference_text: normalizeText(request.previewText, 300) || undefined,
+      language: normalizeText(request.language, 32) || undefined,
+      n: request.n ?? 2,
+      speed: request.speed ?? 1,
+      num_step: request.numStep ?? 32,
+      guidance_scale: request.guidanceScale ?? 2,
+      instruct_guidance_scale: request.instructGuidanceScale ?? 0,
+      seed: request.seed ?? undefined,
+    }),
+  });
+  const data = (await response.json().catch(() => null)) as
+    | {
+        candidates?: Array<{
+          audio_base64: string;
+          duration_ms?: number;
+          id: string;
+          index: number;
+          instruct?: string | null;
+          language?: string | null;
+          sample_rate?: number;
+          text?: string | null;
+        }>;
+        message?: string;
+      }
+    | null;
+  if (!response.ok) {
+    throw new Error(data?.message || `Fish voice design failed with HTTP ${response.status}.`);
+  }
+  return {
+    candidates: (data?.candidates ?? []).map(
+      (candidate): DesignedRemoteTtsVoiceCandidate => ({
+        provider: 'fish-speech',
+        id: candidate.id,
+        index: candidate.index,
+        audioBase64: normalizeResponseBase64(candidate.audio_base64),
+        sampleRate: candidate.sample_rate,
+        durationMs: candidate.duration_ms,
+        text: candidate.text ?? null,
+        instruction: candidate.instruct ?? request.instruction,
+        language: candidate.language ?? request.language ?? null,
+      }),
+    ),
+  };
+}
+
+async function designInworldVoice(
+  apiKey: string,
+  request: VoiceDesignRequest,
+): Promise<DesignRemoteTtsVoiceResult> {
+  const instruction = normalizeText(request.instruction, 250);
+  if (instruction.length < 30) {
+    throw new Error('Inworld voice design prompt must be 30-250 characters.');
+  }
+  const previewText = normalizeText(request.previewText, 300);
+  if (!previewText) {
+    throw new Error('Inworld voice design requires preview text.');
+  }
+  const client = InworldTTS({
+    apiKey,
+    timeout: 120000,
+    ...(inworldBaseUrl() ? { baseUrl: inworldBaseUrl() } : {}),
+  });
+  const result = await client.designVoice({
+    designPrompt: instruction,
+    previewText,
+    lang: normalizeText(request.language, 24) || 'EN_US',
+    numberOfSamples: Math.min(3, request.n ?? 3),
+  });
+  return {
+    candidates: (result.previewVoices ?? []).map(
+      (
+        candidate: { previewAudio?: string; previewText?: string; voiceId: string },
+        index: number,
+      ): DesignedRemoteTtsVoiceCandidate => ({
+        provider: 'inworld',
+        id: candidate.voiceId,
+        index,
+        audioBase64: normalizeResponseBase64(candidate.previewAudio ?? ''),
+        text: candidate.previewText ?? previewText,
+        instruction,
+        language: result.langCode ?? request.language ?? null,
+        previewVoiceId: candidate.voiceId,
+      }),
+    ),
+  };
+}
+
+async function publishInworldDesignedVoice(
+  apiKey: string,
+  request: PublishDesignedRemoteTtsVoiceRequest,
+) {
+  const client = InworldTTS({
+    apiKey,
+    timeout: 30000,
+    ...(inworldBaseUrl() ? { baseUrl: inworldBaseUrl() } : {}),
+  });
+  const result = await client.publishVoice({
+    voice: request.voiceId,
+    displayName: request.name,
+    description: normalizeText(request.description, 500) || undefined,
+    tags: normalizeTags(request.tags),
+  });
+  const voice = 'voice' in result ? result.voice : result;
+  return { ...mapInworldVoice(voice as VoiceInfo), modelId: 'inworld-tts-2', status: 'ready' };
+}
+
 export async function handleListTtsVoices(req: Request, res: Response): Promise<void> {
   const parsed = voiceListSchema.safeParse(req.query);
   if (!parsed.success) {
@@ -245,6 +394,62 @@ export async function handleCreateTtsVoice(req: Request, res: Response): Promise
     res.status(502).json({
       ok: false,
       error: error instanceof Error ? error.message : 'Remote TTS voice creation failed.',
+    });
+  }
+}
+
+export async function handleDesignTtsVoice(req: Request, res: Response): Promise<void> {
+  const parsed = voiceDesignSchema.safeParse(req.body);
+  if (!parsed.success) {
+    res.status(400).json({ ok: false, error: parsed.error.message });
+    return;
+  }
+  const apiKey = readTtsKey(req, parsed.data.provider);
+  if (!apiKey) {
+    res.status(401).json({ ok: false, error: 'Missing TTS provider key' });
+    return;
+  }
+
+  try {
+    const result =
+      parsed.data.provider === 'inworld'
+        ? await designInworldVoice(apiKey, parsed.data)
+        : await designFishVoice(apiKey, parsed.data);
+    res.json({ ok: true, result });
+  } catch (error) {
+    res.status(502).json({
+      ok: false,
+      error: error instanceof Error ? error.message : 'Remote TTS voice design failed.',
+    });
+  }
+}
+
+export async function handlePublishDesignedTtsVoice(req: Request, res: Response): Promise<void> {
+  const parsed = voiceDesignPublishSchema.safeParse(req.body);
+  if (!parsed.success) {
+    res.status(400).json({ ok: false, error: parsed.error.message });
+    return;
+  }
+  if (parsed.data.provider !== 'inworld') {
+    res.status(400).json({
+      ok: false,
+      error: 'Fish Speech designed voices are saved by cloning the selected preview audio.',
+    });
+    return;
+  }
+  const apiKey = readTtsKey(req, parsed.data.provider);
+  if (!apiKey) {
+    res.status(401).json({ ok: false, error: 'Missing TTS provider key' });
+    return;
+  }
+
+  try {
+    const voice = await publishInworldDesignedVoice(apiKey, parsed.data);
+    res.json({ ok: true, voice });
+  } catch (error) {
+    res.status(502).json({
+      ok: false,
+      error: error instanceof Error ? error.message : 'Remote TTS voice publish failed.',
     });
   }
 }

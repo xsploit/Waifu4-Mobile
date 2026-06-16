@@ -170,10 +170,19 @@ import {
 import type { PiperVoiceProfile, WordBoundary } from './lib/tts/piper';
 import { getTtsProviderLabel } from './lib/tts/labels';
 import { getTtsManager, type RemotePcmPushStream } from './lib/tts/manager';
-import { createRemoteTtsStream, createRemoteTtsVoice, fetchRemoteTtsVoices } from './lib/tts/remote';
+import {
+  createRemoteTtsStream,
+  createRemoteTtsVoice,
+  designRemoteTtsVoice,
+  fetchRemoteTtsVoices,
+  publishDesignedRemoteTtsVoice,
+} from './lib/tts/remote';
 import type {
   CreateRemoteTtsVoiceRequest,
   CreatedRemoteTtsVoice,
+  DesignRemoteTtsVoiceRequest,
+  DesignRemoteTtsVoiceResult,
+  PublishDesignedRemoteTtsVoiceRequest,
   RemoteTtsAudioChunk,
   RemoteTtsProvider,
   RemoteTtsRequest,
@@ -2828,6 +2837,41 @@ function App() {
       }
       void loadRemoteTtsVoices(request.provider, true);
       setTtsStatus(`${getTtsProviderLabel(request.provider)} voice created: ${voice.name}.`);
+      return voice;
+    },
+    [loadRemoteTtsVoices, providerKeyVaultWorkspaceId],
+  );
+
+  const handleDesignVoiceLabProviderVoice = useCallback(
+    async (request: DesignRemoteTtsVoiceRequest): Promise<DesignRemoteTtsVoiceResult> => {
+      const providerApiKey = await getBrowserRemoteTtsApiKey(
+        request.provider,
+        providerKeyVaultWorkspaceId,
+      );
+      const result = await designRemoteTtsVoice(request, { providerApiKey });
+      setTtsStatus(
+        `${getTtsProviderLabel(request.provider)} voice design ready (${result.candidates.length}).`,
+      );
+      return result;
+    },
+    [providerKeyVaultWorkspaceId],
+  );
+
+  const handlePublishDesignedVoiceLabProviderVoice = useCallback(
+    async (request: PublishDesignedRemoteTtsVoiceRequest): Promise<CreatedRemoteTtsVoice> => {
+      const providerApiKey = await getBrowserRemoteTtsApiKey(
+        request.provider,
+        providerKeyVaultWorkspaceId,
+      );
+      const voice = await publishDesignedRemoteTtsVoice(request, { providerApiKey });
+      remoteTtsVoiceFetchAttemptedRef.current.delete(request.provider);
+      for (const key of Array.from(remoteTtsVoiceFetchAttemptedRef.current)) {
+        if (key.startsWith(`${request.provider}:`)) {
+          remoteTtsVoiceFetchAttemptedRef.current.delete(key);
+        }
+      }
+      void loadRemoteTtsVoices(request.provider, true);
+      setTtsStatus(`${getTtsProviderLabel(request.provider)} designed voice published: ${voice.name}.`);
       return voice;
     },
     [loadRemoteTtsVoices, providerKeyVaultWorkspaceId],
@@ -7152,6 +7196,8 @@ function App() {
               onApplyPersonaVoice={handleApplyPersonaVoice}
               onCreateVoiceLabProviderVoice={handleCreateVoiceLabProviderVoice}
               onDeleteVoiceLabVoice={handleDeleteVoiceLabVoice}
+              onDesignVoiceLabProviderVoice={handleDesignVoiceLabProviderVoice}
+              onPublishDesignedVoiceLabProviderVoice={handlePublishDesignedVoiceLabProviderVoice}
               onRefreshRemoteVoices={(provider) => {
                 for (const key of Array.from(remoteTtsVoiceFetchAttemptedRef.current)) {
                   if (key === provider || key.startsWith(`${provider}:`)) {

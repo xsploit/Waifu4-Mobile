@@ -65,6 +65,10 @@ function createProps(activeTab: SettingsTabId): SettingsPanelProps {
       provider: 'fish-speech',
       providerVoiceId: 'provider-voice',
     }),
+    onDesignVoiceLabProviderVoice: async () => ({
+      candidates: [],
+      provider: 'fish-speech',
+    }),
     onDeletePersona: noop,
     onDeleteSavedVrmModel: noop,
     onDeleteVoiceLabVoice: noop,
@@ -76,6 +80,12 @@ function createProps(activeTab: SettingsTabId): SettingsPanelProps {
     onLoadSample: noop,
     onLoadSavedVrmModel: noop,
     onPlayAnimation: noop,
+    onPublishDesignedVoiceLabProviderVoice: async () => ({
+      id: 'published-voice',
+      name: 'Published Voice',
+      provider: 'inworld',
+      providerVoiceId: 'provider-voice',
+    }),
     onRefreshAiProxyHealth: noop,
     onRefreshModels: noop,
     onRefreshRemoteVoices: noop,
@@ -348,6 +358,9 @@ describe('SettingsPanel tab smoke', () => {
     expect(html).toContain('Persona Voice Defaults');
     expect(html).toContain('Fish Speech zero-shot / custom voice');
     expect(html).toContain('Inworld custom voice');
+    expect(html).toContain('Voice Design');
+    expect(html).toContain('Design Voice');
+    expect(html).toContain('Warm expressive streamer voice');
     expect(html).toContain('Provider Voice Catalog');
     expect(html).toContain('Fetch Fish Voices');
     expect(html).toContain('Fish Catalog Voice');
