@@ -9,6 +9,7 @@ coverage/
 .lean-ctx/
 .webwaifu4/
 .codex-artifacts/
+.legacy-frontend/
 art/
 public/assets/*
 !public/assets/
