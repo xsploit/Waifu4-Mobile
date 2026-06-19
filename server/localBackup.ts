@@ -1,14 +1,6 @@
 import { readFile } from 'node:fs/promises';
-import { homedir } from 'node:os';
-import { join } from 'node:path';
 import type { Request, Response } from 'express';
 import { mapProviderSecrets } from '../src/shared/providerSecrets';
-
-const DEFAULT_BACKUP_PATH = join(
-  homedir(),
-  'Downloads',
-  'web-waifu-4-local-backup-2026-05-30T03-03-43.json',
-);
 
 type ProviderSecret = {
   keyName?: string;
@@ -33,7 +25,11 @@ type LocalBackup = {
 };
 
 export async function handleLocalBackupSettings(_req: Request, res: Response): Promise<void> {
-  const backupPath = process.env.WEBWAIFU_LOCAL_BACKUP_PATH ?? DEFAULT_BACKUP_PATH;
+  const backupPath = process.env.WEBWAIFU_LOCAL_BACKUP_PATH;
+  if (!backupPath) {
+    res.status(404).json({ ok: false, error: 'WEBWAIFU_LOCAL_BACKUP_PATH is not configured.' });
+    return;
+  }
   try {
     const backup = JSON.parse(await readFile(backupPath, 'utf8')) as LocalBackup;
     const secrets = mapProviderSecrets(backup.providerSecrets);

@@ -1,5 +1,4 @@
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
-import { homedir } from 'node:os';
 import { join } from 'node:path';
 import { buildSpeechTiming, createSpeechTimingAccumulator } from '../server/tts/SpeechTiming';
 import { streamFishTimestampTts, streamFishTts } from '../server/tts/FishTtsStream';
@@ -9,11 +8,6 @@ import type { TtsTimestampInfo } from '../src/tts/TtsClient';
 import type { SpeechTiming } from '../src/tts/SpeechTimingTypes';
 
 const DEFAULT_TEXT = 'The little star smiled, took one careful breath, and said hello to the morning.';
-const DEFAULT_BACKUP_PATH = join(
-  homedir(),
-  'Downloads',
-  'web-waifu-4-local-backup-2026-05-30T03-03-43.json',
-);
 const ARTIFACT_DIR = join(process.cwd(), 'art', 'benchmarks');
 
 type ProviderSecret = {
@@ -69,7 +63,10 @@ type CapturedAudio = {
 };
 
 async function loadBackup(): Promise<LocalBackup> {
-  const backupPath = process.env.WEBWAIFU_LOCAL_BACKUP_PATH ?? DEFAULT_BACKUP_PATH;
+  const backupPath = process.env.WEBWAIFU_LOCAL_BACKUP_PATH;
+  if (!backupPath) {
+    return {};
+  }
   return JSON.parse(await readFile(backupPath, 'utf8')) as LocalBackup;
 }
 
