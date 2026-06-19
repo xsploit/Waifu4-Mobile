@@ -12,7 +12,7 @@
     "build": "tsc --noEmit && vite build",
     "bench:tts": "tsx scripts/bench-tts.ts",
     "audit:dead-code": "fallow dead-code --fail-on-issues",
-    "audit:release": "tsx scripts/release-audit.ts && npm run audit:dead-code && npm run typecheck && npm test -- --run && npm run build",
+    "audit:release": "tsx scripts/release-audit.ts && npm run audit:dead-code && npm run typecheck && npm test -- --run && npm run build && npm run smoke:runtime",
     "smoke:runtime": "tsx scripts/smoke-runtime.ts",
     "typecheck": "tsc --noEmit --pretty",
     "test": "vitest run",
