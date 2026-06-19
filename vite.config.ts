@@ -15,6 +15,47 @@ const apiProxy = {
 export default defineConfig({
   plugins: [react()],
   build: {
+    rollupOptions: {
+      output: {
+        manualChunks(id) {
+          if (!id.includes('node_modules')) {
+            return undefined;
+          }
+          if (
+            id.includes('/three') ||
+            id.includes('/@react-three') ||
+            id.includes('/@pixiv/three-vrm')
+          ) {
+            return 'vendor-vrm';
+          }
+          if (
+            id.includes('/ai/') ||
+            id.includes('/@ai-sdk') ||
+            id.includes('/@openrouter') ||
+            id.includes('/pomljs')
+          ) {
+            return 'vendor-ai';
+          }
+          if (
+            id.includes('/fish-audio') ||
+            id.includes('/@inworld') ||
+            id.includes('/@mintplex-labs') ||
+            id.includes('/wlipsync')
+          ) {
+            return 'vendor-tts';
+          }
+          if (
+            id.includes('/@huggingface') ||
+            id.includes('/onnxruntime') ||
+            id.includes('/phonemize') ||
+            id.includes('/phonemizer')
+          ) {
+            return 'vendor-ml';
+          }
+          return undefined;
+        },
+      },
+    },
     target: 'esnext',
   },
   worker: {
