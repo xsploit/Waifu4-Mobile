@@ -2792,7 +2792,6 @@ function App() {
       if (!force && remoteTtsVoiceFetchAttemptedRef.current.has(fetchKey)) {
         return;
       }
-      remoteTtsVoiceFetchAttemptedRef.current.add(fetchKey);
       setRemoteTtsVoicesLoading(true);
       setRemoteTtsVoicesError(null);
 
@@ -2801,6 +2800,15 @@ function App() {
           provider,
           providerKeyVaultWorkspaceId,
         );
+        if (!providerApiKey) {
+          const message = `${getTtsProviderLabel(provider)} voice catalog needs an Account tab API key.`;
+          if (force) {
+            throw new Error(message);
+          }
+          setTtsStatus(message);
+          return;
+        }
+        remoteTtsVoiceFetchAttemptedRef.current.add(fetchKey);
         const voices = await fetchRemoteTtsVoices(provider, { fishScope, providerApiKey });
         setRemoteTtsVoices((current) => ({
           ...current,
