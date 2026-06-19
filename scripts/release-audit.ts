@@ -29,11 +29,13 @@ const blockedTrackedPathPatterns = [
 
 const binaryExtensions = new Set([
   '.gif',
+  '.glb',
   '.jpg',
   '.jpeg',
   '.lock',
   '.png',
   '.tgz',
+  '.vrm',
   '.wasm',
   '.webp',
 ]);

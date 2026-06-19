@@ -72,6 +72,18 @@ if (existsSync('dist/index.html')) {
     expectedStatus: 200,
     bodyMustNotStartWith: '<!doctype',
   });
+  checks.push({
+    name: 'static background asset',
+    path: '/cdn-assets/backgrounds/hikari-bedroom.png',
+    expectedStatus: 200,
+    bodyMustNotStartWith: '<!doctype',
+  });
+  checks.push({
+    name: 'static bundled vrm asset',
+    path: '/cdn-assets/models/hikkyc2.vrm',
+    expectedStatus: 200,
+    bodyMustNotStartWith: '<!doctype',
+  });
 }
 
 function delay(ms: number) {
