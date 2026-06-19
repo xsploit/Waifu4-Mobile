@@ -313,12 +313,35 @@ async function requestLadybugMemory<T>(
   if (!url) {
     return null;
   }
-  try {
-    const response = await fetch(url, init);
-    return (await response.json()) as LadybugResponse<T>;
-  } catch {
-    return null;
+
+  const retryable = shouldRetryLadybugMemoryRequest(init);
+  const attempts = retryable ? 2 : 1;
+  for (let attempt = 0; attempt < attempts; attempt += 1) {
+    try {
+      const response = await fetch(url, init);
+      if (!response.ok && response.status >= 500 && retryable && attempt + 1 < attempts) {
+        await delayLadybugMemoryRetry();
+        continue;
+      }
+      return (await response.json()) as LadybugResponse<T>;
+    } catch {
+      if (!retryable || attempt + 1 >= attempts) {
+        return null;
+      }
+      await delayLadybugMemoryRetry();
+    }
   }
+
+  return null;
+}
+
+function shouldRetryLadybugMemoryRequest(init?: RequestInit) {
+  const method = (init?.method ?? 'GET').toUpperCase();
+  return method === 'GET' || method === 'PUT' || method === 'DELETE';
+}
+
+function delayLadybugMemoryRetry() {
+  return new Promise((resolve) => globalThis.setTimeout(resolve, 250));
 }
 
 function getLadybugMemoryBackendUrl(path: string) {

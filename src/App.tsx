@@ -277,6 +277,21 @@ const DEFAULT_SAFE_AREA: SafeAreaInsets = {
   left: 0,
 };
 
+const APP_DEBUG_STORAGE_KEY = 'webwaifu:debug';
+
+function isAppDiagnosticsEnabled() {
+  if (typeof window === 'undefined') {
+    return false;
+  }
+
+  try {
+    const urlDebug = new URLSearchParams(window.location.search).get('debug');
+    return urlDebug === '1' || window.localStorage.getItem(APP_DEBUG_STORAGE_KEY) === '1';
+  } catch {
+    return false;
+  }
+}
+
 const BUNDLED_VRM_MODELS: BundledVrmOption[] = [
   {
     id: 'riko-final-fixed-v2',
@@ -3115,19 +3130,21 @@ function App() {
 
         if (latencyTrace.firstSpeechChunkAt === null) {
           latencyTrace.firstSpeechChunkAt = performance.now();
-          console.info('[TTS Latency] first speech chunk', {
-            chunkLength: chunk.length,
-            label,
-            mode: getEffectiveRemoteTtsMode(ttsRuntimeSettings),
-            msFromStart: Math.round(latencyTrace.firstSpeechChunkAt - latencyTrace.startedAt),
-            provider: ttsProvider,
-            transport:
-              ttsProvider === 'fish-speech'
-                ? ttsRuntimeSettings.fishSpeechTransport
-                : ttsProvider === 'inworld'
-                  ? ttsRuntimeSettings.inworldTransport
-                  : 'piper',
-          });
+          if (isAppDiagnosticsEnabled()) {
+            console.info('[TTS Latency] first speech chunk', {
+              chunkLength: chunk.length,
+              label,
+              mode: getEffectiveRemoteTtsMode(ttsRuntimeSettings),
+              msFromStart: Math.round(latencyTrace.firstSpeechChunkAt - latencyTrace.startedAt),
+              provider: ttsProvider,
+              transport:
+                ttsProvider === 'fish-speech'
+                  ? ttsRuntimeSettings.fishSpeechTransport
+                  : ttsProvider === 'inworld'
+                    ? ttsRuntimeSettings.inworldTransport
+                    : 'piper',
+            });
+          }
         }
         queuedSpeech = true;
         const task =
@@ -3197,16 +3214,18 @@ function App() {
         }
         if (latencyTrace.firstAudioAt === null) {
           latencyTrace.firstAudioAt = performance.now();
-          console.info('[TTS Latency] first audio chunk', {
-            label,
-            mimeType: chunk.mimeType,
-            msFromFirstDelta:
-              latencyTrace.firstDeltaAt === null
-                ? null
-                : Math.round(latencyTrace.firstAudioAt - latencyTrace.firstDeltaAt),
-            msFromStart: Math.round(latencyTrace.firstAudioAt - latencyTrace.startedAt),
-            provider: ttsProvider,
-          });
+          if (isAppDiagnosticsEnabled()) {
+            console.info('[TTS Latency] first audio chunk', {
+              label,
+              mimeType: chunk.mimeType,
+              msFromFirstDelta:
+                latencyTrace.firstDeltaAt === null
+                  ? null
+                  : Math.round(latencyTrace.firstAudioAt - latencyTrace.firstDeltaAt),
+              msFromStart: Math.round(latencyTrace.firstAudioAt - latencyTrace.startedAt),
+              provider: ttsProvider,
+            });
+          }
         }
         speechPromises.push(
           liveBridgeSink.push(chunk).catch((error) => {
@@ -3230,10 +3249,12 @@ function App() {
         }
         if (latencyTrace.firstDeltaAt === null) {
           latencyTrace.firstDeltaAt = performance.now();
-          console.info('[TTS Latency] first LLM delta', {
-            label,
-            msFromStart: Math.round(latencyTrace.firstDeltaAt - latencyTrace.startedAt),
-          });
+          if (isAppDiagnosticsEnabled()) {
+            console.info('[TTS Latency] first LLM delta', {
+              label,
+              msFromStart: Math.round(latencyTrace.firstDeltaAt - latencyTrace.startedAt),
+            });
+          }
         }
 
         const visibleDelta = metadataFilter.push(delta);
@@ -3292,7 +3313,7 @@ function App() {
           (rawFinalText && normalizedFinal && rawFinalText.length - normalizedFinal.length > 80)
         ) {
           console.warn('[AI Stream Debug] suspicious assistant stream finish', streamDebug);
-        } else {
+        } else if (isAppDiagnosticsEnabled()) {
           console.info('[AI Stream Debug] assistant stream finish', streamDebug);
         }
         if (!isStale() && !sawDelta && normalizedFinal && normalizedFinal !== fullText.trim()) {
@@ -6066,11 +6087,13 @@ function App() {
           semanticMemoryPromise,
           grilloContextPacketPromise,
         ]);
-        console.info('[Chat Preflight] memory context ready', {
-          hasLadybugPacket: Boolean(grilloContextPacket),
-          ms: Math.round(performance.now() - preflightStartedAt),
-          semanticChars: semanticMemoryContext.length,
-        });
+        if (isAppDiagnosticsEnabled()) {
+          console.info('[Chat Preflight] memory context ready', {
+            hasLadybugPacket: Boolean(grilloContextPacket),
+            ms: Math.round(performance.now() - preflightStartedAt),
+            semanticChars: semanticMemoryContext.length,
+          });
+        }
         const grilloPromptMemory = grilloContextPacket
           ? {
               contextPacket: grilloContextPacket,
@@ -6170,15 +6193,17 @@ function App() {
           }),
           promptVisionFrame,
         );
-        console.info('[Chat Preflight] /ai/chat request ready', {
-          messageCount: promptMessages.length,
-          ms: Math.round(performance.now() - preflightStartedAt),
-          provider: settings.llmProvider,
-          model: selectedModel,
-          replyFormat,
-          toolChoiceMode: settings.toolChoiceMode,
-          promptChars: promptMessages.reduce((total, message) => total + message.content.length, 0),
-        });
+        if (isAppDiagnosticsEnabled()) {
+          console.info('[Chat Preflight] /ai/chat request ready', {
+            messageCount: promptMessages.length,
+            ms: Math.round(performance.now() - preflightStartedAt),
+            provider: settings.llmProvider,
+            model: selectedModel,
+            replyFormat,
+            toolChoiceMode: settings.toolChoiceMode,
+            promptChars: promptMessages.reduce((total, message) => total + message.content.length, 0),
+          });
+        }
         const response = await requestChatCompletion({
           activeChatters: job.activeChatterCount,
           mode: job.mode,
