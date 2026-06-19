@@ -5,12 +5,18 @@ WORKDIR /app
 ENV PORT=3000
 ENV HOST=0.0.0.0
 
+RUN apt-get update \
+  && apt-get install -y --no-install-recommends ca-certificates g++ make python3 \
+  && rm -rf /var/lib/apt/lists/*
+
 COPY package.json package-lock.json ./
 COPY vendor ./vendor
-RUN npm ci
+RUN npm ci && npm cache clean --force
 
 COPY . .
 RUN npm run build
+
+ENV NODE_ENV=production
 
 EXPOSE 3000
 
