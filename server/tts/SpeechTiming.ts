@@ -105,7 +105,7 @@ function normalizeWord(word: string): string {
   return word.replace(/^[^\p{L}\p{N}]+|[^\p{L}\p{N}]+$/gu, '');
 }
 
-export function arpabetFor(word: string): string[] {
+function arpabetFor(word: string): string[] {
   const clean = normalizeWord(word);
   if (!clean) {
     return [];
@@ -120,7 +120,7 @@ export function arpabetFor(word: string): string[] {
   );
 }
 
-export function visemeForPhone(phone: string): string {
+function visemeForPhone(phone: string): string {
   const base = phone.replace(/[0-9]/g, '').toUpperCase();
   if (['P', 'B', 'M', 'EM'].includes(base)) return 'closed';
   if (['F', 'V'].includes(base)) return 'fv';

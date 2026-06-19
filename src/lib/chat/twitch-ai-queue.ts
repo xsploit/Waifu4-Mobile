@@ -1,7 +1,7 @@
 import type { ChatTurn } from './chat-turn';
 
-export const TWITCH_AI_QUEUE_MAX_PENDING_JOBS = 8;
-export const TWITCH_AI_QUEUE_MAX_BATCH_MESSAGES = 120;
+const TWITCH_AI_QUEUE_MAX_PENDING_JOBS = 8;
+const TWITCH_AI_QUEUE_MAX_BATCH_MESSAGES = 120;
 
 export type TwitchAiQueueJob = {
   id: string;

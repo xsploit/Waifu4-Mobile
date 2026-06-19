@@ -43,7 +43,7 @@ function readDesktopSearchParams() {
   return new URLSearchParams(window.location.search);
 }
 
-export function isDesktopRuntime() {
+function isDesktopRuntime() {
   if (typeof window === 'undefined') {
     return false;
   }
@@ -51,7 +51,7 @@ export function isDesktopRuntime() {
   return params?.get('desktop') === '1' || window.webWaifuDesktop?.isDesktop === true;
 }
 
-export function getDesktopBackendBaseUrl() {
+function getDesktopBackendBaseUrl() {
   if (!isDesktopRuntime()) {
     return '';
   }

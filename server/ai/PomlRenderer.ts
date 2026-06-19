@@ -26,7 +26,7 @@ let cachedTemplate: string | null = null;
 let cachedTemplatePromise: Promise<string> | null = null;
 const moduleDir = path.dirname(fileURLToPath(import.meta.url));
 
-export function normalizePomlRenderVariables(value: unknown): PomlRenderVariables {
+function normalizePomlRenderVariables(value: unknown): PomlRenderVariables {
   if (!value || typeof value !== 'object') {
     return {};
   }
