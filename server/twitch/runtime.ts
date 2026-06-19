@@ -81,7 +81,7 @@ function createMockMessage(input: MockChatInjection, channel: string): TwitchCha
   };
 }
 
-export class EnvChatProvider implements ChatProvider {
+class EnvChatProvider implements ChatProvider {
   private provider: GatewayId;
   private model: string;
 

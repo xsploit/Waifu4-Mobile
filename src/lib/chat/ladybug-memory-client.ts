@@ -71,7 +71,7 @@ export type LadybugGrilloRuntimeStatus = {
   startedAt: number;
 };
 
-export type LadybugGrilloTickResult = {
+type LadybugGrilloTickResult = {
   beatType?: string;
   durationMs: number;
   noOpReason: string;
@@ -88,10 +88,6 @@ type LadybugResponse<T> = T & {
   error?: string;
   ok?: boolean;
 };
-
-export function canUseLadybugMemoryBackend() {
-  return Boolean(getLadybugMemoryBackendUrl('/memory/status'));
-}
 
 export async function loadLadybugGrilloState(scopeKey: string) {
   const response = await requestLadybugMemory<{

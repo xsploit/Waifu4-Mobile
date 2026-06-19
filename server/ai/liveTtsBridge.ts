@@ -1,7 +1,7 @@
 import type { FishBackend, FishStreamRequest, FishTextStream } from '../tts/FishTtsStream';
 import { clampInteger } from '../../src/shared/number';
 
-export const LIVE_TTS_BRIDGE_FINAL_WAIT_MS = 15_000;
+const LIVE_TTS_BRIDGE_FINAL_WAIT_MS = 15_000;
 
 export type LiveTtsBridgeRequest = {
   backend?: FishBackend;

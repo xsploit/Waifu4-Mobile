@@ -2377,11 +2377,6 @@ export function getLadybugMemoryService() {
   return singleton;
 }
 
-export async function closeLadybugMemoryService() {
-  await singleton?.close();
-  singleton = null;
-}
-
 function snapshotId(kind: LadybugSnapshotKind, scopeKey: string) {
   return `${kind}:${scopeKey}`;
 }
