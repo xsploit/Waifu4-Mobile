@@ -2,7 +2,7 @@ import type { TwitchChatMessage } from '../twitch/TwitchChatSource.js';
 
 const REPEATED_EMOTE_PATTERN = /^(\S+)(?:\s+\1){4,}$/i;
 
-export function normalizeAlias(alias: string) {
+function normalizeAlias(alias: string) {
   return alias.trim().toLowerCase().replace(/^@/, '');
 }
 
@@ -14,7 +14,7 @@ export function mentionsBot(text: string, aliases: readonly string[]) {
   });
 }
 
-export function isLowSignalMessage(message: TwitchChatMessage) {
+function isLowSignalMessage(message: TwitchChatMessage) {
   const text = message.text.trim();
   if (text.length < 2) {
     return true;

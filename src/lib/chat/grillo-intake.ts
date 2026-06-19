@@ -48,7 +48,7 @@ function normalizeMentionTag(value: string) {
     .replace(/[^a-z0-9_]+/g, '');
 }
 
-export function chatTextMentionsPersona(text: string, persona: PersonaProfile | null) {
+function chatTextMentionsPersona(text: string, persona: PersonaProfile | null) {
   const mentions = new Set(
     Array.from(text.matchAll(/@([a-z0-9_][a-z0-9_-]*)/gi)).map((match) =>
       normalizeMentionTag(match[1] ?? ''),
@@ -129,7 +129,7 @@ function hasRepeatedTopicThread(turns: ChatTurn[]) {
   return Array.from(tokenSources.values()).some((sources) => sources.size >= 2);
 }
 
-export function scoreChatTurnForGrilloIntake(
+function scoreChatTurnForGrilloIntake(
   turn: ChatTurn,
   persona: PersonaProfile | null,
   twitchSettings: TwitchSettings,
@@ -173,7 +173,7 @@ export function scoreChatTurnForGrilloIntake(
   };
 }
 
-export function scoreChatJobForGrilloIntake(
+function scoreChatJobForGrilloIntake(
   mode: ChatJobMemoryMode,
   turns: ChatTurn[],
   persona: PersonaProfile | null,

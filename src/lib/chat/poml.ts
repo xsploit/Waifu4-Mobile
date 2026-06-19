@@ -1,4 +1,3 @@
-import yourWifeyPromptTemplate from './templates/yourwifey-responses.poml?raw';
 import { getDesktopBackendUrl } from '../desktop/runtime';
 
 type PromptRole = 'system' | 'user' | 'assistant';
@@ -42,8 +41,6 @@ type PomlRenderResponse = {
   ok?: boolean;
 };
 
-export const YOURWIFEY_POML_TEMPLATE = yourWifeyPromptTemplate;
-
 const EMPTY_PERSONA_CONTEXT =
   'No active persona profile is configured. Reply as a concise, friendly stream assistant.';
 
@@ -74,19 +71,6 @@ export async function buildYourWifeyPomlMessages(
   const renderedInputMessages = renderedMessages.filter(isResponsesInputMessage);
 
   return [{ role: 'system', content: instructions }, ...input.history, ...renderedInputMessages];
-}
-
-export function buildYourWifeyResponsesPromptPayload(
-  messages: PomlPromptMessage[],
-): YourWifeyResponsesPromptPayload {
-  return {
-    instructions: messages
-      .filter((message) => message.role === 'system')
-      .map((message) => message.content)
-      .join('\n\n')
-      .trim(),
-    input: messages.filter(isResponsesInputMessage),
-  };
 }
 
 function withFallback(value: string | undefined, fallback: string) {

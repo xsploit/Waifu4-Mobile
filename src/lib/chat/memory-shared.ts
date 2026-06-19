@@ -1,17 +1,15 @@
 import type {
-  ChatMessage,
   RelationshipActionTag,
   RelationshipMemory,
   RelationshipMood,
   RelationshipStage,
 } from './types';
 
-export const MAX_FACTS = 8;
-export const MAX_SUMMARY_CHARS = 900;
-export const MAX_DIARY_CHARS = 280;
-export const MAX_DIARY_HISTORY = 3;
-export const RELATIONSHIP_STAT_MIN = 0;
-export const RELATIONSHIP_STAT_MAX = 20;
+const MAX_FACTS = 8;
+const MAX_DIARY_CHARS = 280;
+const MAX_DIARY_HISTORY = 3;
+const RELATIONSHIP_STAT_MIN = 0;
+const RELATIONSHIP_STAT_MAX = 20;
 
 const ACTION_TAGS: RelationshipActionTag[] = [
   'none',
@@ -92,20 +90,6 @@ export function extractFactsFromUserMessage(message: string) {
   return facts;
 }
 
-export function buildSummary(history: ChatMessage[]) {
-  const relevant = history
-    .filter((message) => message.role === 'user' || message.role === 'assistant')
-    .slice(-6)
-    .map((message) => `${message.role === 'user' ? 'User' : 'Riko'}: ${message.content.trim()}`)
-    .join(' | ');
-
-  if (relevant.length <= MAX_SUMMARY_CHARS) {
-    return relevant;
-  }
-
-  return relevant.slice(relevant.length - MAX_SUMMARY_CHARS);
-}
-
 export function normalizeRelationshipMood(value: unknown): RelationshipMood {
   if (typeof value !== 'string') {
     return 'guarded';
@@ -131,7 +115,7 @@ export function sanitizeDiaryEntry(value: unknown) {
     .slice(0, MAX_DIARY_CHARS);
 }
 
-export function stringifyMemoryText(value: unknown): string {
+function stringifyMemoryText(value: unknown): string {
   if (typeof value === 'string') {
     const text = value.trim();
     return text === '[object Object]' ? '' : value;
