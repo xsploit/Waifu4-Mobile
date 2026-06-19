@@ -1,7 +1,7 @@
 import { formatChatTurnMetadata, type ChatTurn } from './chat-turn';
 import type { PersonaProfile, RelationshipMemory } from './types';
 
-export const GRILLO_DEFAULT_SECTION_BUDGETS = {
+const GRILLO_DEFAULT_SECTION_BUDGETS = {
   background_information: 300,
   instructions: 220,
   channel_history: 500,
@@ -11,7 +11,7 @@ export const GRILLO_DEFAULT_SECTION_BUDGETS = {
   output_description: 80,
 } as const;
 
-export const GRILLO_DEFAULT_GLOBAL_BUDGET = 2030;
+const GRILLO_DEFAULT_GLOBAL_BUDGET = 2030;
 
 export type GrilloSectionName = keyof typeof GRILLO_DEFAULT_SECTION_BUDGETS;
 
@@ -69,11 +69,11 @@ type BuildGrilloContextSectionsOptions = {
   turnContext?: Record<string, PromptTurnContextValue>;
 };
 
-export function estimateGrilloTokens(text: string): number {
+function estimateGrilloTokens(text: string): number {
   return Math.ceil(text.length / 4);
 }
 
-export function buildGrilloContextSections({
+function buildGrilloContextSections({
   channelHistory = [],
   currentTurnText = '',
   diaryContext = '',
@@ -149,7 +149,7 @@ export function buildGrilloContextSections({
   };
 }
 
-export function reduceGrilloContextBudget(
+function reduceGrilloContextBudget(
   sections: GrilloContextSections,
   budgets: Record<GrilloSectionName, number> = { ...GRILLO_DEFAULT_SECTION_BUDGETS },
   globalBudget = GRILLO_DEFAULT_GLOBAL_BUDGET,
