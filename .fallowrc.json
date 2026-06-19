@@ -1,7 +1,8 @@
 {
   "$schema": "./node_modules/fallow/schema.json",
   "ignoreDependencies": [
-    "better-sqlite3"
+    "better-sqlite3",
+    "lil-gui"
   ],
   "ignoreExports": [
     {
