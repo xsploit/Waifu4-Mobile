@@ -9,6 +9,7 @@ type Check = {
   method?: 'GET' | 'POST';
   path: string;
   body?: unknown;
+  bodyMustNotStartWith?: string;
   expectedStatus: number;
 };
 
@@ -59,6 +60,18 @@ const checks: Check[] = [
 
 if (existsSync('dist/index.html')) {
   checks.push({ name: 'static app shell', path: '/', expectedStatus: 200 });
+  checks.push({
+    name: 'static vrma animation asset',
+    path: '/assets/animations/sachi-vrma/CC0animationruru02.vrma',
+    expectedStatus: 200,
+    bodyMustNotStartWith: '<!doctype',
+  });
+  checks.push({
+    name: 'static bvh animation asset',
+    path: '/assets/animations/silly-bvh/caring.bvh',
+    expectedStatus: 200,
+    bodyMustNotStartWith: '<!doctype',
+  });
 }
 
 function delay(ms: number) {
@@ -93,6 +106,13 @@ async function runCheck(check: Check) {
     throw new Error(
       `${check.name} expected ${check.expectedStatus}, got ${response.status}${text ? `: ${text}` : ''}`,
     );
+  }
+
+  if (check.bodyMustNotStartWith) {
+    const text = await response.text();
+    if (text.trimStart().toLowerCase().startsWith(check.bodyMustNotStartWith.toLowerCase())) {
+      throw new Error(`${check.name} returned the app shell instead of the requested asset.`);
+    }
   }
 
   console.log(`${check.name}=${response.status}`);

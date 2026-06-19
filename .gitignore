@@ -16,4 +16,6 @@ art/
 public/assets/*
 !public/assets/
 !public/assets/lipsync-profile.json
+!public/assets/animations/
+!public/assets/animations/**
 public/cdn-assets/
