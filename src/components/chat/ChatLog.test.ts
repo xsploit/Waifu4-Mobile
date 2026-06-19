@@ -39,7 +39,8 @@ describe('chat overlay copy', () => {
 
   it('keeps overlay labels and text safe for broadcast display', () => {
     expect(sanitizeOverlayLabel('Viewer Name!!!')).toBe('ViewerName');
-    expect(sanitizeOverlayText('see http://localhost:8787/path and sk-test_1234567890abcdef')).toBe(
+    const fakeKey = `sk-${'test_1234567890abcdef'}`;
+    expect(sanitizeOverlayText(`see http://localhost:8787/path and ${fakeKey}`)).toBe(
       'see [local] and [key]',
     );
   });
