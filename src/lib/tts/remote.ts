@@ -1,4 +1,5 @@
 import { getDesktopBackendUrl } from '../desktop/runtime';
+import { clampInteger } from '../../shared/number';
 
 export type RemoteTtsProvider = 'fish-speech' | 'inworld';
 export type RemoteTtsMode = 'live-bridge' | 'full-response' | 'early-chunks' | 'sentence-chunks';
@@ -225,13 +226,6 @@ function normalizeFishBackend(value: string | undefined) {
   return undefined;
 }
 
-function clampInteger(value: number | undefined, min: number, max: number): number | undefined {
-  if (typeof value !== 'number' || !Number.isFinite(value)) {
-    return undefined;
-  }
-  return Math.max(min, Math.min(max, Math.round(value)));
-}
-
 export function createRemoteTtsProxyRequest(request: RemoteTtsRequest): RemoteTtsProxyRequest {
   if (request.provider === 'inworld') {
     return {
@@ -291,6 +285,30 @@ function fileToBase64(file: File) {
     };
     reader.readAsDataURL(file);
   });
+}
+
+async function postRemoteTtsJson<T>(
+  path: string,
+  body: unknown,
+  options: RemoteTtsProxyOptions,
+  label: string,
+  select: (data: { error?: string; ok?: boolean } & Record<string, unknown>) => T | undefined,
+) {
+  const response = await fetch(getTtsProxyUrl(path), {
+    method: 'POST',
+    headers: buildRemoteTtsHeaders(options),
+    body: JSON.stringify(body),
+  });
+  if (!response.ok) {
+    throw new Error(`${label} failed with HTTP ${response.status}.`);
+  }
+
+  const data = (await response.json()) as { error?: string; ok?: boolean } & Record<string, unknown>;
+  const value = data.ok ? select(data) : undefined;
+  if (!value) {
+    throw new Error(data.error || `${label} failed.`);
+  }
+  return value;
 }
 
 export function createRemoteTtsStream(
@@ -446,10 +464,9 @@ export async function createRemoteTtsVoice(
   options: RemoteTtsProxyOptions = {},
 ) {
   const sampleBase64 = await fileToBase64(request.sampleFile);
-  const response = await fetch(getTtsProxyUrl('/tts/voices/create'), {
-    method: 'POST',
-    headers: buildRemoteTtsHeaders(options),
-    body: JSON.stringify({
+  return postRemoteTtsJson<CreatedRemoteTtsVoice>(
+    '/tts/voices/create',
+    {
       provider: request.provider,
       name: request.name,
       sampleBase64,
@@ -462,69 +479,37 @@ export async function createRemoteTtsVoice(
       removeBackgroundNoise: request.removeBackgroundNoise,
       enhanceAudioQuality: request.enhanceAudioQuality,
       visibility: request.visibility,
-    }),
-  });
-  if (!response.ok) {
-    throw new Error(`Remote TTS voice creation failed with HTTP ${response.status}.`);
-  }
-
-  const data = (await response.json()) as {
-    ok?: boolean;
-    error?: string;
-    voice?: CreatedRemoteTtsVoice;
-  };
-  if (!data.ok || !data.voice) {
-    throw new Error(data.error || 'Remote TTS voice creation failed.');
-  }
-  return data.voice;
+    },
+    options,
+    'Remote TTS voice creation',
+    (data) => data.voice as CreatedRemoteTtsVoice | undefined,
+  );
 }
 
 export async function designRemoteTtsVoice(
   request: DesignRemoteTtsVoiceRequest,
   options: RemoteTtsProxyOptions = {},
 ) {
-  const response = await fetch(getTtsProxyUrl('/tts/voices/design'), {
-    method: 'POST',
-    headers: buildRemoteTtsHeaders(options),
-    body: JSON.stringify(request),
-  });
-  if (!response.ok) {
-    throw new Error(`Remote TTS voice design failed with HTTP ${response.status}.`);
-  }
-
-  const data = (await response.json()) as {
-    ok?: boolean;
-    error?: string;
-    result?: DesignRemoteTtsVoiceResult;
-  };
-  if (!data.ok || !data.result) {
-    throw new Error(data.error || 'Remote TTS voice design failed.');
-  }
-  return data.result;
+  return postRemoteTtsJson<DesignRemoteTtsVoiceResult>(
+    '/tts/voices/design',
+    request,
+    options,
+    'Remote TTS voice design',
+    (data) => data.result as DesignRemoteTtsVoiceResult | undefined,
+  );
 }
 
 export async function publishDesignedRemoteTtsVoice(
   request: PublishDesignedRemoteTtsVoiceRequest,
   options: RemoteTtsProxyOptions = {},
 ) {
-  const response = await fetch(getTtsProxyUrl('/tts/voices/design/publish'), {
-    method: 'POST',
-    headers: buildRemoteTtsHeaders(options),
-    body: JSON.stringify(request),
-  });
-  if (!response.ok) {
-    throw new Error(`Remote TTS voice publish failed with HTTP ${response.status}.`);
-  }
-
-  const data = (await response.json()) as {
-    ok?: boolean;
-    error?: string;
-    voice?: CreatedRemoteTtsVoice;
-  };
-  if (!data.ok || !data.voice) {
-    throw new Error(data.error || 'Remote TTS voice publish failed.');
-  }
-  return data.voice;
+  return postRemoteTtsJson<CreatedRemoteTtsVoice>(
+    '/tts/voices/design/publish',
+    request,
+    options,
+    'Remote TTS voice publish',
+    (data) => data.voice as CreatedRemoteTtsVoice | undefined,
+  );
 }
 
 function buildRemoteTtsHeaders(
