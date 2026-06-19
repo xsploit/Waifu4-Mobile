@@ -32,11 +32,15 @@ describe('release audit', () => {
   it('blocks tracked release-only paths and local backup filenames', () => {
     expect(
       checkBlockedPaths([
+        '.codex-run/state.json',
+        '.fallow/cache.bin',
         'docs/source-of-truth.md',
         'release/win-unpacked/app.exe',
         'web-waifu-4-local-backup-example.json',
       ]),
     ).toEqual([
+      { file: '.codex-run/state.json', kind: 'blocked tracked release path' },
+      { file: '.fallow/cache.bin', kind: 'blocked tracked release path' },
       { file: 'docs/source-of-truth.md', kind: 'blocked tracked release path' },
       { file: 'release/win-unpacked/app.exe', kind: 'blocked tracked release path' },
       { file: 'web-waifu-4-local-backup-example.json', kind: 'blocked tracked release path' },

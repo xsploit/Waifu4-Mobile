@@ -6,6 +6,8 @@ release/
 .env.local
 .DS_Store
 coverage/
+.codex-run/
+.fallow/
 .lean-ctx/
 .webwaifu4/
 .codex-artifacts/
