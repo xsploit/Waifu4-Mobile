@@ -95,7 +95,9 @@ type OverlaySocketEnv = Partial<
     | 'VITE_STREAM_BOT_WS_ENABLED'
     | 'VITE_OVERLAY_WS_ENABLED'
     | 'VITE_OVERLAY_WS_URL'
-    | 'VITE_BOT_WS_URL',
+    | 'VITE_BOT_WS_URL'
+    | 'MODE'
+    | 'PROD',
     string | boolean | undefined
   >
 >;
@@ -129,7 +131,7 @@ export function shouldConnectOverlaySocket(env: OverlaySocketEnv = import.meta.e
   if (String(env.VITE_OVERLAY_WS_URL ?? env.VITE_BOT_WS_URL ?? '').trim()) {
     return true;
   }
-  return true;
+  return !(env.PROD === true || env.MODE === 'production');
 }
 
 export function getOverlaySocketToken() {

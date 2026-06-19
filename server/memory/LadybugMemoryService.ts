@@ -1,5 +1,6 @@
 import { mkdir, readFile, rename, writeFile } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
+import { randomUUID } from 'node:crypto';
 import type { Connection, Database } from '@ladybugdb/core';
 
 export type LadybugSemanticMemoryRecord = {
@@ -204,6 +205,7 @@ export class LadybugMemoryService {
   private state: LadybugState | null = null;
   private initPromise: Promise<LadybugState> | null = null;
   private fallbackReason: string | null = null;
+  private fallbackMutationQueue: Promise<void> = Promise.resolve();
 
   constructor(dbDir = process.env['WEBWAIFU_MEMORY_DB_DIR']?.trim() || DEFAULT_MEMORY_DB_DIR) {
     this.dbDir = dbDir;
@@ -1541,8 +1543,11 @@ export class LadybugMemoryService {
     record: Record<string, unknown>,
     error: unknown,
   ) {
-    const existing = await this.readFallbackGrilloRecords<Record<string, unknown>>(entity, error);
-    await this.replaceFallbackGrilloRecords(entity, [...existing, record], error);
+    await this.enableFallback(error);
+    await this.updateFallbackStore((store) => {
+      const existing = readFallbackGrilloBucket(store, entity);
+      writeFallbackGrilloBucket(store, entity, [...existing, record]);
+    });
   }
 
   private async readFallbackGrilloRecords<T>(
@@ -1561,9 +1566,9 @@ export class LadybugMemoryService {
     error: unknown,
   ) {
     await this.enableFallback(error);
-    const store = await this.readFallbackStore();
-    writeFallbackGrilloBucket(store, entity, records);
-    await this.writeFallbackStore(store);
+    await this.updateFallbackStore((store) => {
+      writeFallbackGrilloBucket(store, entity, records);
+    });
   }
 
   private async readFallbackGrilloSingleton<T>(
@@ -1582,9 +1587,9 @@ export class LadybugMemoryService {
     error: unknown,
   ) {
     await this.enableFallback(error);
-    const store = await this.readFallbackStore();
-    writeFallbackGrilloSingletonValue(store, entity, value);
-    await this.writeFallbackStore(store);
+    await this.updateFallbackStore((store) => {
+      writeFallbackGrilloSingletonValue(store, entity, value);
+    });
   }
 
   private async loadFallbackSnapshotValue(
@@ -1606,14 +1611,14 @@ export class LadybugMemoryService {
   ) {
     await this.enableFallback(error);
     const normalizedScopeKey = normalizeScopeKey(scopeKey);
-    const store = await this.readFallbackStore();
-    store.snapshots[snapshotId(kind, normalizedScopeKey)] = {
-      kind,
-      scopeKey: normalizedScopeKey,
-      updatedAt: Date.now(),
-      value,
-    };
-    await this.writeFallbackStore(store);
+    await this.updateFallbackStore((store) => {
+      store.snapshots[snapshotId(kind, normalizedScopeKey)] = {
+        kind,
+        scopeKey: normalizedScopeKey,
+        updatedAt: Date.now(),
+        value,
+      };
+    });
   }
 
   private async deleteFallbackSnapshotValue(
@@ -1623,9 +1628,9 @@ export class LadybugMemoryService {
   ) {
     await this.enableFallback(error);
     const normalizedScopeKey = normalizeScopeKey(scopeKey);
-    const store = await this.readFallbackStore();
-    delete store.snapshots[snapshotId(kind, normalizedScopeKey)];
-    await this.writeFallbackStore(store);
+    await this.updateFallbackStore((store) => {
+      delete store.snapshots[snapshotId(kind, normalizedScopeKey)];
+    });
   }
 
   private async queryFallbackSemanticVectors(
@@ -1698,9 +1703,24 @@ export class LadybugMemoryService {
       version: 1,
     };
     await mkdir(dirname(this.fallbackStorePath), { recursive: true });
-    const temporaryPath = `${this.fallbackStorePath}.${process.pid}.tmp`;
+    const temporaryPath = `${this.fallbackStorePath}.${process.pid}.${randomUUID()}.tmp`;
     await writeFile(temporaryPath, `${JSON.stringify(nextStore, null, 2)}\n`, 'utf8');
     await rename(temporaryPath, this.fallbackStorePath);
+  }
+
+  private async updateFallbackStore(mutator: (store: FallbackStore) => void | Promise<void>) {
+    const run = this.fallbackMutationQueue
+      .catch(() => undefined)
+      .then(async () => {
+        const store = await this.readFallbackStore();
+        await mutator(store);
+        await this.writeFallbackStore(store);
+      });
+    this.fallbackMutationQueue = run.then(
+      () => undefined,
+      () => undefined,
+    );
+    return run;
   }
 
   async close() {

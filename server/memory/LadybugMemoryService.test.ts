@@ -536,6 +536,45 @@ describe('LadybugMemoryService', () => {
     }
   });
 
+  it('serializes concurrent JSON fallback writes without losing snapshots', async () => {
+    const service = createService();
+    const failingService = service as unknown as { init: () => Promise<never> };
+    failingService.init = async () => {
+      throw new Error('native wal unavailable');
+    };
+
+    try {
+      await Promise.all(
+        Array.from({ length: 20 }, async (_, index) => {
+          const scopeKey = `local:persona:fallback-${index}`;
+          await service.saveSemanticRecords(scopeKey, [
+            {
+              assistantText: `assistant-${index}`,
+              createdAt: index,
+              embedding: [index + 1, 0, 0],
+              id: `fallback-semantic-${index}`,
+              personaId: `fallback-${index}`,
+              scopeKey,
+              text: `Fallback semantic memory ${index}.`,
+              userText: `remember fallback ${index}`,
+            },
+          ]);
+        }),
+      );
+
+      await Promise.all(
+        Array.from({ length: 20 }, async (_, index) => {
+          const scopeKey = `local:persona:fallback-${index}`;
+          await expect(service.loadSemanticRecords(scopeKey)).resolves.toEqual([
+            expect.objectContaining({ id: `fallback-semantic-${index}` }),
+          ]);
+        }),
+      );
+    } finally {
+      await service.close();
+    }
+  });
+
   it('clears every memory data class for one scope while preserving a sibling scope', async () => {
     const service = createService();
     const clearedScope = 'local:persona:hikari-clear';

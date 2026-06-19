@@ -1,4 +1,5 @@
 import type { FishBackend, FishStreamRequest, FishTextStream } from '../tts/FishTtsStream';
+import { clampInteger } from '../../src/shared/number';
 
 export const LIVE_TTS_BRIDGE_FINAL_WAIT_MS = 15_000;
 
@@ -25,13 +26,6 @@ type TextQueue = {
 
 function normalizeTtsLatency(value: unknown): FishStreamRequest['latency'] | undefined {
   return value === 'balanced' || value === 'normal' ? value : undefined;
-}
-
-function normalizeNumber(value: unknown, min: number, max: number): number | undefined {
-  if (typeof value !== 'number' || !Number.isFinite(value)) {
-    return undefined;
-  }
-  return Math.max(min, Math.min(max, Math.round(value)));
 }
 
 function normalizeBridgeChunkingStrategy(
@@ -76,16 +70,16 @@ export function normalizeLiveTtsBridge(value: unknown): LiveTtsBridgeRequest | n
   return {
     backend: normalizeFishBackend(source['modelId'] ?? source['backend']),
     chunkingStrategy: normalizeBridgeChunkingStrategy(source['chunkingStrategy']),
-    chunkLength: normalizeNumber(source['chunkLength'], 100, 300),
+    chunkLength: clampInteger(source['chunkLength'], 100, 300),
     conditionOnPreviousChunks:
       typeof source['conditionOnPreviousChunks'] === 'boolean'
         ? source['conditionOnPreviousChunks']
         : undefined,
     latency: normalizeTtsLatency(source['latency']),
-    maxBufferChars: normalizeNumber(source['maxBufferChars'], 16, 1000),
-    minBufferChars: normalizeNumber(source['minBufferChars'], 1, 500),
-    sampleRate: normalizeNumber(source['sampleRate'], 8000, 96000),
-    softBufferChars: normalizeNumber(source['softBufferChars'], 8, 1000),
+    maxBufferChars: clampInteger(source['maxBufferChars'], 16, 1000),
+    minBufferChars: clampInteger(source['minBufferChars'], 1, 500),
+    sampleRate: clampInteger(source['sampleRate'], 8000, 96000),
+    softBufferChars: clampInteger(source['softBufferChars'], 8, 1000),
     voiceId: typeof source['voiceId'] === 'string' ? source['voiceId'] : undefined,
   };
 }

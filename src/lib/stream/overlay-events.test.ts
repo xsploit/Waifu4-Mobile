@@ -6,6 +6,11 @@ describe('overlay socket activation', () => {
     expect(shouldConnectOverlaySocket({})).toBe(true);
   });
 
+  it('stays off by default in production builds', () => {
+    expect(shouldConnectOverlaySocket({ PROD: true })).toBe(false);
+    expect(shouldConnectOverlaySocket({ MODE: 'production' })).toBe(false);
+  });
+
   it('keeps old explicit enable flags working', () => {
     expect(shouldConnectOverlaySocket({ VITE_STREAM_BOT_WS_ENABLED: 'true' })).toBe(true);
     expect(shouldConnectOverlaySocket({ VITE_OVERLAY_WS_ENABLED: '1' })).toBe(true);

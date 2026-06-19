@@ -4,6 +4,7 @@ import { join } from 'node:path';
 import { buildSpeechTiming, createSpeechTimingAccumulator } from '../server/tts/SpeechTiming';
 import { streamFishTimestampTts, streamFishTts } from '../server/tts/FishTtsStream';
 import { streamInworldTts } from '../server/tts/InworldTtsStream';
+import { mapProviderSecrets } from '../src/shared/providerSecrets';
 import type { TtsTimestampInfo } from '../src/tts/TtsClient';
 import type { SpeechTiming } from '../src/tts/SpeechTimingTypes';
 
@@ -66,14 +67,6 @@ type CapturedAudio = {
   bytes: number;
   timestamps: TtsTimestampInfo[];
 };
-
-function secretMap(secrets: ProviderSecret[] | undefined): Record<string, string> {
-  return Object.fromEntries(
-    (secrets ?? [])
-      .filter((secret): secret is Required<ProviderSecret> => Boolean(secret.keyName && secret.secret))
-      .map((secret) => [secret.keyName, secret.secret]),
-  );
-}
 
 async function loadBackup(): Promise<LocalBackup> {
   const backupPath = process.env.WEBWAIFU_LOCAL_BACKUP_PATH ?? DEFAULT_BACKUP_PATH;
@@ -153,7 +146,7 @@ async function main() {
   const text = process.argv.slice(2).join(' ').trim() || DEFAULT_TEXT;
   const rounds = Number(process.env.WEBWAIFU_TTS_BENCH_ROUNDS ?? 2);
   const backup = await loadBackup();
-  const secrets = secretMap(backup.providerSecrets);
+  const secrets = mapProviderSecrets(backup.providerSecrets);
   const ai = backup.state?.aiSettings ?? {};
   const fishKey = process.env.FISH_AUDIO_API_KEY ?? process.env.FISHSPEECH_API_KEY ?? secrets['fishSpeech.apiKey'];
   const inworldKey = process.env.INWORLD_API_KEY ?? secrets['inworld.apiKey'];

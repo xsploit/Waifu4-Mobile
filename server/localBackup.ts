@@ -2,6 +2,7 @@ import { readFile } from 'node:fs/promises';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
 import type { Request, Response } from 'express';
+import { mapProviderSecrets } from '../src/shared/providerSecrets';
 
 const DEFAULT_BACKUP_PATH = join(
   homedir(),
@@ -31,19 +32,11 @@ type LocalBackup = {
   };
 };
 
-function secretMap(secrets: ProviderSecret[] | undefined): Record<string, string> {
-  return Object.fromEntries(
-    (secrets ?? [])
-      .filter((secret): secret is Required<ProviderSecret> => Boolean(secret.keyName && secret.secret))
-      .map((secret) => [secret.keyName, secret.secret]),
-  );
-}
-
 export async function handleLocalBackupSettings(_req: Request, res: Response): Promise<void> {
   const backupPath = process.env.WEBWAIFU_LOCAL_BACKUP_PATH ?? DEFAULT_BACKUP_PATH;
   try {
     const backup = JSON.parse(await readFile(backupPath, 'utf8')) as LocalBackup;
-    const secrets = secretMap(backup.providerSecrets);
+    const secrets = mapProviderSecrets(backup.providerSecrets);
     const ai = backup.state?.aiSettings ?? {};
     const provider = ai.llmProvider === 'openrouter-responses' ? 'openrouter-responses' : 'vercel-gateway';
     res.json({
