@@ -114,7 +114,7 @@ type ParsedWorkerResponse = {
   tool_calls?: unknown;
 };
 
-export const GRILLO_WORKER_LOOP_RESPONSE_FORMAT: GrilloWorkerLoopResponseFormat = {
+const GRILLO_WORKER_LOOP_RESPONSE_FORMAT: GrilloWorkerLoopResponseFormat = {
   name: 'grillo_worker_loop',
   schema: {
     additionalProperties: false,

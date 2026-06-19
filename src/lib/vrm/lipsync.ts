@@ -1,7 +1,7 @@
 import type { VRM } from '@pixiv/three-vrm';
 import type { TtsManager } from '../tts/manager';
 
-export const PHONEME_TO_BLEND_SHAPE: Record<string, Record<string, number>> = {
+const PHONEME_TO_BLEND_SHAPE: Record<string, Record<string, number>> = {
   // Vowels
   'ə': { aa: 0.5, ih: 0.2 },
   'æ': { aa: 0.7 },

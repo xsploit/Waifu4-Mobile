@@ -104,7 +104,7 @@ function runProcess(
   });
 }
 
-export async function resolveTwitchStreamUrl(channel: string, media: 'audio' | 'video' = 'audio') {
+async function resolveTwitchStreamUrl(channel: string, media: 'audio' | 'video' = 'audio') {
   const twitchUrl = `https://www.twitch.tv/${channel}`;
   const attempts = [
     {

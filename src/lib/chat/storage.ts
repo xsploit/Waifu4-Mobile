@@ -1307,7 +1307,7 @@ function mergeBuiltInPersonas(
   return [...mergedBuiltIns, ...customPersonas];
 }
 
-export function createDefaultPersistedChatState(): PersistedChatState {
+function createDefaultPersistedChatState(): PersistedChatState {
   const defaultPersonas = createDefaultPersonas();
   const defaultActivePersonaId = defaultPersonas[0]?.id ?? '';
   return {

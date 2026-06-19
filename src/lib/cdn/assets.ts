@@ -1,4 +1,4 @@
-export function getLocalCdnAssetUrl(assetPath: string) {
+function getLocalCdnAssetUrl(assetPath: string) {
   return `/cdn-assets/${assetPath.replace(/^\/+/, '')}`;
 }
 

@@ -4,7 +4,7 @@ import { z } from 'zod';
  * Canonical assistant emotion enum (Resolved Decision D3 follow-up).
  * An emotion is NEVER an animation name. Low-stakes / reversible.
  */
-export const EMOTIONS = [
+const EMOTIONS = [
   'neutral',
   'amused',
   'happy',
@@ -34,7 +34,7 @@ export const assistantReplySchema = z.object({
 export type AssistantReply = z.infer<typeof assistantReplySchema>;
 
 /** The non-spoken part of a reply. */
-export const replyMetadataSchema = assistantReplySchema.omit({ message: true });
+const replyMetadataSchema = assistantReplySchema.omit({ message: true });
 export type ReplyMetadata = z.infer<typeof replyMetadataSchema>;
 
 /** Lenient parse for metadata coming off the wire (Lane A object / Lane B JSON). */

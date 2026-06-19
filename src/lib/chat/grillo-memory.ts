@@ -221,26 +221,12 @@ export async function hydrateGrilloMemoryState(scopeKey: string): Promise<Grillo
   return legacyState;
 }
 
-export function saveGrilloMemoryState(state: GrilloMemoryState) {
-  const key = normalizeScopeStorageKey(state.scopeKey);
-  const nextState = mergeCachedGrilloMemoryState(state);
-  grilloMemoryCache.set(key, nextState);
-  void enqueueGrilloMemoryWrite(state.scopeKey, () => persistGrilloMemoryState(nextState));
-}
-
 export async function saveGrilloMemoryStateAsync(state: GrilloMemoryState) {
   const key = normalizeScopeStorageKey(state.scopeKey);
   const nextState = mergeCachedGrilloMemoryState(state);
   grilloMemoryCache.set(key, nextState);
   await enqueueGrilloMemoryWrite(state.scopeKey, () => persistGrilloMemoryState(nextState));
   return nextState;
-}
-
-export function clearGrilloMemoryState(scopeKey: string) {
-  const state = createDefaultGrilloMemoryState(scopeKey);
-  grilloMemoryCache.set(normalizeScopeStorageKey(scopeKey), state);
-  void enqueueGrilloMemoryWrite(scopeKey, () => deletePersistedGrilloMemoryState(scopeKey));
-  return state;
 }
 
 export async function clearGrilloMemoryStateAsync(scopeKey: string) {
@@ -250,18 +236,7 @@ export async function clearGrilloMemoryStateAsync(scopeKey: string) {
   return state;
 }
 
-export function recordGrilloMemoryTurn({
-  now = Date.now(),
-  scopeKey,
-  turns,
-}: RecordGrilloMemoryTurnOptions): GrilloMemoryState {
-  const state = loadGrilloMemoryState(scopeKey);
-  const promoted = recordGrilloMemoryTurnInState(state, { now, scopeKey, turns });
-  saveGrilloMemoryState(promoted);
-  return promoted;
-}
-
-export async function recordGrilloMemoryTurnAsync({
+async function recordGrilloMemoryTurnAsync({
   now = Date.now(),
   scopeKey,
   turns,
@@ -421,7 +396,7 @@ export function createEmptyGrilloMemoryPromptAdditions(): GrilloMemoryPromptAddi
   };
 }
 
-export async function buildGrilloMemoryPromptAdditionsAsync(
+async function buildGrilloMemoryPromptAdditionsAsync(
   options: BuildGrilloMemoryPromptOptions,
 ): Promise<GrilloMemoryPromptAdditions> {
   await hydrateGrilloMemoryState(options.scopeKey);

@@ -74,7 +74,7 @@ function getFacts(value: unknown) {
     .slice(0, 4);
 }
 
-export function mergeRelationshipMemory(
+function mergeRelationshipMemory(
   currentMemory: RelationshipMemory,
   parsed: Record<string, unknown> | null,
   targetTurnCount: number,

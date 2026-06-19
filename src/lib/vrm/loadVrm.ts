@@ -206,7 +206,7 @@ export async function loadVrm(url: string): Promise<VRM> {
   return vrm;
 }
 
-export function makePhysicalFrom(
+function makePhysicalFrom(
   oldMaterial: THREE.Material & { [key: string]: any },
   envMap: THREE.Texture | null,
   visualSettings: VisualSettings,

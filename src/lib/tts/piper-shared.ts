@@ -107,7 +107,7 @@ export const CUSTOM_RIKO_PIPER_VOICES: PiperVoiceProfile[] = [
   ),
 ];
 
-export const CUSTOM_RIKO_PIPER_VOICE: PiperVoiceProfile = CUSTOM_RIKO_PIPER_VOICES[0]!;
+const CUSTOM_RIKO_PIPER_VOICE: PiperVoiceProfile = CUSTOM_RIKO_PIPER_VOICES[0]!;
 
 export const RIKO_PIPER_VOICE_KEY = CUSTOM_RIKO_PIPER_VOICE.key;
 export const NEURO_PIPER_VOICE_KEY = 'en_US-neuro-sama-medium';

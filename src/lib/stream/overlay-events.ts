@@ -15,7 +15,7 @@ function getConfiguredOverlaySocketUrl() {
   ).trim();
 }
 
-export const OVERLAY_SOCKET_PROTOCOL = 'yourwifey.overlay';
+const OVERLAY_SOCKET_PROTOCOL = 'yourwifey.overlay';
 const OVERLAY_SESSION_TOKEN_KEY = 'yourwifey.overlay.token';
 
 type OverlaySocketEnv = Partial<
@@ -62,7 +62,7 @@ export function shouldConnectOverlaySocket(env: OverlaySocketEnv = import.meta.e
   return !(env.PROD === true || env.MODE === 'production');
 }
 
-export function getOverlaySocketToken() {
+function getOverlaySocketToken() {
   const configured = (import.meta.env['VITE_OVERLAY_WS_TOKEN'] || '').trim();
   if (configured) {
     return configured;

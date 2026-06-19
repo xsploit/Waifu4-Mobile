@@ -22,7 +22,7 @@ const PROTECTED_EXPRESSION_ALIASES: Record<string, string> = {
   u: 'ou',
 };
 
-export const PROTECTED_EXPRESSION_KEYS = new Set([
+const PROTECTED_EXPRESSION_KEYS = new Set([
   'aa',
   'ih',
   'ou',
@@ -45,7 +45,7 @@ export function normalizeVrmExpressionKey(value: string) {
     .toLowerCase();
 }
 
-export function resolveProtectedExpressionKey(value: string) {
+function resolveProtectedExpressionKey(value: string) {
   const normalized = normalizeVrmExpressionKey(value);
   const aliased = PROTECTED_EXPRESSION_ALIASES[normalized] ?? normalized;
   return PROTECTED_EXPRESSION_KEYS.has(aliased) ? aliased : null;

@@ -6,7 +6,7 @@ export type MouthWeights = {
   oh: number;
 };
 
-export const ZERO_MOUTH_WEIGHTS: MouthWeights = {
+const ZERO_MOUTH_WEIGHTS: MouthWeights = {
   aa: 0,
   ih: 0,
   ou: 0,

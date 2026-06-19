@@ -1,7 +1,7 @@
 import { coerceMetadata, type ReplyMetadata } from './BrainTypes';
 
-export const TAG_OPEN = '<yw-meta>';
-export const TAG_CLOSE = '</yw-meta>';
+const TAG_OPEN = '<yw-meta>';
+const TAG_CLOSE = '</yw-meta>';
 
 /**
  * How many trailing chars of `pending` could be the start of an (incomplete)

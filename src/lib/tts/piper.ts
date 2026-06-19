@@ -1,7 +1,6 @@
 import type { ProgressCallback } from '@mintplex-labs/piper-tts-web';
 import { fetchGameAssetBlob } from '../cdn/assets';
 import {
-  CUSTOM_RIKO_PIPER_VOICE,
   CUSTOM_RIKO_PIPER_VOICES,
   HIKARI_PIPER_VOICE_KEY,
   NEURO_PIPER_VOICE_KEY,
@@ -142,7 +141,6 @@ class PiperWorkerClient {
     this.pendingRequests.clear();
   }
 }
-
 const workerClient = new PiperWorkerClient();
 
 if (import.meta.hot) {
@@ -158,7 +156,6 @@ export type {
   WordBoundary,
 } from './piper-shared';
 export {
-  CUSTOM_RIKO_PIPER_VOICE,
   CUSTOM_RIKO_PIPER_VOICES,
   HIKARI_PIPER_VOICE_KEY,
   NEURO_PIPER_VOICE_KEY,
@@ -202,8 +199,4 @@ export async function synthesizePiperChunk(
     text: result.text,
     sampleRate: result.sampleRate,
   };
-}
-
-export async function synthesizePiperText(text: string, voiceId: string): Promise<Blob> {
-  return (await synthesizePiperChunk(text, voiceId)).audioBlob;
 }
