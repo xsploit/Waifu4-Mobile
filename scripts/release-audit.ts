@@ -1,8 +1,9 @@
 import { execFileSync } from 'node:child_process';
 import { readFileSync, statSync } from 'node:fs';
 import { extname } from 'node:path';
+import { pathToFileURL } from 'node:url';
 
-type Finding = {
+export type ReleaseAuditFinding = {
   file: string;
   kind: string;
   line?: number;
@@ -57,8 +58,8 @@ function trackedFiles() {
   return output ? output.split(/\r?\n/).filter(Boolean) : [];
 }
 
-function checkBlockedPaths(files: string[]) {
-  const findings: Finding[] = [];
+export function checkBlockedPaths(files: string[]) {
+  const findings: ReleaseAuditFinding[] = [];
   for (const file of files) {
     if (blockedTrackedPathPatterns.some((pattern) => pattern.test(file))) {
       findings.push({ file, kind: 'blocked tracked release path' });
@@ -67,8 +68,8 @@ function checkBlockedPaths(files: string[]) {
   return findings;
 }
 
-function checkJsonPayloadPatterns(files: string[]) {
-  const findings: Finding[] = [];
+export function checkJsonPayloadPatterns(files: string[]) {
+  const findings: ReleaseAuditFinding[] = [];
   for (const file of files) {
     if (extname(file).toLowerCase() !== '.json') {
       continue;
@@ -90,8 +91,8 @@ function checkJsonPayloadPatterns(files: string[]) {
   return findings;
 }
 
-function checkSecretPatterns(files: string[]) {
-  const findings: Finding[] = [];
+export function checkSecretPatterns(files: string[]) {
+  const findings: ReleaseAuditFinding[] = [];
   for (const file of files) {
     const extension = extname(file).toLowerCase();
     if (binaryExtensions.has(extension)) {
@@ -116,13 +117,20 @@ function checkSecretPatterns(files: string[]) {
   return findings;
 }
 
+export function auditTrackedFiles(files: string[]) {
+  const blockedPathFindings = checkBlockedPaths(files);
+  const blockedFiles = new Set(blockedPathFindings.map((finding) => finding.file));
+  const scannableFiles = files.filter((file) => !blockedFiles.has(file));
+  return [
+    ...blockedPathFindings,
+    ...checkJsonPayloadPatterns(scannableFiles),
+    ...checkSecretPatterns(scannableFiles),
+  ];
+}
+
 function main() {
   const files = trackedFiles();
-  const findings = [
-    ...checkBlockedPaths(files),
-    ...checkJsonPayloadPatterns(files),
-    ...checkSecretPatterns(files),
-  ];
+  const findings = auditTrackedFiles(files);
   if (findings.length > 0) {
     console.error('Release audit failed:');
     for (const finding of findings) {
@@ -135,4 +143,6 @@ function main() {
   console.log(`Release audit passed: ${files.length} tracked files checked.`);
 }
 
-main();
+if (import.meta.url === pathToFileURL(process.argv[1] ?? '').href) {
+  main();
+}
