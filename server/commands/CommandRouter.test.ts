@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { ChatProvider } from '../ai/ChatProvider.js';
-import type { StreamBotEvent } from '../scheduler/ChatScheduler.js';
+import type { StreamBotEvent } from '../../src/shared/streamEvents';
 import type { TwitchChatMessage, TwitchChatSource } from '../twitch/TwitchChatSource.js';
 import { CommandRouter } from './CommandRouter.js';
 

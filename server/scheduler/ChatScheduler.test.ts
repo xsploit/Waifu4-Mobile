@@ -1,7 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import type { ChatProvider, ChatProviderRequest } from '../ai/ChatProvider.js';
-import { ChatScheduler, type ChatSchedulerOptions, type StreamBotEvent } from './ChatScheduler.js';
+import { ChatScheduler, type ChatSchedulerOptions } from './ChatScheduler.js';
 import type { TwitchChatMessage } from '../twitch/TwitchChatSource.js';
+import type { StreamBotEvent } from '../../src/shared/streamEvents';
 
 class CapturingProvider implements ChatProvider {
   requests: ChatProviderRequest[] = [];

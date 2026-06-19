@@ -1,65 +1,7 @@
 import type { ChatProvider, ChatProviderMessage } from '../ai/ChatProvider.js';
-import type { TwitchChatMembershipEvent, TwitchChatMessage } from '../twitch/TwitchChatSource.js';
+import type { TwitchChatMessage } from '../twitch/TwitchChatSource.js';
+import type { StreamBotEvent } from '../../src/shared/streamEvents';
 import { mentionsBot, selectMeaningfulMessages } from './messageFilters.js';
-
-export type StreamBotEvent =
-  | { type: 'chat:message'; payload: TwitchChatMessage }
-  | { type: 'twitch:membership'; payload: TwitchChatMembershipEvent }
-  | {
-      type: 'chat:batch';
-      payload: {
-        activeChatters: number;
-        batchSize: number;
-        messages: TwitchChatMessage[];
-      };
-    }
-  | {
-      type: 'ai:thinking';
-      payload: {
-        jobId: string;
-        mode: 'direct' | 'batch';
-        activeChatters: number;
-      };
-    }
-  | {
-      type: 'ai:delta';
-      payload: {
-        jobId: string;
-        mode: 'direct' | 'batch';
-        delta: string;
-      };
-    }
-  | {
-      type: 'ai:reply';
-      payload: {
-        jobId: string;
-        mode: 'direct' | 'batch';
-        text: string;
-        target?: TwitchChatMessage;
-      };
-    }
-  | {
-      type: 'overlay:command';
-      payload:
-        | { action: 'reload' }
-        | { action: 'set-ai-model'; model: string }
-        | { action: 'list-personas' }
-        | { action: 'set-persona'; persona: string }
-        | { action: 'set-character'; selector: string }
-        | { action: 'list-vrms' }
-        | { action: 'load-vrm'; model: string }
-        | { action: 'set-camera-view'; viewMode: 'full-body' | 'half-body' }
-        | { action: 'list-animations' }
-        | { action: 'play-animation'; selector: string }
-        | { action: 'sequencer'; command: 'start' | 'stop' | 'next' | 'random' }
-        | { action: 'set-animation-speed'; speed: number }
-        | { action: 'set-animation-duration'; duration: number }
-        | { action: 'set-tts'; enabled: boolean }
-        | { action: 'set-auto-speak'; enabled: boolean }
-        | { action: 'say'; text: string };
-    }
-  | { type: 'command:response'; payload: { text: string; sendToChat: boolean } }
-  | { type: 'system:status'; payload: { level: 'info' | 'warning' | 'error'; message: string } };
 
 export type ChatSchedulerOptions = {
   provider: ChatProvider;

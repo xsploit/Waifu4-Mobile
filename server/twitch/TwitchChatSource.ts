@@ -1,22 +1,7 @@
-export type TwitchChatMessage = {
-  id: string;
-  user: string;
-  displayName: string;
-  text: string;
-  timestamp: number;
-  badges: string[];
-  isMod: boolean;
-  isBroadcaster: boolean;
-};
+import type { StreamTwitchChatMessage, StreamTwitchMembershipEvent } from '../../src/shared/streamEvents';
 
-export type TwitchChatMembershipEvent = {
-  id: string;
-  type: 'join' | 'part';
-  user: string;
-  displayName: string;
-  channel: string;
-  timestamp: number;
-};
+export type TwitchChatMessage = StreamTwitchChatMessage;
+export type TwitchChatMembershipEvent = StreamTwitchMembershipEvent;
 
 export type TwitchChatStatus = {
   level: 'info' | 'warning' | 'error';

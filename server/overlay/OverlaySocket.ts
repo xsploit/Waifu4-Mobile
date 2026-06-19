@@ -2,7 +2,7 @@ import { createHmac, timingSafeEqual } from 'node:crypto';
 import type { IncomingHttpHeaders, IncomingMessage, Server as HttpServer } from 'node:http';
 import type { Duplex } from 'node:stream';
 import { WebSocket, WebSocketServer, type RawData } from 'ws';
-import type { StreamBotEvent } from '../scheduler/ChatScheduler.js';
+import type { StreamBotEvent } from '../../src/shared/streamEvents';
 
 export type OverlayClientEvent =
   | { type: 'overlay:ready'; payload?: Record<string, unknown> }

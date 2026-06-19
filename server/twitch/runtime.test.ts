@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { ChatProvider, ChatProviderRequest } from '../ai/ChatProvider.js';
-import type { StreamBotEvent } from '../scheduler/ChatScheduler.js';
+import type { StreamBotEvent } from '../../src/shared/streamEvents';
 import { createTwitchRuntime } from './runtime.js';
 
 class CapturingProvider implements ChatProvider {

@@ -1,12 +1,13 @@
 import type { ChatProvider, ChatProviderRequest, ChatProviderStreamHandlers } from '../ai/ChatProvider.js';
 import { completeChat, streamChat } from '../ai/llmGateway.js';
-import { ChatScheduler, type StreamBotEvent } from '../scheduler/ChatScheduler.js';
+import { ChatScheduler } from '../scheduler/ChatScheduler.js';
 import { CommandRouter } from '../commands/CommandRouter.js';
 import { MockTwitchChatSource, type MockChatInjection } from '../mock/MockTwitchChatSource.js';
 import { TwitchIrcSource } from './TwitchIrcSource.js';
 import type { TwitchChatMessage, TwitchChatSource, TwitchChatSourceHandlers } from './TwitchChatSource.js';
 import type { GatewayId, ReasoningEffort } from '../../src/brain/BrainTypes';
 import type { OverlaySocket } from '../overlay/OverlaySocket.js';
+import type { StreamBotEvent } from '../../src/shared/streamEvents';
 
 export type TwitchRuntimeSourceMode = 'mock' | 'irc';
 
