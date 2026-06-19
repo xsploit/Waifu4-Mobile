@@ -17,12 +17,12 @@ import type { GrilloScoredItem } from './grillo-context';
 import type { ChatMessage, PersonaProfile, RelationshipMemory } from './types';
 import { buildWorkerDebriefPlan } from '../grillo/worker-debrief';
 
-export type GrilloWorkerLoopMessage = {
+type GrilloWorkerLoopMessage = {
   role: string;
   content: string;
 };
 
-export type GrilloWorkerLoopResponseFormat =
+type GrilloWorkerLoopResponseFormat =
   | {
       type: 'json_object';
     }
@@ -33,7 +33,7 @@ export type GrilloWorkerLoopResponseFormat =
       type: 'json_schema';
     };
 
-export type GrilloWorkerLoopCompletionRequest = {
+type GrilloWorkerLoopCompletionRequest = {
   maxTokens: number;
   messages: GrilloWorkerLoopMessage[];
   model: string;
@@ -43,11 +43,11 @@ export type GrilloWorkerLoopCompletionRequest = {
   temperature: number;
 };
 
-export type GrilloWorkerLoopCompletion = (
+type GrilloWorkerLoopCompletion = (
   request: GrilloWorkerLoopCompletionRequest,
 ) => Promise<string>;
 
-export type GrilloWorkerToolCall = {
+type GrilloWorkerToolCall = {
   args: Record<string, unknown>;
   name: GrilloWorkerToolName;
 };
@@ -62,7 +62,7 @@ const GRILLO_WORKER_TOOL_NAMES = [
   'core.worker_memory_insert_archival',
 ] as const;
 
-export type GrilloWorkerToolName = (typeof GRILLO_WORKER_TOOL_NAMES)[number];
+type GrilloWorkerToolName = (typeof GRILLO_WORKER_TOOL_NAMES)[number];
 
 export type GrilloWorkerLoopResult = {
   finalJsonText: string;

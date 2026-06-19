@@ -1,4 +1,4 @@
-export type SseEvent = { event: string; data: string };
+type SseEvent = { event: string; data: string };
 
 /** Serialize one named SSE event with a JSON payload. */
 export function formatSseEvent(event: string, data: unknown): string {

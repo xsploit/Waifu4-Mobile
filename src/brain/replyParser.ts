@@ -29,7 +29,7 @@ function extractMetaJson(metaRaw: string): string | null {
   return trimmed.length > 0 ? trimmed : null;
 }
 
-export type LaneBFinish = {
+type LaneBFinish = {
   /** Any held-back tail that turned out not to be a tag; emit as a final delta. */
   flushedDelta: string;
   /** Full spoken text, metadata block stripped. The only thing sent to TTS. */

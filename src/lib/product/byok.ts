@@ -1,10 +1,10 @@
-export type AuthProvider = 'local';
+type AuthProvider = 'local';
 
-export type DatabaseProvider = 'indexeddb';
+type DatabaseProvider = 'indexeddb';
 
-export type AssetStorageProvider = 'indexeddb' | 'local-file';
+type AssetStorageProvider = 'indexeddb' | 'local-file';
 
-export type ProductStorageMode = 'local-only';
+type ProductStorageMode = 'local-only';
 
 export type ProviderKeyMode = 'local-indexeddb';
 
@@ -22,7 +22,7 @@ export type SettingStorageClass =
   | 'local-secret'
   | 'server-only';
 
-export type ProductStackDecision = {
+type ProductStackDecision = {
   authProvider: AuthProvider;
   databaseProvider: DatabaseProvider;
   assetStorageProvider: AssetStorageProvider;

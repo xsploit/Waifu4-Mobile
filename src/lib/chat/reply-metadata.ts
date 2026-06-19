@@ -28,7 +28,7 @@ export type AssistantEmotion =
   | 'sad'
   | 'caring';
 
-export type AssistantFacialExpression =
+type AssistantFacialExpression =
   | 'neutral'
   | 'happy'
   | 'relaxed'

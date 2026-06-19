@@ -63,13 +63,6 @@ export type TtsTimestampInfo = {
   };
 };
 
-export type TtsTimingSummary = {
-  timestampChunks: number;
-  words: number;
-  phonemes: number;
-  visemes: number;
-};
-
 export type TtsAudioEvent = {
   type: 'audio';
   audio: Uint8Array;

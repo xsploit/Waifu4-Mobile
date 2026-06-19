@@ -3,7 +3,7 @@ import type { PersonaProfile, TwitchSettings } from './types';
 
 export type ChatJobMemoryMode = 'direct' | 'batch';
 
-export type GrilloIntakeSignal =
+type GrilloIntakeSignal =
   | 'local_turn'
   | 'trusted_twitch_role'
   | 'direct_persona_mention'
@@ -12,7 +12,7 @@ export type GrilloIntakeSignal =
   | 'stream_event_relevance'
   | 'repeated_topic_thread';
 
-export type GrilloIntakeScore = {
+type GrilloIntakeScore = {
   score: number;
   shouldIngest: boolean;
   signals: GrilloIntakeSignal[];

@@ -62,7 +62,7 @@ export type GrilloContextPacket = {
   thoughts: string[];
 };
 
-export type GrilloWorkerToolName =
+type GrilloWorkerToolName =
   | 'core.worker_memory_read'
   | 'core.worker_memory_search'
   | 'core.worker_candidate_list'
@@ -152,7 +152,7 @@ export type GrilloWorkerTickOptions = {
   provider?: unknown;
 };
 
-export type GrilloWorkerTickResult = {
+type GrilloWorkerTickResult = {
   beatType: string;
   durationMs: number;
   noOpReason: string;

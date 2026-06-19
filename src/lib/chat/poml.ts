@@ -8,7 +8,7 @@ export type PomlPromptMessage = {
   content: string;
 };
 
-export type ResponsesPromptInputMessage = {
+type ResponsesPromptInputMessage = {
   role: 'user' | 'assistant';
   content: string;
 };
@@ -28,12 +28,7 @@ export type YourWifeyPomlPromptInput = {
   ttsContext?: string;
 };
 
-export type YourWifeyResponsesPromptPayload = {
-  input: ResponsesPromptInputMessage[];
-  instructions: string;
-};
-
-export type YourWifeyPomlVariables = Record<string, string>;
+type YourWifeyPomlVariables = Record<string, string>;
 
 type PomlRenderResponse = {
   error?: string;

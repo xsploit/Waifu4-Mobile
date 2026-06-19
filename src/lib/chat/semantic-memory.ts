@@ -21,12 +21,6 @@ export type SemanticMemoryMatch = SemanticMemoryRecord & {
   score: number;
 };
 
-export type SemanticMemoryWriteResult = {
-  record: SemanticMemoryRecord;
-  totalIndexed: number;
-  vectorDims: number;
-};
-
 const LEGACY_MEMORY_KEY_PREFIX = 'yourwifey:semantic-memory:v1:';
 const DB_NAME = 'yourwifey-memory';
 // v2 replays the schema guard so older/broken IndexedDB stores get the scope index before vector recall is used.

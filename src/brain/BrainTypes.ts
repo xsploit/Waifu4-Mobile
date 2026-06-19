@@ -16,8 +16,6 @@ const EMOTIONS = [
   'curious',
 ] as const;
 
-export type Emotion = (typeof EMOTIONS)[number];
-
 /**
  * The one canonical reply contract (D3). Never changes across phases.
  * `message` is the only field ever sent to TTS; the rest is metadata that is
@@ -30,8 +28,6 @@ export const assistantReplySchema = z.object({
   arousal: z.number().min(0).max(1).describe('Energy/intensity of the mood, 0 (calm) to 1 (highly energized).'),
   dominance: z.number().min(-1).max(1).describe('Sense of control, -1 (submissive) to 1 (dominant).'),
 });
-
-export type AssistantReply = z.infer<typeof assistantReplySchema>;
 
 /** The non-spoken part of a reply. */
 const replyMetadataSchema = assistantReplySchema.omit({ message: true });

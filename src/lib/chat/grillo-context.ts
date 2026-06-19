@@ -13,14 +13,14 @@ const GRILLO_DEFAULT_SECTION_BUDGETS = {
 
 const GRILLO_DEFAULT_GLOBAL_BUDGET = 2030;
 
-export type GrilloSectionName = keyof typeof GRILLO_DEFAULT_SECTION_BUDGETS;
+type GrilloSectionName = keyof typeof GRILLO_DEFAULT_SECTION_BUDGETS;
 
 export type GrilloScoredItem = {
   text: string;
   score?: number;
 };
 
-export type GrilloContextSections = {
+type GrilloContextSections = {
   background_information: string[];
   instructions: string[];
   channel_history: string[];
@@ -30,14 +30,14 @@ export type GrilloContextSections = {
   output_description: string[];
 };
 
-export type GrilloReductionLog = {
+type GrilloReductionLog = {
   step: string;
   section: GrilloSectionName;
   removedItems: number;
   tokensSaved: number;
 };
 
-export type GrilloBudgetResult = {
+type GrilloBudgetResult = {
   sections: GrilloContextSections;
   reductions: GrilloReductionLog[];
   totalTokens: number;
