@@ -43,16 +43,7 @@ export type ProviderSecretDescriptor = {
   updatedAt: string;
 };
 
-export const PROVIDER_SECRET_ENV_NAMES: Record<ProviderKind, readonly string[]> = {
-  openai: ['OPENAI_API_KEY'],
-  openrouter: ['OPENROUTER_API_KEY'],
-  fish_speech: ['FISH_AUDIO_API_KEY', 'FISH_SPEECH_API_KEY'],
-  inworld: ['INWORLD_API_KEY'],
-  tavily: ['TAVILY_API_KEY'],
-  custom: [],
-};
-
-export const LOCAL_STACK_DECISION: ProductStackDecision = {
+const LOCAL_STACK_DECISION: ProductStackDecision = {
   authProvider: 'local',
   databaseProvider: 'indexeddb',
   assetStorageProvider: 'indexeddb',
@@ -100,8 +91,6 @@ export function classifyLocalSetting(key: string): SettingStorageClass {
   return 'local-setting';
 }
 
-export const classifyByokSetting = classifyLocalSetting;
-
 export function normalizeSettingKey(key: string) {
   return key.trim().replace(/\s+/g, '');
 }
@@ -110,7 +99,7 @@ function canonicalizeSettingKey(key: string) {
   return normalizeSettingKey(key).toLowerCase();
 }
 
-export function normalizeTwitchChannelName(value: string) {
+function normalizeTwitchChannelName(value: string) {
   return value.trim().toLowerCase().replace(/^#/, '');
 }
 

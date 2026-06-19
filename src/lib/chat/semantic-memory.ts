@@ -84,7 +84,7 @@ const EMOTIONAL_MEMORY_TERMS = new Set([
   'worried',
 ]);
 
-export function buildSemanticMemoryTurnText(
+function buildSemanticMemoryTurnText(
   userText: string,
   assistantText: string,
   persona: PersonaProfile | null,
@@ -98,7 +98,7 @@ export function buildSemanticMemoryTurnText(
     .slice(0, 2400);
 }
 
-export function normalizeSemanticAssistantText(value: unknown, maxLength = 1200) {
+function normalizeSemanticAssistantText(value: unknown, maxLength = 1200) {
   const raw = normalizeSemanticMemoryText(value, maxLength * 2);
   if (!raw) {
     return '';
@@ -124,7 +124,7 @@ export function buildSemanticMemoryContext(matches: SemanticMemoryMatch[]) {
     .join('\n');
 }
 
-export async function loadSemanticMemory(scopeKey: string): Promise<SemanticMemoryRecord[]> {
+async function loadSemanticMemory(scopeKey: string): Promise<SemanticMemoryRecord[]> {
   const cacheKey = normalizeScopeKey(scopeKey);
   const cached = semanticMemoryRecordCache.get(cacheKey);
   if (cached) {
@@ -170,7 +170,7 @@ export async function loadSemanticMemory(scopeKey: string): Promise<SemanticMemo
   return legacyRecords;
 }
 
-export async function saveSemanticMemory(scopeKey: string, records: SemanticMemoryRecord[]) {
+async function saveSemanticMemory(scopeKey: string, records: SemanticMemoryRecord[]) {
   const cacheKey = normalizeScopeKey(scopeKey);
   const normalizedRecords = normalizeSemanticMemoryRecords(records, MAX_RECORDS_PER_SCOPE);
   setSemanticMemoryRecordCache(cacheKey, normalizedRecords);
@@ -287,7 +287,7 @@ export async function findSemanticMemoryMatches(
   return matches;
 }
 
-export function findSemanticMemoryMatchesInRecords(
+function findSemanticMemoryMatchesInRecords(
   records: SemanticMemoryRecord[],
   query: string,
   queryEmbedding: number[] | null,
@@ -304,14 +304,6 @@ export function findSemanticMemoryMatchesInRecords(
     .filter((record) => record.score > 0.05)
     .sort((a, b) => b.score - a.score || b.createdAt - a.createdAt)
     .slice(0, limit);
-}
-
-export function scoreSemanticMemoryRecord(
-  record: SemanticMemoryRecord,
-  query: string,
-  queryEmbedding: number[] | null,
-) {
-  return scoreSemanticMemory(record, tokenize(query), normalizeEmbedding(queryEmbedding), Date.now());
 }
 
 function scoreSemanticMemory(
