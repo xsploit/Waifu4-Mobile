@@ -256,6 +256,16 @@ npm run build
 npm run smoke:runtime
 ```
 
+Release gate:
+
+```powershell
+npm run audit:release
+```
+
+The release audit checks tracked files for accidental build output, legacy
+reference folders, local backup JSON, database files, env files, and key-shaped
+literals, then runs typecheck, the full test suite, and the production build.
+
 ---
 
 <h2 align="center" id="status">Status</h2>
