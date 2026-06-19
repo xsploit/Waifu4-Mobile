@@ -1,0 +1,997 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>VRM Inspector — hook everything</title>
+    <style>
+      :root { color-scheme: dark; }
+      * { box-sizing: border-box; }
+      html, body { margin: 0; height: 100%; background: #11131a; color: #e7ecff; font: 13px/1.4 system-ui, sans-serif; overflow: hidden; }
+      #app { position: fixed; inset: 0; }
+      canvas { display: block; }
+      #drop {
+        position: absolute; inset: 0; display: flex; align-items: center; justify-content: center;
+        pointer-events: none; z-index: 5; transition: background .15s;
+      }
+      #drop.armed { background: rgba(80,120,255,.18); outline: 3px dashed #5a7bff; outline-offset: -16px; }
+      #bar {
+        position: absolute; top: 0; left: 0; right: 0; z-index: 10; display: flex; gap: 12px; align-items: center;
+        padding: 8px 12px; background: rgba(16,18,26,.82); backdrop-filter: blur(6px); border-bottom: 1px solid #2a2f44;
+      }
+      #bar strong { color: #9fb4ff; }
+      #bar label { cursor: pointer; padding: 4px 10px; background: #232a44; border: 1px solid #3a4366; border-radius: 6px; }
+      #bar input[type=file] { display: none; }
+      #bar select, #bar button {
+        background: #232a44; color: #e7ecff; border: 1px solid #3a4366; border-radius: 6px; padding: 4px 8px;
+      }
+      #bar button { cursor: pointer; }
+      #status { margin-left: auto; opacity: .8; }
+      .hint { position: absolute; bottom: 8px; left: 12px; z-index: 10; opacity: .55; }
+
+      /* spring panel (mirrors the app's grouped spring-bone editor) */
+      #springPanel {
+        position: absolute; top: 46px; left: 0; bottom: 0; width: 340px; z-index: 9;
+        overflow-y: auto; padding: 12px; background: #0e1018; border-right: 1px solid #232a40;
+        display: none;
+      }
+      #springPanel.show { display: block; }
+      #springPanel h2 { font-size: 13px; letter-spacing: .08em; color: #aebbe6; margin: 0 0 10px; display: flex; align-items: center; gap: 8px; }
+      #springPanel h2 .count { color: #6f7aa0; font-weight: 400; }
+      .sp-group { margin-bottom: 14px; }
+      .sp-ghead { cursor: pointer; color: #cfe0ff; font-weight: 600; letter-spacing: .06em; font-size: 12px; margin: 4px 0 8px; display: flex; gap: 6px; align-items: center; }
+      .sp-ghead .count { color: #6f7aa0; font-weight: 400; }
+      .sp-ghead .tri { transition: transform .12s; }
+      .sp-group.collapsed .tri { transform: rotate(-90deg); }
+      .sp-group.collapsed .sp-body { display: none; }
+      .sp-chips { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; margin-bottom: 10px; }
+      .sp-chip { padding: 6px 4px; font-size: 11px; text-align: center; background: #161c2e; border: 1px solid #2c3756; border-radius: 5px; color: #b9c6ee; cursor: pointer; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+      .sp-chip:hover { border-color: #4a6bff; }
+      .sp-chip.sel { background: #21305a; border-color: #5a7bff; color: #fff; }
+      .sp-row { display: flex; gap: 8px; align-items: center; margin-bottom: 8px; }
+      .sp-row select { flex: 1; background: #161c2e; color: #cdd8f5; border: 1px solid #2c3756; border-radius: 5px; padding: 5px; }
+      .sp-save { background: #21305a; border: 1px solid #3a4f86; color: #cfe0ff; border-radius: 5px; padding: 5px 10px; cursor: pointer; }
+      .sp-save:hover { background: #2a3f72; }
+      .sp-slider { display: grid; grid-template-columns: 64px 1fr 46px; gap: 8px; align-items: center; margin-bottom: 6px; font-size: 11px; color: #9aa7cf; }
+      .sp-slider input[type=range] { width: 100%; accent-color: #4a7bff; }
+      .sp-slider .val { text-align: right; color: #dfe7ff; font-variant-numeric: tabular-nums; }
+      .sp-actions { display: flex; gap: 8px; margin: 6px 0 16px; }
+      .sp-actions button { background: #1a2138; border: 1px solid #2c3756; color: #cdd8f5; border-radius: 6px; padding: 6px 12px; cursor: pointer; }
+      .sp-actions button:hover { border-color: #4a6bff; }
+    </style>
+    <script type="importmap">
+      {
+        "imports": {
+          "three": "https://cdn.jsdelivr.net/npm/three@0.170.0/build/three.module.js",
+          "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.170.0/examples/jsm/",
+          "@pixiv/three-vrm": "https://cdn.jsdelivr.net/npm/@pixiv/three-vrm@3/lib/three-vrm.module.js",
+          "@pixiv/three-vrm-animation": "https://cdn.jsdelivr.net/npm/@pixiv/three-vrm-animation@3/lib/three-vrm-animation.module.js",
+          "lil-gui": "https://cdn.jsdelivr.net/npm/lil-gui@0.19/dist/lil-gui.esm.js"
+        }
+      }
+    </script>
+  </head>
+  <body>
+    <div id="app"></div>
+    <div id="bar">
+      <strong>VRM Inspector</strong>
+      <label>Load .vrm<input id="vrmFile" type="file" accept=".vrm,.glb" /></label>
+      <label>Load .vrma<input id="vrmaFile" type="file" accept=".vrma,.glb" /></label>
+      <select id="idleSelect" title="Idle animation">
+        <option value="/assets/animations/sachi-vrma/CC0animationidle01.vrma">Idle 01</option>
+        <option value="/assets/animations/sachi-vrma/CC0animationidle03.vrma">Idle 03</option>
+        <option value="/assets/animations/sachi-vrma/CC0animationidle04.vrma">Idle 04</option>
+        <option value="/assets/animations/sachi-vrma/CC0animationidle05.vrma">Idle 05</option>
+        <option value="/assets/animations/sachi-vrma/CC0animationhima01.vrma">Hima idle</option>
+        <option value="/assets/animations/sachi-vrma/CC0animationstand01.vrma">Stand idle</option>
+      </select>
+      <button id="playIdle" type="button">Play idle</button>
+      <span id="status">drag a .vrm anywhere…</span>
+    </div>
+    <div id="drop"></div>
+    <div id="springPanel"></div>
+    <div class="hint">Orbit: drag • zoom: wheel • Everything hookable is in the panel + dumped to console (F12).</div>
+
+    <script type="module">
+      import * as THREE from 'three';
+      import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+      import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+      import { VRMLoaderPlugin, VRMUtils } from '@pixiv/three-vrm';
+      import {
+        VRMAnimationLoaderPlugin,
+        createVRMAnimationClip,
+      } from '@pixiv/three-vrm-animation';
+      import GUI from 'lil-gui';
+
+      const statusEl = document.getElementById('status');
+      const setStatus = (t) => (statusEl.textContent = t);
+      const idleSelect = document.getElementById('idleSelect');
+      const playIdleButton = document.getElementById('playIdle');
+
+      // ---- scene -------------------------------------------------------------
+      const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+      renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+      renderer.setSize(innerWidth, innerHeight);
+      renderer.outputColorSpace = THREE.SRGBColorSpace;
+      renderer.toneMapping = THREE.ACESFilmicToneMapping;
+      renderer.toneMappingExposure = 1;
+      document.getElementById('app').appendChild(renderer.domElement);
+
+      const scene = new THREE.Scene();
+      scene.background = new THREE.Color(0x11131a);
+      const camera = new THREE.PerspectiveCamera(35, innerWidth / innerHeight, 0.1, 100);
+      camera.position.set(0, 1.35, 2.6);
+
+      const controls = new OrbitControls(camera, renderer.domElement);
+      controls.target.set(0, 1.3, 0);
+      controls.update();
+
+      scene.add(new THREE.HemisphereLight(0xffffff, 0x223344, 1.4));
+      const key = new THREE.DirectionalLight(0xffffff, 1.6);
+      key.position.set(1.5, 2.2, 1.4);
+      scene.add(key);
+      scene.add(new THREE.GridHelper(10, 20, 0x335, 0x223));
+
+      addEventListener('resize', () => {
+        camera.aspect = innerWidth / innerHeight;
+        camera.updateProjectionMatrix();
+        renderer.setSize(innerWidth, innerHeight);
+      });
+
+      // ---- state -------------------------------------------------------------
+      let vrm = null;
+      let mixer = null;
+      const clock = new THREE.Clock();
+      let gui = null;
+      const boneOverrides = new Map(); // boneName -> {active, x,y,z (deg)}
+      const springBase = []; // captured base spring settings for multipliers
+      const lookAtTarget = new THREE.Object3D();
+      scene.add(lookAtTarget);
+      const idle = { enabled: true };
+      let lookState = null;
+      let originalScene = null;
+      const sceneParams = {
+        background: '#11131a',
+        keyIntensity: 1.6,
+        hemiIntensity: 1.4,
+        exposure: 1
+      };
+
+      const vrmLoader = new GLTFLoader();
+      vrmLoader.register((parser) => new VRMLoaderPlugin(parser));
+      const vrmaLoader = new GLTFLoader();
+      vrmaLoader.register((parser) => new VRMAnimationLoaderPlugin(parser));
+
+      // ---- enumeration helpers ----------------------------------------------
+      function expressionNames(v) {
+        const m = v.expressionManager;
+        if (!m) return [];
+        if (m.expressionMap) return Object.keys(m.expressionMap);
+        const presets = ['neutral','happy','angry','sad','relaxed','surprised','aa','ih','ou','ee','oh','blink','blinkLeft','blinkRight','lookUp','lookDown','lookLeft','lookRight'];
+        return presets.filter((n) => m.getExpression && m.getExpression(n));
+      }
+      function boneNames(v) {
+        const h = v.humanoid;
+        if (!h) return [];
+        try { return Object.keys(h.humanBones); } catch { return []; }
+      }
+      function springJoints(v) {
+        const mgr = v.springBoneManager;
+        if (!mgr || !mgr.joints) return [];
+        return [...mgr.joints];
+      }
+      function materials(v) {
+        const out = [];
+        v.scene.traverse((o) => {
+          if (!o.isMesh || !o.material) return;
+          (Array.isArray(o.material) ? o.material : [o.material]).forEach((mat) => {
+            if (!out.includes(mat)) out.push(mat);
+          });
+        });
+        return out;
+      }
+
+      const MATERIAL_PROPS = [
+        'opacity','transparent','alphaTest','roughness','metalness','emissiveIntensity','envMapIntensity','normalScale','aoMapIntensity',
+        'clearcoat','clearcoatRoughness','sheen','sheenRoughness','transmission','thickness','attenuationDistance','ior','reflectivity',
+        'iridescence','iridescenceIOR','iridescenceThicknessRange',
+        'shadingShiftFactor','shadingToonyFactor','giEqualizationFactor','rimLightingMixFactor','parametricRimFresnelPowerFactor',
+        'parametricRimLiftFactor','outlineWidthFactor','outlineLightingMixFactor','color','emissive','shadeColorFactor',
+        'parametricRimColorFactor','outlineColorFactor'
+      ];
+
+      const SHADER_PRESETS = {
+        'clean-neutral': {
+          roughness: 0.75, metalness: 0, envMapIntensity: 0.55, normalScale: 1, aoMapIntensity: 0.9,
+          clearcoat: 0, clearcoatRoughness: 0.4, sheen: 0, sheenRoughness: 0.7, emissiveIntensity: 0,
+          shadingShiftFactor: -0.12, shadingToonyFactor: 0.78, giEqualizationFactor: 0.22,
+          rimLightingMixFactor: 0, parametricRimFresnelPowerFactor: 5, parametricRimLiftFactor: 0,
+          outlineWidthFactor: 0.0025, outlineLightingMixFactor: 0.65,
+          shadeColorFactor: '#8f96a3', parametricRimColorFactor: '#000000', outlineColorFactor: '#111318'
+        },
+        'flat-no-rim': {
+          roughness: 0.95, metalness: 0, envMapIntensity: 0.15, normalScale: 0.6, aoMapIntensity: 0.5,
+          clearcoat: 0, clearcoatRoughness: 0.8, sheen: 0, sheenRoughness: 1, emissiveIntensity: 0,
+          shadingShiftFactor: -0.04, shadingToonyFactor: 0.55, giEqualizationFactor: 0.55,
+          rimLightingMixFactor: 0, parametricRimFresnelPowerFactor: 8, parametricRimLiftFactor: 0,
+          outlineWidthFactor: 0.0015, outlineLightingMixFactor: 0.85,
+          shadeColorFactor: '#c3c4c8', parametricRimColorFactor: '#000000', outlineColorFactor: '#303038'
+        },
+        'soft-skin-friendly': {
+          color: '#fff6f2', roughness: 0.88, metalness: 0, envMapIntensity: 0.35, normalScale: 0.75, aoMapIntensity: 0.65,
+          clearcoat: 0.02, clearcoatRoughness: 0.55, sheen: 0.08, sheenRoughness: 0.85, emissiveIntensity: 0,
+          shadingShiftFactor: -0.06, shadingToonyFactor: 0.62, giEqualizationFactor: 0.42,
+          rimLightingMixFactor: 0.04, parametricRimFresnelPowerFactor: 5.5, parametricRimLiftFactor: 0.02,
+          outlineWidthFactor: 0.0018, outlineLightingMixFactor: 0.75,
+          shadeColorFactor: '#d9c7c0', parametricRimColorFactor: '#f4e0d8', outlineColorFactor: '#4a3d42'
+        },
+        'soft-mtoon': {
+          roughness: 0.78, metalness: 0, envMapIntensity: 0.7, normalScale: 0.85, aoMapIntensity: 0.85,
+          clearcoat: 0.05, clearcoatRoughness: 0.35, sheenRoughness: 0.7,
+          shadingShiftFactor: -0.08, shadingToonyFactor: 0.72, giEqualizationFactor: 0.28,
+          rimLightingMixFactor: 0.08, parametricRimFresnelPowerFactor: 4.6, parametricRimLiftFactor: 0.04,
+          outlineWidthFactor: 0.0025, outlineLightingMixFactor: 0.55,
+          shadeColorFactor: '#b8c0ca', parametricRimColorFactor: '#d6eeff', outlineColorFactor: '#151923'
+        },
+        'hard-anime': {
+          roughness: 0.82, metalness: 0, envMapIntensity: 0.4, normalScale: 1, aoMapIntensity: 1.15,
+          clearcoat: 0, clearcoatRoughness: 0.2, sheenRoughness: 0.8,
+          shadingShiftFactor: -0.36, shadingToonyFactor: 0.98, giEqualizationFactor: 0.05,
+          rimLightingMixFactor: 0.03, parametricRimFresnelPowerFactor: 6.2, parametricRimLiftFactor: 0,
+          outlineWidthFactor: 0.007, outlineLightingMixFactor: 0.25,
+          shadeColorFactor: '#595f6d', parametricRimColorFactor: '#ffffff', outlineColorFactor: '#08090d'
+        },
+        'nilo-urp': {
+          roughness: 0.62, metalness: 0, envMapIntensity: 1.25, normalScale: 1.15, aoMapIntensity: 1.2,
+          clearcoat: 0.18, clearcoatRoughness: 0.18, sheenRoughness: 0.45,
+          shadingShiftFactor: -0.22, shadingToonyFactor: 0.92, giEqualizationFactor: 0.12,
+          rimLightingMixFactor: 0.12, parametricRimFresnelPowerFactor: 4.2, parametricRimLiftFactor: 0.04,
+          outlineWidthFactor: 0.0055, outlineLightingMixFactor: 0.18,
+          shadeColorFactor: '#676f80', parametricRimColorFactor: '#8fd7ff', outlineColorFactor: '#05080c'
+        },
+        'pastel-vtuber': {
+          color: '#fff7fb', roughness: 0.9, metalness: 0, emissive: '#1b1018', emissiveIntensity: 0.08,
+          envMapIntensity: 0.45, normalScale: 0.7, aoMapIntensity: 0.55, clearcoat: 0.02, clearcoatRoughness: 0.65,
+          sheenRoughness: 0.9, shadingShiftFactor: -0.05, shadingToonyFactor: 0.64, giEqualizationFactor: 0.45,
+          rimLightingMixFactor: 0.05, parametricRimFresnelPowerFactor: 5, parametricRimLiftFactor: 0.03,
+          outlineWidthFactor: 0.002, outlineLightingMixFactor: 0.65,
+          shadeColorFactor: '#dccbd4', parametricRimColorFactor: '#ffd6ec', outlineColorFactor: '#4f4050'
+        },
+        'high-contrast': {
+          roughness: 0.5, metalness: 0, envMapIntensity: 1.6, normalScale: 1.35, aoMapIntensity: 1.4,
+          clearcoat: 0.25, clearcoatRoughness: 0.08, sheenRoughness: 0.28,
+          shadingShiftFactor: -0.48, shadingToonyFactor: 1, giEqualizationFactor: 0,
+          rimLightingMixFactor: 0.08, parametricRimFresnelPowerFactor: 5, parametricRimLiftFactor: 0.02,
+          outlineWidthFactor: 0.01, outlineLightingMixFactor: 0,
+          shadeColorFactor: '#303744', parametricRimColorFactor: '#bff0ff', outlineColorFactor: '#000000'
+        },
+        'ink-outline-no-rim': {
+          roughness: 0.86, metalness: 0, envMapIntensity: 0.3, normalScale: 1, aoMapIntensity: 1,
+          clearcoat: 0, clearcoatRoughness: 0.5, sheen: 0, sheenRoughness: 0.75, emissiveIntensity: 0,
+          shadingShiftFactor: -0.28, shadingToonyFactor: 0.96, giEqualizationFactor: 0.08,
+          rimLightingMixFactor: 0, parametricRimFresnelPowerFactor: 8, parametricRimLiftFactor: 0,
+          outlineWidthFactor: 0.009, outlineLightingMixFactor: 0.05,
+          shadeColorFactor: '#555b68', parametricRimColorFactor: '#000000', outlineColorFactor: '#000000'
+        },
+        'glossy-anime-low-rim': {
+          roughness: 0.36, metalness: 0, envMapIntensity: 1.1, normalScale: 1, aoMapIntensity: 0.9,
+          clearcoat: 0.32, clearcoatRoughness: 0.12, sheen: 0.12, sheenRoughness: 0.35, emissiveIntensity: 0,
+          shadingShiftFactor: -0.18, shadingToonyFactor: 0.86, giEqualizationFactor: 0.16,
+          rimLightingMixFactor: 0.1, parametricRimFresnelPowerFactor: 4.8, parametricRimLiftFactor: 0.04,
+          outlineWidthFactor: 0.0035, outlineLightingMixFactor: 0.35,
+          shadeColorFactor: '#737b89', parametricRimColorFactor: '#a9cce0', outlineColorFactor: '#101217'
+        },
+        'rim-accent-test': {
+          roughness: 0.55, metalness: 0, envMapIntensity: 0.85, normalScale: 1, aoMapIntensity: 0.9,
+          clearcoat: 0.1, clearcoatRoughness: 0.2, sheen: 0.05, sheenRoughness: 0.5, emissiveIntensity: 0,
+          shadingShiftFactor: -0.18, shadingToonyFactor: 0.82, giEqualizationFactor: 0.18,
+          rimLightingMixFactor: 0.45, parametricRimFresnelPowerFactor: 2.5, parametricRimLiftFactor: 0.15,
+          outlineWidthFactor: 0.003, outlineLightingMixFactor: 0.35,
+          shadeColorFactor: '#727987', parametricRimColorFactor: '#b8e6ff', outlineColorFactor: '#11151c'
+        }
+      };
+
+      function cloneValue(v) {
+        if (v && typeof v.clone === 'function') return v.clone();
+        if (Array.isArray(v)) return [...v];
+        return v;
+      }
+      function captureMaterialDefaults(mat) {
+        if (mat.userData?.vrmInspectorDefaults) return;
+        const out = {};
+        for (const p of MATERIAL_PROPS) if (p in mat) out[p] = cloneValue(mat[p]);
+        mat.userData = mat.userData || {};
+        mat.userData.vrmInspectorDefaults = out;
+      }
+      function restoreMaterialDefaults(mat) {
+        const d = mat.userData?.vrmInspectorDefaults;
+        if (!d) return;
+        for (const [p, v] of Object.entries(d)) setMaterialValue(mat, p, cloneValue(v));
+        mat.needsUpdate = true;
+      }
+      function setMaterialValue(mat, prop, value) {
+        if (!(prop in mat)) return;
+        const cur = mat[prop];
+        if (cur && value && typeof cur.copy === 'function' && typeof value.copy === 'function') cur.copy(value);
+        else if (cur && typeof cur.set === 'function' && typeof value === 'string') cur.set(value);
+        else if (cur && typeof cur.set === 'function' && typeof value === 'number') cur.set(value, value);
+        else mat[prop] = Array.isArray(value) ? [...value] : value;
+        mat.needsUpdate = true;
+      }
+      function addColorControl(folder, mat, prop, label = prop) {
+        if (!(prop in mat) || !mat[prop]) return;
+        const current = mat[prop];
+        const proxy = { value: current.getHexString ? '#' + current.getHexString() : '#ffffff' };
+        folder.addColor(proxy, 'value').name(label).onChange((h) => setMaterialValue(mat, prop, h));
+      }
+      function addNumberControl(folder, mat, prop, min, max, step = 0.01, label = prop) {
+        if (typeof mat[prop] !== 'number') return;
+        folder.add(mat, prop, min, max, step).name(label).onChange(() => (mat.needsUpdate = true));
+      }
+      function addVectorScaleControl(folder, mat, prop, min, max, step = 0.01, label = prop) {
+        if (!(prop in mat) || !mat[prop] || typeof mat[prop].x !== 'number') return;
+        const proxy = { value: mat[prop].x };
+        folder.add(proxy, 'value', min, max, step).name(label).onChange((v) => setMaterialValue(mat, prop, v));
+      }
+      function applyShaderPreset(mat, presetName) {
+        const preset = SHADER_PRESETS[presetName];
+        if (!preset) return;
+        for (const [prop, value] of Object.entries(preset)) setMaterialValue(mat, prop, value);
+      }
+
+      function addLiveShaderControl(folder, state, prop, min, max, step = 0.01, label = prop) {
+        folder.add(state, prop, min, max, step).name(label).onChange(() => state.applyLive());
+      }
+      function addLiveShaderColor(folder, state, prop, label = prop) {
+        folder.addColor(state, prop).name(label).onChange(() => state.applyLive());
+      }
+
+      // ---- load --------------------------------------------------------------
+      async function loadVRMFromBuffer(buffer, name) {
+        setStatus('parsing ' + name + '…');
+        if (vrm) {
+          scene.remove(vrm.scene);
+          VRMUtils.deepDispose(vrm.scene);
+          vrm = null;
+          mixer = null;
+        }
+        const gltf = await vrmLoader.parseAsync(buffer, '');
+        vrm = gltf.userData.vrm;
+        VRMUtils.rotateVRM0?.(vrm); // face +Z for VRM0 models
+        vrm.scene.traverse((o) => { o.frustumCulled = false; });
+        scene.add(vrm.scene);
+        originalScene = {
+          background: scene.background?.clone?.() ?? null,
+          keyIntensity: key.intensity,
+          hemiIntensity: sceneParams.hemiIntensity,
+          exposure: renderer.toneMappingExposure
+        };
+        boneOverrides.clear();
+        springBase.length = 0;
+        for (const j of springJoints(vrm)) {
+          springBase.push({
+            j,
+            name: j.bone?.name || '(unnamed joint)',
+            stiffness: j.settings.stiffness,
+            gravityPower: j.settings.gravityPower,
+            dragForce: j.settings.dragForce,
+            hitRadius: j.settings.hitRadius,
+          });
+        }
+        applySavedSprings();
+        buildInventoryAndGUI();
+        setStatus('loaded: ' + (vrm.meta?.name || name));
+        await loadVRMAFromUrl(idleSelect.value);
+      }
+
+      async function loadVRMA(buffer, name) {
+        if (!vrm) return setStatus('load a .vrm first');
+        const gltf = await vrmaLoader.parseAsync(buffer, '');
+        const anim = gltf.userData.vrmAnimations?.[0];
+        if (!anim) return setStatus('no VRM animation found in ' + name);
+        const clip = createVRMAnimationClip(anim, vrm);
+        mixer = new THREE.AnimationMixer(vrm.scene);
+        mixer.clipAction(clip).play();
+        idle.enabled = false;
+        setStatus('playing animation: ' + name);
+      }
+
+      async function loadVRMAFromUrl(url) {
+        if (!vrm) return setStatus('load a .vrm first');
+        const res = await fetch(url);
+        if (!res.ok) return setStatus('failed to load animation: ' + url);
+        await loadVRMA(await res.arrayBuffer(), url.split('/').pop() || url);
+      }
+
+      // ---- inventory + GUI ---------------------------------------------------
+      function buildInventoryAndGUI() {
+        const exprs = expressionNames(vrm);
+        const bones = boneNames(vrm);
+        const joints = springJoints(vrm);
+        const mats = materials(vrm);
+        const colliderGroups = vrm.springBoneManager?.colliderGroups ?? [];
+        const constraints = vrm.nodeConstraintManager?.constraints
+          ? [...vrm.nodeConstraintManager.constraints]
+          : [];
+
+        // full node tree (so you can find every transformable object)
+        const tree = [];
+        vrm.scene.traverse((o) => {
+          if (o.isBone || o.type === 'Bone' || o.name) {
+            tree.push({ name: o.name, type: o.type, isBone: !!o.isBone });
+          }
+        });
+
+        // full inventory dump to console
+        const inventory = {
+          meta: vrm.meta,
+          expressions: exprs,
+          humanoidBones: bones,
+          springBones: springBase.map((b) => ({
+            bone: b.name,
+            stiffness: b.stiffness,
+            gravityPower: b.gravityPower,
+            gravityDir: b.j.settings.gravityDir?.toArray?.() ?? null,
+            dragForce: b.dragForce,
+            hitRadius: b.hitRadius,
+          })),
+          springBoneColliderGroups: colliderGroups.map((g, i) => ({
+            index: i,
+            name: g.name ?? null,
+            colliderCount: g.colliders?.length ?? 0,
+          })),
+          nodeConstraints: constraints.map((c) => ({
+            type: c.constructor.name,
+            weight: c.weight,
+            target: c.destination?.name ?? c.object?.name ?? null,
+          })),
+          lookAt: vrm.lookAt ? { type: vrm.lookAt.applier?.constructor?.name } : null,
+          materials: mats.map((m) => ({ name: m.name, type: m.constructor.name, isMToon: !!m.isMToonMaterial })),
+          nodeTree: tree,
+        };
+        console.clear();
+        console.log('%c==== VRM HOOKABLE INVENTORY ====', 'color:#9fb4ff;font-weight:bold');
+        console.dir(inventory);
+        console.log(`%cspring joints: ${joints.length} | collider groups: ${colliderGroups.length} | constraints: ${constraints.length} | bones: ${bones.length} | expressions: ${exprs.length}`, 'color:#7fd');
+        console.log('Live object: window.vrm  (e.g. window.vrm.springBoneManager.joints)');
+        window.vrm = vrm;
+
+        if (gui) gui.destroy();
+        gui = new GUI({ title: 'VRM controls', width: 340 });
+
+        // -- scene transform
+        const fScene = gui.addFolder('Scene transform');
+        fScene.add(vrm.scene.position, 'x', -2, 2, 0.01).name('pos x');
+        fScene.add(vrm.scene.position, 'y', -2, 2, 0.01).name('pos y');
+        fScene.add(vrm.scene.position, 'z', -2, 2, 0.01).name('pos z');
+        fScene.add(vrm.scene.rotation, 'y', -Math.PI, Math.PI, 0.01).name('rot y');
+        const sc = { uniform: 1 };
+        fScene.add(sc, 'uniform', 0.1, 4, 0.01).name('scale').onChange((s) => vrm.scene.scale.setScalar(s));
+        fScene.close();
+
+        const fRender = gui.addFolder('Render / lighting');
+        fRender.addColor(sceneParams, 'background').name('background').onChange((h) => { scene.background = new THREE.Color(h); });
+        fRender.add(sceneParams, 'keyIntensity', 0, 5, 0.01).name('key light').onChange((v) => { key.intensity = v; });
+        fRender.add(sceneParams, 'hemiIntensity', 0, 5, 0.01).name('hemi light').onChange((v) => {
+          scene.traverse((o) => { if (o.isHemisphereLight) o.intensity = v; });
+        });
+        fRender.add(sceneParams, 'exposure', 0, 3, 0.01).name('exposure').onChange((v) => { renderer.toneMappingExposure = v; });
+        fRender.close();
+
+        // -- expressions (every blendshape, 0..1)
+        const fExpr = gui.addFolder(`Expressions (${exprs.length})`);
+        for (const name of exprs) {
+          const proxy = { v: vrm.expressionManager.getValue(name) ?? 0 };
+          fExpr.add(proxy, 'v', 0, 1, 0.01).name(name).onChange((val) => vrm.expressionManager.setValue(name, val));
+        }
+
+        // -- look at
+        if (vrm.lookAt) {
+          const fLook = gui.addFolder('LookAt');
+          lookState = { trackCamera: false, yaw: 0, pitch: 0 };
+          vrm.lookAt.target = lookAtTarget;
+          fLook.add(lookState, 'trackCamera');
+          fLook.add(lookState, 'yaw', -1, 1, 0.01);
+          fLook.add(lookState, 'pitch', -1, 1, 0.01);
+          fLook.close();
+        }
+
+        // -- spring bones: custom grouped editor panel (Breast/Hair/Other/Tail)
+        buildSpringPanel();
+
+        // -- node constraints (rotation / aim / roll)
+        if (constraints.length) {
+          const fCon = gui.addFolder(`Node constraints (${constraints.length})`);
+          constraints.forEach((c, i) => {
+            const label = `${c.constructor.name}: ${c.destination?.name ?? c.object?.name ?? i}`;
+            if (typeof c.weight === 'number') fCon.add(c, 'weight', 0, 1, 0.01).name(label);
+          });
+          fCon.close();
+        }
+
+        // -- humanoid bones (rotation override per bone, applied after animation)
+        const fBones = gui.addFolder(`Humanoid bones (${bones.length})`);
+        for (const name of bones) {
+          const node = vrm.humanoid.getNormalizedBoneNode(name);
+          if (!node) continue;
+          const ov = { active: false, x: 0, y: 0, z: 0 };
+          boneOverrides.set(name, ov);
+          const sub = fBones.addFolder(name);
+          const arm = () => (ov.active = true);
+          sub.add(ov, 'active').listen();
+          sub.add(ov, 'x', -180, 180, 1).name('rot x°').onChange(arm);
+          sub.add(ov, 'y', -180, 180, 1).name('rot y°').onChange(arm);
+          sub.add(ov, 'z', -180, 180, 1).name('rot z°').onChange(arm);
+          sub.close();
+        }
+        fBones.close();
+
+        // -- materials / shaders: MToon + PBR + Physical, with reversible presets
+        mats.forEach(captureMaterialDefaults);
+        const shaderState = {
+          material: 0,
+          target: 'all',
+          preset: 'clean-neutral',
+          applySelected: () => applyShaderPreset(mats[shaderState.material], shaderState.preset),
+          applyAll: () => mats.forEach((mat) => applyShaderPreset(mat, shaderState.preset)),
+          restoreSelected: () => restoreMaterialDefaults(mats[shaderState.material]),
+          restoreAll: () => {
+            mats.forEach(restoreMaterialDefaults);
+            if (originalScene) {
+              scene.background = originalScene.background?.clone?.() ?? null;
+              key.intensity = originalScene.keyIntensity;
+            }
+          },
+          dumpMaterials: () => console.dir(mats.map((m) => ({
+            name: m.name,
+            type: m.constructor.name,
+            isMToon: !!m.isMToonMaterial,
+            isPBR: !!m.isMeshStandardMaterial,
+            isPhysical: !!m.isMeshPhysicalMaterial,
+            props: MATERIAL_PROPS.filter((p) => p in m)
+          }))),
+          color: '#ffffff',
+          emissive: '#000000',
+          shadeColorFactor: '#8f96a3',
+          parametricRimColorFactor: '#000000',
+          outlineColorFactor: '#111318',
+          opacity: 1,
+          alphaTest: 0,
+          roughness: 0.75,
+          metalness: 0,
+          envMapIntensity: 0.55,
+          emissiveIntensity: 0,
+          normalScale: 1,
+          aoMapIntensity: 0.9,
+          clearcoat: 0,
+          clearcoatRoughness: 0.4,
+          sheen: 0,
+          sheenRoughness: 0.7,
+          transmission: 0,
+          thickness: 0,
+          attenuationDistance: 0,
+          ior: 1.5,
+          reflectivity: 0.5,
+          iridescence: 0,
+          iridescenceIOR: 1.3,
+          shadingShiftFactor: -0.12,
+          shadingToonyFactor: 0.78,
+          giEqualizationFactor: 0.22,
+          rimLightingMixFactor: 0,
+          parametricRimFresnelPowerFactor: 5,
+          parametricRimLiftFactor: 0,
+          outlineWidthFactor: 0.0025,
+          outlineLightingMixFactor: 0.65,
+          applyLive: () => {
+            const targetMats = shaderState.target === 'all' ? mats : [mats[shaderState.material]];
+            for (const mat of targetMats.filter(Boolean)) {
+              for (const prop of [
+                'color','emissive','shadeColorFactor','parametricRimColorFactor','outlineColorFactor',
+                'opacity','alphaTest','roughness','metalness','envMapIntensity','emissiveIntensity','normalScale','aoMapIntensity',
+                'clearcoat','clearcoatRoughness','sheen','sheenRoughness','transmission','thickness','attenuationDistance',
+                'ior','reflectivity','iridescence','iridescenceIOR','shadingShiftFactor','shadingToonyFactor','giEqualizationFactor',
+                'rimLightingMixFactor','parametricRimFresnelPowerFactor','parametricRimLiftFactor','outlineWidthFactor','outlineLightingMixFactor'
+              ]) setMaterialValue(mat, prop, shaderState[prop]);
+            }
+          },
+          loadPresetIntoEditor: () => {
+            const preset = SHADER_PRESETS[shaderState.preset];
+            if (!preset) return;
+            for (const [prop, value] of Object.entries(preset)) if (prop in shaderState) shaderState[prop] = value;
+            shaderState.applyLive();
+          }
+        };
+        const materialOptions = Object.fromEntries(mats.map((mat, i) => [`${i}: ${mat.name || mat.constructor.name}`, i]));
+        const fShader = gui.addFolder(`Shader presets (${mats.length})`);
+        fShader.add(shaderState, 'material', materialOptions).name('target material');
+        fShader.add(shaderState, 'target', ['all', 'selected']).name('live target');
+        fShader.add(shaderState, 'preset', Object.keys(SHADER_PRESETS)).name('preset');
+        fShader.add(shaderState, 'loadPresetIntoEditor').name('load preset into sliders');
+        fShader.add(shaderState, 'applySelected').name('apply selected');
+        fShader.add(shaderState, 'applyAll').name('apply all');
+        fShader.add(shaderState, 'restoreSelected').name('restore selected');
+        fShader.add(shaderState, 'restoreAll').name('restore all / off');
+        fShader.add(shaderState, 'dumpMaterials').name('dump material props');
+
+        const fLive = gui.addFolder('Live Shader Editor');
+        const fLiveColor = fLive.addFolder('Colors');
+        addLiveShaderColor(fLiveColor, shaderState, 'color', 'base color');
+        addLiveShaderColor(fLiveColor, shaderState, 'emissive', 'emissive');
+        addLiveShaderColor(fLiveColor, shaderState, 'shadeColorFactor', 'MToon shade');
+        addLiveShaderColor(fLiveColor, shaderState, 'parametricRimColorFactor', 'MToon rim');
+        addLiveShaderColor(fLiveColor, shaderState, 'outlineColorFactor', 'MToon outline');
+        const fLiveBase = fLive.addFolder('Base / alpha');
+        addLiveShaderControl(fLiveBase, shaderState, 'opacity', 0, 1, 0.01);
+        addLiveShaderControl(fLiveBase, shaderState, 'alphaTest', 0, 1, 0.01);
+        const fLivePbr = fLive.addFolder('PBR');
+        addLiveShaderControl(fLivePbr, shaderState, 'roughness', 0, 1, 0.01);
+        addLiveShaderControl(fLivePbr, shaderState, 'metalness', 0, 1, 0.01);
+        addLiveShaderControl(fLivePbr, shaderState, 'envMapIntensity', 0, 5, 0.01);
+        addLiveShaderControl(fLivePbr, shaderState, 'emissiveIntensity', 0, 5, 0.01);
+        addLiveShaderControl(fLivePbr, shaderState, 'normalScale', 0, 3, 0.01);
+        addLiveShaderControl(fLivePbr, shaderState, 'aoMapIntensity', 0, 3, 0.01);
+        const fLivePhysical = fLive.addFolder('Physical');
+        addLiveShaderControl(fLivePhysical, shaderState, 'clearcoat', 0, 1, 0.01);
+        addLiveShaderControl(fLivePhysical, shaderState, 'clearcoatRoughness', 0, 1, 0.01);
+        addLiveShaderControl(fLivePhysical, shaderState, 'sheen', 0, 1, 0.01);
+        addLiveShaderControl(fLivePhysical, shaderState, 'sheenRoughness', 0, 1, 0.01);
+        addLiveShaderControl(fLivePhysical, shaderState, 'transmission', 0, 1, 0.01);
+        addLiveShaderControl(fLivePhysical, shaderState, 'thickness', 0, 5, 0.01);
+        addLiveShaderControl(fLivePhysical, shaderState, 'attenuationDistance', 0, 20, 0.01);
+        addLiveShaderControl(fLivePhysical, shaderState, 'ior', 1, 2.333, 0.001);
+        addLiveShaderControl(fLivePhysical, shaderState, 'reflectivity', 0, 1, 0.01);
+        addLiveShaderControl(fLivePhysical, shaderState, 'iridescence', 0, 1, 0.01);
+        addLiveShaderControl(fLivePhysical, shaderState, 'iridescenceIOR', 1, 2.333, 0.001);
+        const fLiveToon = fLive.addFolder('MToon');
+        addLiveShaderControl(fLiveToon, shaderState, 'shadingShiftFactor', -1, 1, 0.01);
+        addLiveShaderControl(fLiveToon, shaderState, 'shadingToonyFactor', 0, 1, 0.01);
+        addLiveShaderControl(fLiveToon, shaderState, 'giEqualizationFactor', 0, 1, 0.01);
+        addLiveShaderControl(fLiveToon, shaderState, 'rimLightingMixFactor', 0, 1, 0.01);
+        addLiveShaderControl(fLiveToon, shaderState, 'parametricRimFresnelPowerFactor', 0, 8, 0.01);
+        addLiveShaderControl(fLiveToon, shaderState, 'parametricRimLiftFactor', 0, 1, 0.01);
+        addLiveShaderControl(fLiveToon, shaderState, 'outlineWidthFactor', 0, 0.04, 0.0005);
+        addLiveShaderControl(fLiveToon, shaderState, 'outlineLightingMixFactor', 0, 1, 0.01);
+
+        const fMat = gui.addFolder(`Materials (${mats.length})`);
+        for (const mat of mats) {
+          const flags = [
+            mat.isMToonMaterial ? 'MToon' : null,
+            mat.isMeshStandardMaterial ? 'PBR' : null,
+            mat.isMeshPhysicalMaterial ? 'Physical' : null
+          ].filter(Boolean).join('/');
+          const sub = fMat.addFolder(`${mat.name || mat.constructor.name}${flags ? ` · ${flags}` : ''}`);
+          sub.add({ restore: () => restoreMaterialDefaults(mat) }, 'restore').name('restore original');
+
+          const fBase = sub.addFolder('Base / alpha');
+          addColorControl(fBase, mat, 'color', 'base color');
+          addNumberControl(fBase, mat, 'opacity', 0, 1, 0.01);
+          if ('transparent' in mat) fBase.add(mat, 'transparent').onChange(() => (mat.needsUpdate = true));
+          addNumberControl(fBase, mat, 'alphaTest', 0, 1, 0.01);
+          fBase.close();
+
+          const fPbr = sub.addFolder('PBR');
+          addNumberControl(fPbr, mat, 'roughness', 0, 1, 0.01);
+          addNumberControl(fPbr, mat, 'metalness', 0, 1, 0.01);
+          addNumberControl(fPbr, mat, 'envMapIntensity', 0, 5, 0.01);
+          addColorControl(fPbr, mat, 'emissive', 'emissive color');
+          addNumberControl(fPbr, mat, 'emissiveIntensity', 0, 5, 0.01);
+          addVectorScaleControl(fPbr, mat, 'normalScale', 0, 3, 0.01, 'normal scale');
+          addNumberControl(fPbr, mat, 'aoMapIntensity', 0, 3, 0.01);
+          fPbr.close();
+
+          const fPhysical = sub.addFolder('Physical');
+          addNumberControl(fPhysical, mat, 'clearcoat', 0, 1, 0.01);
+          addNumberControl(fPhysical, mat, 'clearcoatRoughness', 0, 1, 0.01);
+          addNumberControl(fPhysical, mat, 'sheen', 0, 1, 0.01);
+          addNumberControl(fPhysical, mat, 'sheenRoughness', 0, 1, 0.01);
+          addNumberControl(fPhysical, mat, 'transmission', 0, 1, 0.01);
+          addNumberControl(fPhysical, mat, 'thickness', 0, 5, 0.01);
+          addNumberControl(fPhysical, mat, 'attenuationDistance', 0, 20, 0.01);
+          addNumberControl(fPhysical, mat, 'ior', 1, 2.333, 0.001);
+          addNumberControl(fPhysical, mat, 'reflectivity', 0, 1, 0.01);
+          addNumberControl(fPhysical, mat, 'iridescence', 0, 1, 0.01);
+          addNumberControl(fPhysical, mat, 'iridescenceIOR', 1, 2.333, 0.001);
+          fPhysical.close();
+
+          const fToon = sub.addFolder('MToon');
+          addColorControl(fToon, mat, 'shadeColorFactor', 'shade color');
+          addNumberControl(fToon, mat, 'shadingShiftFactor', -1, 1, 0.01);
+          addNumberControl(fToon, mat, 'shadingToonyFactor', 0, 1, 0.01);
+          addNumberControl(fToon, mat, 'giEqualizationFactor', 0, 1, 0.01);
+          addColorControl(fToon, mat, 'parametricRimColorFactor', 'rim color');
+          addNumberControl(fToon, mat, 'rimLightingMixFactor', 0, 1, 0.01);
+          addNumberControl(fToon, mat, 'parametricRimFresnelPowerFactor', 0, 8, 0.01);
+          addNumberControl(fToon, mat, 'parametricRimLiftFactor', 0, 1, 0.01);
+          addColorControl(fToon, mat, 'outlineColorFactor', 'outline color');
+          addNumberControl(fToon, mat, 'outlineWidthFactor', 0, 0.04, 0.0005);
+          addNumberControl(fToon, mat, 'outlineLightingMixFactor', 0, 1, 0.01);
+          fToon.close();
+
+          sub.close();
+        }
+        fMat.close();
+
+        // -- animation
+        const fAnim = gui.addFolder('Animation');
+        fAnim.add(idle, 'enabled').name('procedural idle');
+        fAnim.add({ playSelectedIdle: () => loadVRMAFromUrl(idleSelect.value) }, 'playSelectedIdle').name('play selected idle');
+        fAnim.add({ stopClip: () => { mixer?.stopAllAction(); mixer = null; idle.enabled = true; setStatus('stopped clip; procedural idle on'); } }, 'stopClip').name('stop clip');
+        fAnim.add({ dump: () => console.dir(inventory) }, 'dump').name('dump inventory → console');
+      }
+
+      // ---- spring-bone editor panel (grouped: Breast / Hair / Other / Tail) --
+      const SPRING_GROUPS = [
+        { name: 'Breast', test: (n) => /bust|breast/i.test(n) },
+        { name: 'Hair', test: (n) => /hair/i.test(n) },
+        { name: 'Skirt', test: (n) => /skirt/i.test(n) },
+        { name: 'Sleeve', test: (n) => /sleeve/i.test(n) },
+        { name: 'Ear', test: (n) => /ear/i.test(n) },
+        { name: 'Tail', test: (n) => /tail/i.test(n) },
+        { name: 'Other', test: () => true },
+      ];
+      const SPRING_FIELDS = [
+        { key: 'stiffness', label: 'Stiffness', min: 0, max: 2, step: 0.01, dp: 2 },
+        { key: 'gravityPower', label: 'Gravity', min: 0, max: 1, step: 0.001, dp: 2 },
+        { key: 'dragForce', label: 'Drag', min: 0, max: 1, step: 0.01, dp: 2 },
+        { key: 'hitRadius', label: 'Hit Radius', min: 0, max: 0.2, step: 0.001, dp: 3 },
+      ];
+      const springGroupOf = (n) => (SPRING_GROUPS.find((g) => g.test(n)) ?? SPRING_GROUPS.at(-1)).name;
+      const springKey = () => 'vrm-spring::' + (vrm?.meta?.name || 'model');
+      const loadSavedSprings = () => { try { return JSON.parse(localStorage.getItem(springKey()) || '{}'); } catch { return {}; } };
+      const saveSprings = (m) => { try { localStorage.setItem(springKey(), JSON.stringify(m)); } catch {} };
+      const SPRING_PRESETS = {
+        'max jiggle': { stiffness: 0.02, gravityPower: 0.08, dragForce: 0.02, hitRadius: 0.035 },
+        'soft jiggle': { stiffness: 0.12, gravityPower: 0.12, dragForce: 0.08, hitRadius: 0.025 },
+        'balanced': { stiffness: 0.45, gravityPower: 0.2, dragForce: 0.22, hitRadius: 0.02 },
+        'stiff': { stiffness: 1.15, gravityPower: 0.1, dragForce: 0.65, hitRadius: 0.015 },
+      };
+      function applySpringPreset(targets, presetName) {
+        const preset = SPRING_PRESETS[presetName];
+        if (!preset) return;
+        for (const b of targets) {
+          for (const [key, value] of Object.entries(preset)) {
+            if (key === 'hitRadius' && typeof b.hitRadius !== 'number') continue;
+            b.j.settings[key] = value;
+          }
+        }
+        vrm?.springBoneManager?.reset?.();
+      }
+      function applySavedSprings() {
+        const saved = loadSavedSprings();
+        for (const b of springBase) {
+          const s = saved[b.name];
+          if (!s) continue;
+          for (const f of SPRING_FIELDS) if (typeof s[f.key] === 'number') b.j.settings[f.key] = s[f.key];
+        }
+      }
+
+      function buildSpringPanel() {
+        const panel = document.getElementById('springPanel');
+        panel.innerHTML = '';
+        if (!springBase.length) { panel.classList.remove('show'); return; }
+        panel.classList.add('show');
+
+        const groups = new Map();
+        for (const b of springBase) {
+          const g = springGroupOf(b.name);
+          if (!groups.has(g)) groups.set(g, []);
+          groups.get(g).push(b);
+        }
+        const order = ['Breast', 'Hair', 'Skirt', 'Sleeve', 'Ear', 'Tail', 'Other'];
+        const ordered = [...groups.entries()].sort((a, b) => order.indexOf(a[0]) - order.indexOf(b[0]));
+
+        const h = document.createElement('h2');
+        h.innerHTML = `SPRING BONES <span class="count">(${springBase.length})</span>`;
+        const collapseBtn = document.createElement('button');
+        collapseBtn.className = 'sp-save';
+        collapseBtn.style.marginLeft = 'auto';
+        collapseBtn.textContent = 'collapse groups';
+        let collapsedAll = false;
+        collapseBtn.onclick = () => {
+          collapsedAll = !collapsedAll;
+          panel.querySelectorAll('.sp-group').forEach((el) => el.classList.toggle('collapsed', collapsedAll));
+          collapseBtn.textContent = collapsedAll ? 'expand groups' : 'collapse groups';
+        };
+        h.appendChild(collapseBtn);
+        panel.appendChild(h);
+
+        for (const [groupName, members] of ordered) {
+          const groupEl = document.createElement('div');
+          groupEl.className = 'sp-group';
+          const head = document.createElement('div');
+          head.className = 'sp-ghead';
+          head.innerHTML = `<span class="tri">▼</span> ${groupName.toUpperCase()} <span class="count">(${members.length})</span>`;
+          head.onclick = () => groupEl.classList.toggle('collapsed');
+          groupEl.appendChild(head);
+
+          const body = document.createElement('div');
+          body.className = 'sp-body';
+
+          const chips = document.createElement('div');
+          chips.className = 'sp-chips';
+          body.appendChild(chips);
+
+          const row = document.createElement('div');
+          row.className = 'sp-row';
+          const select = document.createElement('select');
+          select.innerHTML = `<option value="*">All bones in ${groupName}</option>`;
+          members.forEach((b, i) => {
+            const o = document.createElement('option');
+            o.value = String(i);
+            o.textContent = b.name;
+            select.appendChild(o);
+          });
+          const saveBtn = document.createElement('button');
+          saveBtn.className = 'sp-save';
+          saveBtn.textContent = '💾 Save';
+          const presetSelect = document.createElement('select');
+          presetSelect.innerHTML = Object.keys(SPRING_PRESETS).map((name) => `<option value="${name}">${name}</option>`).join('');
+          const presetBtn = document.createElement('button');
+          presetBtn.className = 'sp-save';
+          presetBtn.textContent = 'Apply';
+          row.appendChild(select);
+          row.appendChild(presetSelect);
+          row.appendChild(presetBtn);
+          row.appendChild(saveBtn);
+          body.appendChild(row);
+
+          const selected = () => (select.value === '*' ? members : [members[Number(select.value)]]);
+          const rep = (key) => { const s = selected(); return s.reduce((a, b) => a + (b.j.settings[key] ?? 0), 0) / s.length; };
+
+          const sliders = {};
+          for (const f of SPRING_FIELDS) {
+            const sl = document.createElement('div');
+            sl.className = 'sp-slider';
+            const input = document.createElement('input');
+            input.type = 'range'; input.min = f.min; input.max = f.max; input.step = f.step;
+            const val = document.createElement('span');
+            val.className = 'val';
+            input.oninput = () => {
+              const v = Number(input.value);
+              for (const b of selected()) b.j.settings[f.key] = v;
+              val.textContent = v.toFixed(f.dp);
+            };
+            sl.innerHTML = `<span>${f.label}</span>`;
+            sl.appendChild(input); sl.appendChild(val);
+            body.appendChild(sl);
+            sliders[f.key] = { input, val };
+          }
+          const refresh = () => {
+            for (const f of SPRING_FIELDS) {
+              const v = rep(f.key);
+              sliders[f.key].input.value = v;
+              sliders[f.key].val.textContent = v.toFixed(f.dp);
+            }
+          };
+
+          members.forEach((b, i) => {
+            const chip = document.createElement('div');
+            chip.className = 'sp-chip';
+            chip.title = b.name;
+            chip.textContent = b.name;
+            chip.onclick = () => { select.value = String(i); select.onchange(); };
+            chips.appendChild(chip);
+          });
+          select.onchange = () => {
+            chips.querySelectorAll('.sp-chip').forEach((c, idx) => c.classList.toggle('sel', String(idx) === select.value));
+            refresh();
+          };
+
+          saveBtn.onclick = () => {
+            const saved = loadSavedSprings();
+            for (const b of selected()) {
+              saved[b.name] = {
+                stiffness: b.j.settings.stiffness,
+                gravityPower: b.j.settings.gravityPower,
+                dragForce: b.j.settings.dragForce,
+                hitRadius: b.j.settings.hitRadius,
+              };
+            }
+            saveSprings(saved);
+            saveBtn.textContent = '✓ Saved';
+            setTimeout(() => (saveBtn.textContent = '💾 Save'), 900);
+          };
+
+          presetBtn.onclick = () => {
+            applySpringPreset(selected(), presetSelect.value);
+            refresh();
+          };
+
+          refresh();
+          groupEl.appendChild(body);
+          panel.appendChild(groupEl);
+        }
+
+        const actions = document.createElement('div');
+        actions.className = 'sp-actions';
+        const max = document.createElement('button');
+        max.textContent = 'Max jiggle all';
+        max.onclick = () => {
+          applySpringPreset(springBase, 'max jiggle');
+          buildSpringPanel();
+        };
+        actions.appendChild(max);
+        const soft = document.createElement('button');
+        soft.textContent = 'Soft all';
+        soft.onclick = () => {
+          applySpringPreset(springBase, 'soft jiggle');
+          buildSpringPanel();
+        };
+        actions.appendChild(soft);
+        const restore = document.createElement('button');
+        restore.textContent = 'Restore all';
+        restore.onclick = () => {
+          for (const b of springBase) {
+            b.j.settings.stiffness = b.stiffness;
+            b.j.settings.gravityPower = b.gravityPower;
+            b.j.settings.dragForce = b.dragForce;
+            if (typeof b.hitRadius === 'number') b.j.settings.hitRadius = b.hitRadius;
+          }
+          try { localStorage.removeItem(springKey()); } catch {}
+          vrm.springBoneManager?.reset?.();
+          buildSpringPanel();
+        };
+        actions.appendChild(restore);
+        panel.appendChild(actions);
+      }
+
+      // ---- render loop -------------------------------------------------------
+      function animate() {
+        requestAnimationFrame(animate);
+        const dt = clock.getDelta();
+        controls.update();
+
+        if (vrm) {
+          if (mixer) mixer.update(dt);
+          // procedural idle (so spring bones & shape are visible without a clip)
+          if (idle.enabled && !mixer) {
+            const t = clock.elapsedTime;
+            const spine = vrm.humanoid?.getNormalizedBoneNode('spine');
+            if (spine) spine.rotation.x = Math.sin(t * 1.6) * 0.04;
+            const chest = vrm.humanoid?.getNormalizedBoneNode('chest');
+            if (chest) chest.rotation.y = Math.sin(t * 0.8) * 0.05;
+          }
+          // apply bone rotation overrides AFTER animation, BEFORE vrm.update maps to raw
+          for (const [name, ov] of boneOverrides) {
+            if (!ov.active) continue;
+            const node = vrm.humanoid.getNormalizedBoneNode(name);
+            if (node) node.rotation.set(
+              THREE.MathUtils.degToRad(ov.x),
+              THREE.MathUtils.degToRad(ov.y),
+              THREE.MathUtils.degToRad(ov.z),
+            );
+          }
+          // look-at
+          const ls = lookState;
+          if (ls) {
+            if (ls.trackCamera) lookAtTarget.position.copy(camera.position);
+            else lookAtTarget.position.set(ls.yaw * 2, 1.4 + ls.pitch * 2, 2);
+          }
+          vrm.update(dt);
+        }
+        renderer.render(scene, camera);
+      }
+      animate();
+
+      // ---- file in (picker + drag/drop) -------------------------------------
+      const readFile = (file) => file.arrayBuffer();
+      document.getElementById('vrmFile').addEventListener('change', async (e) => {
+        const f = e.target.files[0]; if (f) await loadVRMFromBuffer(await readFile(f), f.name);
+      });
+      document.getElementById('vrmaFile').addEventListener('change', async (e) => {
+        const f = e.target.files[0]; if (f) await loadVRMA(await readFile(f), f.name);
+      });
+      playIdleButton.addEventListener('click', () => loadVRMAFromUrl(idleSelect.value));
+      const drop = document.getElementById('drop');
+      addEventListener('dragover', (e) => { e.preventDefault(); drop.classList.add('armed'); });
+      addEventListener('dragleave', () => drop.classList.remove('armed'));
+      addEventListener('drop', async (e) => {
+        e.preventDefault(); drop.classList.remove('armed');
+        const f = e.dataTransfer.files[0]; if (!f) return;
+        const buf = await readFile(f);
+        if (/\.vrma$/i.test(f.name)) await loadVRMA(buf, f.name);
+        else await loadVRMFromBuffer(buf, f.name);
+      });
+    </script>
+  </body>
+</html>
