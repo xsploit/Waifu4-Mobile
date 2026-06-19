@@ -1,0 +1,4 @@
+{$WEBWAIFU_SITE_ADDRESS} {
+  encode zstd gzip
+  reverse_proxy webwaifu:3000
+}

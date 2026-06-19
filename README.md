@@ -27,6 +27,8 @@ backup restore, while keeping the original frontend look and tab workflow.
 -
 <a href="#quick-start">Quick Start</a>
 -
+<a href="#vps-deploy">VPS Deploy</a>
+-
 <a href="#status">Status</a>
 
 </div>
@@ -264,7 +266,57 @@ npm run audit:release
 
 The release audit checks tracked files for accidental build output, legacy
 reference folders, local backup JSON, database files, env files, and key-shaped
-literals, then runs typecheck, the full test suite, and the production build.
+literals, then runs dead-code audit, typecheck, the full test suite, the
+production build, built-dist artifact scanning, and the runtime smoke.
+
+---
+
+<h2 align="center" id="vps-deploy">VPS Deploy</h2>
+
+The intended hosted shape is a normal long-running VPS process, not serverless:
+
+```text
+Oracle Cloud Always Free ARM VPS
+└── Docker Compose
+    ├── webwaifu app container
+    ├── Caddy reverse proxy
+    └── named volume for .webwaifu4 memory data
+```
+
+The app container builds the Vite frontend, serves `dist/` from the Node backend,
+and keeps `/api/*` compatible with the local Vite proxy shape. Caddy fronts the
+same container for HTTPS and WebSocket proxying.
+
+Minimal deploy:
+
+```bash
+git clone https://github.com/xsploit/webwaifu4-rebuild.git /opt/waifu
+cd /opt/waifu
+WEBWAIFU_SITE_ADDRESS=waifu.example.com docker compose up -d --build
+```
+
+For raw IP/local testing:
+
+```bash
+docker compose up -d --build
+```
+
+Production routes:
+
+```text
+https://waifu.example.com/
+wss://waifu.example.com/ws
+https://waifu.example.com/api/ai/chat
+https://waifu.example.com/api/tts/stream
+```
+
+Notes:
+
+- Browser Account-tab keys remain the normal provider-key path.
+- Compose environment keys are optional backend fallback values.
+- `.webwaifu4` memory data is persisted in the `webwaifu_data` Docker volume.
+- Caddy handles TLS and WebSocket upgrade proxying through `reverse_proxy`.
+- Set `WEBWAIFU_SITE_ADDRESS` to the real domain once DNS points at the VPS.
 
 ---
 

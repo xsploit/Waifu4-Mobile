@@ -1,4 +1,5 @@
 import { spawn, type ChildProcessWithoutNullStreams } from 'node:child_process';
+import { existsSync } from 'node:fs';
 
 const port = Number(process.env.SMOKE_PORT ?? 8798);
 const baseUrl = `http://127.0.0.1:${port}`;
@@ -13,6 +14,7 @@ type Check = {
 
 const checks: Check[] = [
   { name: 'health', path: '/health', expectedStatus: 200 },
+  { name: 'api health alias', path: '/api/health', expectedStatus: 200 },
   { name: 'twitch runtime', path: '/twitch/runtime/status', expectedStatus: 200 },
   { name: 'memory status', path: '/memory/status', expectedStatus: 200 },
   {
@@ -54,6 +56,10 @@ const checks: Check[] = [
     body: { provider: 'fish-speech', name: '', sampleBase64: '' },
   },
 ];
+
+if (existsSync('dist/index.html')) {
+  checks.push({ name: 'static app shell', path: '/', expectedStatus: 200 });
+}
 
 function delay(ms: number) {
   return new Promise((resolve) => setTimeout(resolve, ms));
