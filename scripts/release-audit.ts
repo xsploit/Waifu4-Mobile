@@ -41,6 +41,13 @@ const secretPatterns = [
   },
 ];
 
+const blockedJsonPayloadPatterns = [
+  {
+    kind: 'local transfer backup JSON payload',
+    patterns: [/"kind"\s*:\s*"local-transfer-backup"/, /"providerSecrets"\s*:/],
+  },
+];
+
 function git(args: string[]) {
   return execFileSync('git', args, { encoding: 'utf8' }).trim();
 }
@@ -55,6 +62,29 @@ function checkBlockedPaths(files: string[]) {
   for (const file of files) {
     if (blockedTrackedPathPatterns.some((pattern) => pattern.test(file))) {
       findings.push({ file, kind: 'blocked tracked release path' });
+    }
+  }
+  return findings;
+}
+
+function checkJsonPayloadPatterns(files: string[]) {
+  const findings: Finding[] = [];
+  for (const file of files) {
+    if (extname(file).toLowerCase() !== '.json') {
+      continue;
+    }
+    try {
+      if (!statSync(file).isFile()) {
+        continue;
+      }
+      const content = readFileSync(file, 'utf8');
+      for (const { kind, patterns } of blockedJsonPayloadPatterns) {
+        if (patterns.every((pattern) => pattern.test(content))) {
+          findings.push({ file, kind });
+        }
+      }
+    } catch {
+      findings.push({ file, kind: 'unreadable tracked JSON file' });
     }
   }
   return findings;
@@ -88,7 +118,11 @@ function checkSecretPatterns(files: string[]) {
 
 function main() {
   const files = trackedFiles();
-  const findings = [...checkBlockedPaths(files), ...checkSecretPatterns(files)];
+  const findings = [
+    ...checkBlockedPaths(files),
+    ...checkJsonPayloadPatterns(files),
+    ...checkSecretPatterns(files),
+  ];
   if (findings.length > 0) {
     console.error('Release audit failed:');
     for (const finding of findings) {
