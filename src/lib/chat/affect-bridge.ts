@@ -1,7 +1,7 @@
 import type { AffectState } from './types';
 import { EMOTION_VAD_DEFAULTS, type AssistantReplyMetadata } from './reply-metadata';
 
-export function createDefaultAffectState(): AffectState {
+function createDefaultAffectState(): AffectState {
   return {
     arousal: 0.18,
     dominance: 0,

@@ -6,7 +6,6 @@ import type {
   CreatedRemoteTtsVoice,
   DesignRemoteTtsVoiceResult,
   DesignedRemoteTtsVoiceCandidate,
-  FishSpeechVoiceScope,
   PublishDesignedRemoteTtsVoiceRequest,
   RemoteTtsProvider,
   RemoteTtsVoice,
@@ -17,6 +16,8 @@ const voiceListSchema = z.object({
   provider: z.enum(['fish-speech', 'inworld']).optional(),
   scope: z.enum(['all', 'mine', 'public']).optional(),
 });
+
+type FishSpeechVoiceScope = NonNullable<z.infer<typeof voiceListSchema>['scope']>;
 
 const voiceCreateSchema = z.object({
   provider: z.enum(['fish-speech', 'inworld']),

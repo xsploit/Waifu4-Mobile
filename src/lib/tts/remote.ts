@@ -2,14 +2,14 @@ import { getDesktopBackendUrl } from '../desktop/runtime';
 import { clampInteger } from '../../shared/number';
 
 export type RemoteTtsProvider = 'fish-speech' | 'inworld';
-export type RemoteTtsMode = 'live-bridge' | 'full-response' | 'early-chunks' | 'sentence-chunks';
-export type FishSpeechVoiceScope = 'all' | 'mine' | 'public';
-export type FishSpeechLatency = 'balanced' | 'normal';
-export type FishSpeechFormat = 'pcm' | 'mp3' | 'wav' | 'opus';
-export type FishSpeechLiveChunkingStrategy = 'app' | 'python-safe' | 'eager';
-export type InworldDeliveryMode = 'STABLE' | 'BALANCED' | 'CREATIVE' | 'EXPRESSIVE';
-export type InworldTimestampType = 'NONE' | 'WORD' | 'CHARACTER';
-export type InworldTimestampTransportStrategy = 'SYNC' | 'ASYNC';
+type RemoteTtsMode = 'live-bridge' | 'full-response' | 'early-chunks' | 'sentence-chunks';
+type FishSpeechVoiceScope = 'all' | 'mine' | 'public';
+type FishSpeechLatency = 'balanced' | 'normal';
+type FishSpeechFormat = 'pcm' | 'mp3' | 'wav' | 'opus';
+type FishSpeechLiveChunkingStrategy = 'app' | 'python-safe' | 'eager';
+type InworldDeliveryMode = 'STABLE' | 'BALANCED' | 'CREATIVE' | 'EXPRESSIVE';
+type InworldTimestampType = 'NONE' | 'WORD' | 'CHARACTER';
+type InworldTimestampTransportStrategy = 'SYNC' | 'ASYNC';
 
 export type RemoteTtsRequest = {
   provider: RemoteTtsProvider;
