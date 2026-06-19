@@ -11,6 +11,7 @@
     "server": "tsx server/index.ts",
     "build": "tsc --noEmit && vite build",
     "bench:tts": "tsx scripts/bench-tts.ts",
+    "audit:release": "tsx scripts/release-audit.ts && npm run typecheck && npm test -- --run && npm run build",
     "smoke:runtime": "tsx scripts/smoke-runtime.ts",
     "typecheck": "tsc --noEmit --pretty",
     "test": "vitest run",
