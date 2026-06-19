@@ -673,6 +673,7 @@ export class TtsManager {
     this.teardownCurrentAudio();
   }
 
+  // fallow-ignore-next-line unused-class-member
   destroy() {
     this.stop();
     if (this.audioContext && this.audioContext.state !== 'closed') {

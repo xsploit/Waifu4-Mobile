@@ -2,5 +2,53 @@
   "$schema": "./node_modules/fallow/schema.json",
   "ignoreDependencies": [
     "better-sqlite3"
+  ],
+  "ignoreExports": [
+    {
+      "file": "src/lib/chat/ladybug-memory-client.ts",
+      "exports": [
+        "updateLadybugGrilloRuntime"
+      ]
+    },
+    {
+      "file": "src/lib/vrm/animation.ts",
+      "exports": [
+        "mixamoVRMRigMap",
+        "loadMixamoAnimation",
+        "retargetClip"
+      ]
+    },
+    {
+      "file": "src/tts/TtsClient.ts",
+      "exports": [
+        "streamTts"
+      ]
+    }
+  ],
+  "usedClassMembers": [
+    {
+      "implements": "TwitchChatSource",
+      "members": [
+        "sendMessage",
+        "switchChannel"
+      ]
+    },
+    "getBackendLabel",
+    "loadGrilloState",
+    "saveGrilloState",
+    "deleteGrilloState",
+    "deleteSemanticRecords",
+    "deleteRelationshipProfile",
+    "replaceGrilloRecords",
+    "listGrilloMemorySlots",
+    "listGrilloMemorySlotPatches",
+    "shouldAutoStart",
+    "speakPiperText",
+    "speakRemoteText",
+    "setPlaybackRate",
+    "setVolume",
+    "primeAudio",
+    "getAudioState",
+    "getOutputStream"
   ]
 }

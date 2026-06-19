@@ -167,6 +167,7 @@ export class DirectTwitchIrcClient {
     this.socket = null;
   }
 
+  // fallow-ignore-next-line unused-class-member
   switchChannel(channel: string) {
     const nextChannel = normalizeChannel(channel);
     if (!nextChannel || nextChannel === this.currentChannel) {

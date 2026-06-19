@@ -664,6 +664,7 @@ export class AnimationSequencer {
     this.advance(playlist, enabled, options);
   }
 
+  // fallow-ignore-next-line unused-class-member
   pause() {
     if (this.timer) {
       clearTimeout(this.timer);
@@ -671,6 +672,7 @@ export class AnimationSequencer {
     }
   }
 
+  // fallow-ignore-next-line unused-class-member
   resume(delayMs = 0) {
     if (this.timer || !this.activeOptions || this.activeEnabled.length === 0) {
       return;

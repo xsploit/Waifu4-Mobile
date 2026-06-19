@@ -1,5 +1,4 @@
 import type {
-  TwitchChatMessage,
   TwitchChatSource,
   TwitchChatSourceHandlers,
 } from '../twitch/TwitchChatSource.js';
@@ -15,7 +14,6 @@ export type MockChatInjection = {
 
 export class MockTwitchChatSource implements TwitchChatSource {
   private currentChannel: string;
-  private started = false;
 
   constructor(
     channel: string,
@@ -29,7 +27,6 @@ export class MockTwitchChatSource implements TwitchChatSource {
   }
 
   start() {
-    this.started = true;
     this.handlers.onStatus({
         level: 'info',
         message: `Mock Twitch chat source started for #${this.currentChannel}.`,
@@ -37,7 +34,6 @@ export class MockTwitchChatSource implements TwitchChatSource {
   }
 
   stop() {
-    this.started = false;
     this.handlers.onStatus({ level: 'info', message: 'Mock Twitch chat source stopped.' });
   }
 
@@ -61,27 +57,4 @@ export class MockTwitchChatSource implements TwitchChatSource {
     });
   }
 
-  inject(input: MockChatInjection) {
-    if (!this.started) {
-      this.start();
-    }
-
-    const user = (input.user || input.displayName || `viewer${Math.floor(Math.random() * 10000)}`)
-      .trim()
-      .toLowerCase()
-      .replace(/\s+/g, '_');
-    const displayName = input.displayName?.trim() || user;
-    const badges = input.badges ?? [];
-    const message: TwitchChatMessage = {
-      id: `mock-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
-      user,
-      displayName,
-      text: input.text?.trim() || 'hello @yourwifey',
-      timestamp: Date.now(),
-      badges,
-      isMod: input.isMod ?? badges.some((badge) => badge.startsWith('moderator/')),
-      isBroadcaster: input.isBroadcaster ?? badges.some((badge) => badge.startsWith('broadcaster/')),
-    };
-    this.handlers.onMessage(message);
-  }
 }

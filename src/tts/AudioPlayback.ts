@@ -76,6 +76,7 @@ export class AudioPlayback {
     });
   }
 
+  // fallow-ignore-next-line unused-class-member
   reset(): void {
     this.playhead = this.context?.currentTime ?? 0;
     this.activeSources = 0;
@@ -83,6 +84,7 @@ export class AudioPlayback {
     this.resolveIdle();
   }
 
+  // fallow-ignore-next-line unused-class-member
   stop(): void {
     for (const source of this.sources) {
       try {
