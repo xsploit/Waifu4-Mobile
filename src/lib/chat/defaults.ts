@@ -30,14 +30,13 @@ export const STORAGE_KEYS = {
   voiceLabVoices: 'yourwifey.voiceLabVoices.v1',
 } as const;
 
-export const DEFAULT_OPENAI_MODEL = 'gpt-5-nano';
 export const DEFAULT_MEMORY_AGENT_MODEL = 'gpt-4.1-mini';
 export const DEFAULT_OPENROUTER_MODEL = 'openai/gpt-4o-mini';
 export const DEFAULT_AI_GATEWAY_MODEL = 'openai/gpt-5-nano';
 export const DEFAULT_OPENROUTER_EMBEDDING_MODEL = 'openai/text-embedding-3-small';
 export const DEFAULT_LOCAL_EMBEDDING_MODEL = 'onnx-community/all-MiniLM-L6-v2-ONNX';
 
-export const RIKO_PERSONA: PersonaProfile = {
+const RIKO_PERSONA: PersonaProfile = {
   id: 'default-waifu',
   name: 'Riko',
   systemPrompt:
@@ -54,8 +53,6 @@ export const DEFAULT_PERSONA: PersonaProfile = {
   description: 'A chaotic AI VTuber who weaponizes wit, irony, and skill issue energy.',
   userNickname: '',
 };
-
-export const NEURO_SAMA_PERSONA = DEFAULT_PERSONA;
 
 export const HIKARI_PERSONA: PersonaProfile = {
   id: 'hikari-chan',
@@ -171,7 +168,7 @@ export function createDefaultRelationshipMemory(): RelationshipMemory {
   };
 }
 
-export function createDefaultAffectState(): AffectState {
+function createDefaultAffectState(): AffectState {
   return {
     arousal: 0.18,
     dominance: 0,

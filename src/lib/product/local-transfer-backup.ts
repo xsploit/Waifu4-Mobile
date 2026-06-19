@@ -3,10 +3,10 @@ import { normalizePersistedChatStateSnapshot } from '../chat/storage';
 import type { SavedVrmModelSummary } from '../menu/types';
 import type { ProviderSecretRecord } from './provider-key-vault';
 
-export const LOCAL_TRANSFER_BACKUP_APP = 'web-waifu-4-local';
+const LOCAL_TRANSFER_BACKUP_APP = 'web-waifu-4-local';
 const LEGACY_LOCAL_TRANSFER_BACKUP_APPS = new Set(['yourwifey-local', 'yourwifey-byok']);
-export const LOCAL_TRANSFER_BACKUP_KIND = 'local-transfer-backup';
-export const LOCAL_TRANSFER_BACKUP_VERSION = 1;
+const LOCAL_TRANSFER_BACKUP_KIND = 'local-transfer-backup';
+const LOCAL_TRANSFER_BACKUP_VERSION = 1;
 
 export type LocalTransferSavedVrmModel = SavedVrmModelSummary & {
   dataBase64: string;
