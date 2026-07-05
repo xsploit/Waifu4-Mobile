@@ -1,4 +1,12 @@
-import { Output, generateText, stepCountIs, streamText, type ModelMessage } from 'ai';
+import {
+  Output,
+  extractJsonMiddleware,
+  generateText,
+  stepCountIs,
+  streamText,
+  wrapLanguageModel,
+  type ModelMessage,
+} from 'ai';
 import { createGateway } from '@ai-sdk/gateway';
 import { createOpenRouter } from '@openrouter/ai-sdk-provider';
 import {
@@ -131,7 +139,7 @@ export function buildProviderOptions(
   return Object.keys(options).length > 0 ? options : undefined;
 }
 
-function createModel(req: Pick<StreamChatRequest, 'provider' | 'model' | 'apiKey'>) {
+function createModel(req: Pick<StreamChatRequest, 'provider' | 'model' | 'apiKey'>, structured = false) {
   // OpenRouter: just its own key. (Its BYOK is a website-dashboard feature, not
   // a confirmed API parameter, so we don't inject it here.)
   if (req.provider === 'openrouter-responses') {
@@ -139,7 +147,22 @@ function createModel(req: Pick<StreamChatRequest, 'provider' | 'model' | 'apiKey
   }
   // Vercel gateway: own key; optional OpenAI BYOK is applied via providerOptions
   // (gateway.byok). If BYOK fails, the gateway falls back to Vercel credits.
-  return createGateway({ apiKey: req.apiKey })(req.model);
+  const model = createGateway({ apiKey: req.apiKey })(req.model);
+  return structured
+    ? wrapLanguageModel({
+        model,
+        middleware: extractJsonMiddleware(),
+      })
+    : model;
+}
+
+function createAssistantStructuredOutput() {
+  return Output.object({
+    description:
+      'A WebWaifu assistant reply. The message field is spoken to the user; emotion and VAD drive avatar reactions.',
+    name: 'assistant_reply',
+    schema: assistantReplySchema,
+  });
 }
 
 export function toModelMessages(messages: LlmMessage[]): ModelMessage[] {
@@ -162,7 +185,7 @@ export function toModelMessages(messages: LlmMessage[]): ModelMessage[] {
 }
 
 export async function completeChat(req: CompleteChatRequest): Promise<CompleteChatResult> {
-  const model = createModel(req);
+  const model = createModel(req, req.jsonMode === true);
   const tools = req.toolChoiceMode === 'off' ? undefined : createTavilyTools(req.tavilyKey);
   const providerOptions = buildProviderOptions(req, req.jsonMode === true, !!tools);
   const started = Date.now();
@@ -212,7 +235,7 @@ export async function streamChat(
   onDelta: (text: string) => void,
 ): Promise<StreamChatResult> {
   const structured = req.replyFormat === 'structured';
-  const model = createModel(req);
+  const model = createModel(req, structured);
   const tools = req.toolChoiceMode === 'off' ? undefined : createTavilyTools(req.tavilyKey);
   const providerOptions = buildProviderOptions(req, structured, !!tools);
   let streamError: string | null = null;
@@ -244,7 +267,7 @@ export async function streamChat(
     messages: toModelMessages(req.messages),
     temperature: req.temperature,
     maxOutputTokens: req.maxTokens,
-    output: structured ? Output.object({ schema: assistantReplySchema }) : undefined,
+    output: structured ? createAssistantStructuredOutput() : undefined,
     tools,
     toolChoice: tools && req.toolChoiceMode === 'required' ? 'required' : undefined,
     stopWhen: tools ? stepCountIs(req.maxToolRounds ?? 10) : undefined,
