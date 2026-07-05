@@ -84,6 +84,18 @@ if (existsSync('dist/index.html')) {
     expectedStatus: 200,
     bodyMustNotStartWith: '<!doctype',
   });
+  checks.push({
+    name: 'static piper onnx asset',
+    path: '/cdn-assets/piper/en_US-neuro_100_32k_2259-medium.onnx',
+    expectedStatus: 200,
+    bodyMustNotStartWith: '<!doctype',
+  });
+  checks.push({
+    name: 'static piper config asset',
+    path: '/cdn-assets/piper/en_US-neuro_100_32k_2259-medium.onnx.json',
+    expectedStatus: 200,
+    bodyMustNotStartWith: '<!doctype',
+  });
 }
 
 function delay(ms: number) {

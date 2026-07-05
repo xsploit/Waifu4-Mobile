@@ -33,6 +33,7 @@ const binaryExtensions = new Set([
   '.jpg',
   '.jpeg',
   '.lock',
+  '.onnx',
   '.png',
   '.tgz',
   '.vrm',

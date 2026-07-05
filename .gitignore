@@ -24,3 +24,5 @@ public/cdn-assets/
 !public/cdn-assets/backgrounds/**
 !public/cdn-assets/models/
 !public/cdn-assets/models/**
+!public/cdn-assets/piper/
+!public/cdn-assets/piper/**
