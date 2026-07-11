@@ -127,10 +127,20 @@ retrieval controller --> budgeted context packet --> main reply model
 - The provenance release gate passed with 74 test files and 367 tests. Two
   bounded Fable reviews of the newest range exhausted their cost caps before
   returning a verdict; do not mislabel that range as Fable-verified.
+- Worker extraction and semantic-indexing watermarks are now isolated per
+  memory scope while the root snapshot remains compatible with the current UI.
+  Cross-scope local/Twitch regression coverage proves both lanes and their
+  no-op reruns. Commit `43c7014` passed the full release gate with 74 test files
+  and 368 tests.
+- A persistent cross-process lease is not implemented. LadybugDB advertises
+  transactions, but the installed Node binding exposes no transaction or
+  compare-and-swap API, the JSON fallback serializes writes only inside one
+  process, and deployment does not enforce one instance. Do not substitute a
+  read-then-write singleton lock: it can grant the lease to two processes.
 - Before any live switch, produce repeated participant-aware whole-prompt shadow
-  reports. Also add the repair queue,
-  persistent worker lease/watermark contract, and an explicit per-scope switch
-  with rollback. A live switch still requires separate user approval.
+  reports. Also add the repair queue, a real atomic persistent worker lease,
+  and an explicit per-scope switch with rollback. A live switch still requires
+  separate user approval.
 
 ## Project Map
 
@@ -327,8 +337,10 @@ attempt to extract or persist hidden chain-of-thought.
 3. Compute a memory-sufficiency receipt before answering.
 4. Feed corrections, weak grounding, missing lanes, dropped evidence, answer
    feedback, and unresolved questions into a worker repair queue.
-5. Add watermarks and a lease so evidence is not repeatedly processed by
-   overlapping worker runs.
+5. Per-scope watermarks are complete. Add a persistent lease only after the
+   storage layer has an atomic acquire/renew/release primitive (or deployment
+   explicitly guarantees one worker instance) so overlapping processes cannot
+   process the same evidence.
 
 ### Phase 4: Developmental experimentation
 
