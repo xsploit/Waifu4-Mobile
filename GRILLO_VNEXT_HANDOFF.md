@@ -59,9 +59,32 @@ retrieval controller --> budgeted context packet --> main reply model
   predicate/value coverage for current blocks, slots, and relationship profile
   fields. Value-only matches stay explicitly uncovered, block/slot drift blocks
   readiness, and malformed ledger records also force `ready=false`.
-- The next decision is migration/backfill policy for established memory. Do not
-  switch live prompt injection to ledger projections until coverage is ready
-  for real profiles and a shadow comparison proves equivalent prompt context.
+- Ledger mutation is serialized per scope. Replay applies supersession
+  independently of storage order, rejects invalid temporal intervals, includes
+  participant identity in claim identity, and reports dangling, self-referential,
+  or time-travelling correction/supersession records as integrity issues.
+- Native and JSON-fallback scope deletion now remove the complete GRILLO record
+  set for only the requested scope. Once Ladybug falls back, that backend stays
+  pinned for the service lifetime instead of retrying native storage mid-run.
+- `GET /api/memory/grillo/projection/shadow?scopeKey=...` is a read-only prompt
+  migration report. It reconciles turn events with turn evidence, reports exact
+  included/dropped legacy and ledger IDs, and refuses `safeToSwitch` when
+  coverage, integrity, reconciliation, or lane-budget gates fail. It is not
+  called by live chat.
+- `GET /api/memory/grillo/migration/plan?scopeKey=...` is a read-only evidence
+  migration planner. It proposes only deterministic turn-event-to-evidence
+  inserts/no-ops/conflicts, schedules zero claim writes, and classifies legacy
+  profile fields as durable claim candidates, rebuildable projections, derived
+  runtime state, or records requiring provenance.
+- A live dry run for `local:persona:hikari-chan` found eight deterministic turn
+  evidence inserts, zero conflicts, zero existing ledger claims, and 22 legacy
+  relationship items. Counters, timestamps, current affect, relationship scores,
+  and summaries remain projections; four stored facts require evidence review
+  before they may become claims.
+- The next write boundary is applying the generation-guarded, idempotent turn
+  evidence plan and recording an audit receipt. Do not infer claims during that
+  backfill. Do not switch live prompt injection until real-profile shadow
+  coverage is ready and the user explicitly approves the switch.
 
 ## Project Map
 
