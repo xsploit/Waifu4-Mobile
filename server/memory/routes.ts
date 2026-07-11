@@ -239,7 +239,10 @@ export function createMemoryRouter() {
       res.json({
         ok: true,
         backend: getLadybugMemoryService().getBackendLabel(),
-        shadow: await getGrilloWorkerService().getPromptShadowComparison(req.query.scopeKey),
+        shadow: await getGrilloWorkerService().getPromptShadowComparison(
+          req.query.scopeKey,
+          req.query.participantKeys,
+        ),
       });
     } catch (error) {
       sendError(res, error, 'GRILLO prompt shadow comparison failed.');

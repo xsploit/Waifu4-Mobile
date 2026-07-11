@@ -1,6 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import type { GrilloLedgerReplay, GrilloMemoryClaim } from './GrilloEvidenceLedger';
-import { buildGrilloShadowComparison } from './GrilloShadowComparison';
+import {
+  buildGrilloShadowComparison,
+  type GrilloShadowComparisonInput,
+} from './GrilloShadowComparison';
 
 const SCOPE_KEY = 'local:persona:hikari-chan';
 const PARTICIPANT_KEY = 'local:local:subsect';
@@ -46,7 +49,7 @@ describe('buildGrilloShadowComparison', () => {
   });
 
   it('reports turn/evidence reconciliation gaps and blocks switching', () => {
-    const input = createParityInput();
+    const input: GrilloShadowComparisonInput = createParityInput();
     input.turnEvents.push({
       content: 'A turn the ledger never saw.',
       created_at: 40,
@@ -127,6 +130,28 @@ describe('buildGrilloShadowComparison', () => {
 
     expect(report.ledgerOnlyClaimIds).toEqual(['claim-novel']);
     expect(report.safeToSwitch).toBe(false);
+  });
+
+  it('filters participant-owned records while retaining scope-level relationship state', () => {
+    const input: GrilloShadowComparisonInput = createParityInput();
+    input.participantKeys = [PARTICIPANT_KEY];
+    input.memoryBlocks.push({
+      block_id: 'block-someone-else',
+      block_name: 'preferences',
+      created_at: 20,
+      items: ['unrelated preference'],
+      operation: 'replace',
+      participant_key: 'local:local:someone-else',
+      scope_key: SCOPE_KEY,
+    });
+    const report = buildGrilloShadowComparison(input);
+
+    expect(report.participantKeys).toEqual([PARTICIPANT_KEY]);
+    expect(report.legacyPrompt.lines).toContain('stage=familiar mood=warm');
+    expect(report.legacyPrompt.lines).not.toContain(
+      '[block:preferences local:local:someone-else] unrelated preference',
+    );
+    expect(report.legacyPrompt.includedRecordIds).not.toContain('block-someone-else');
   });
 });
 

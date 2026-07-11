@@ -13,10 +13,12 @@ export type GrilloShadowComparisonInput = {
   replay: GrilloLedgerReplay;
   scopeKey: string;
   turnEvents: Array<Record<string, unknown>>;
+  participantKeys?: string[];
 };
 
 export type GrilloShadowComparisonReport = {
   scopeKey: string;
+  participantKeys: string[];
   generatedAt: number;
   projectionGeneration: string;
   reconciliation: {
@@ -60,20 +62,38 @@ const LANE_ITEMS_PER_RECORD = 5;
 export function buildGrilloShadowComparison(
   input: GrilloShadowComparisonInput,
 ): GrilloShadowComparisonReport {
+  const participantKeys = uniqueIds(
+    (input.participantKeys ?? []).map((key) => key.trim().toLowerCase()).filter(Boolean),
+  ).sort();
+  const participantSet = new Set(participantKeys);
+  const includeParticipant = (participantKey: string | null, includeScope = false) =>
+    participantSet.size === 0 || (includeScope && !participantKey) || participantSet.has((participantKey ?? '').toLowerCase());
+  const filteredBlocks = input.memoryBlocks.filter((record) =>
+    includeParticipant(recordParticipantKey(record) || null),
+  );
+  const filteredSlots = input.memorySlots.filter((record) =>
+    includeParticipant(recordParticipantKey(record) || null),
+  );
   const projection = buildGrilloLedgerProjection(input.replay);
   const coverage = auditGrilloProjectionCoverage(projection, {
-    memoryBlocks: input.memoryBlocks,
-    memorySlots: input.memorySlots,
+    memoryBlocks: filteredBlocks,
+    memorySlots: filteredSlots,
     relationshipProfile: input.relationshipProfile,
     scopeKey: input.scopeKey,
   });
-  const legacyLines = renderLegacyRelationshipLane(input);
+  const legacyLines = renderLegacyRelationshipLane({
+    ...input,
+    memoryBlocks: filteredBlocks,
+    memorySlots: filteredSlots,
+  });
   const includedLegacy = legacyLines.slice(0, LANE_LINE_LIMIT);
   const droppedLegacy = legacyLines.slice(LANE_LINE_LIMIT);
-  const ledgerLines = projection.slots.map((slot) => ({
-    sourceId: slot.current.claimId,
-    text: renderProjectedClaimLine(slot.current),
-  }));
+  const ledgerLines = projection.slots
+    .filter((slot) => includeParticipant(slot.current.participantKey, true))
+    .map((slot) => ({
+      sourceId: slot.current.claimId,
+      text: renderProjectedClaimLine(slot.current),
+    }));
   const includedLedger = ledgerLines.slice(0, LANE_LINE_LIMIT);
   const droppedLedger = ledgerLines.slice(LANE_LINE_LIMIT);
   const reconciliation = reconcileTurnEvidence(input);
@@ -87,6 +107,7 @@ export function buildGrilloShadowComparison(
     droppedLedger.length === 0;
   return {
     scopeKey: input.scopeKey,
+    participantKeys,
     generatedAt: input.generatedAt ?? Date.now(),
     projectionGeneration: projection.generation,
     reconciliation,

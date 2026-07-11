@@ -305,7 +305,7 @@ export class GrilloWorkerService {
    * of live prompt injection.
    */
   // fallow-ignore-next-line unused-class-member
-  async getPromptShadowComparison(scopeKey: unknown) {
+  async getPromptShadowComparison(scopeKey: unknown, participantKeys?: unknown) {
     const normalizedScopeKey = normalizeKey(scopeKey, 'local:persona:default');
     const [replay, turnEvents, memoryBlocks, memorySlots, relationshipProfiles] =
       await Promise.all([
@@ -323,6 +323,7 @@ export class GrilloWorkerService {
       replay,
       scopeKey: normalizedScopeKey,
       turnEvents,
+      participantKeys: readStringArray(participantKeys),
     });
   }
 
