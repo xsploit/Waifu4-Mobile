@@ -1,3 +1,5 @@
+import { createHash } from 'node:crypto';
+import { isDeepStrictEqual } from 'node:util';
 import type { GrilloEvidenceRecord, GrilloLedgerReplay } from './GrilloEvidenceLedger.js';
 
 export type GrilloMigrationDisposition =
@@ -14,7 +16,12 @@ export type GrilloEvidenceBackfillItem = {
 };
 
 export type GrilloMigrationPlan = {
+  schemaVersion: '1.0.0';
+  kind: 'turn_event_evidence_backfill';
   scopeKey: string;
+  sourceGeneration: string;
+  evidenceGeneration: string;
+  planHash: string;
   evidenceBackfill: {
     canApply: boolean;
     conflicts: number;
@@ -111,19 +118,51 @@ const PROFILE_POLICIES: Array<{
 
 export function buildGrilloMigrationPlan(input: GrilloMigrationPlanInput): GrilloMigrationPlan {
   const existingEvidence = new Map(input.replay.evidence.map((record) => [record.id, record]));
-  const items = input.turnEvents
-    .filter((record) => recordScopeKey(record) === input.scopeKey)
-    .map((record) => planTurnEvidence(record, input.scopeKey, existingEvidence))
+  const scopedTurns = input.turnEvents.filter(
+    (record) => recordScopeKey(record) === input.scopeKey,
+  );
+  const plannedItems = scopedTurns.map((record, index) =>
+    planTurnEvidence(record, input.scopeKey, existingEvidence, index),
+  );
+  const turnIdCounts = new Map<string, number>();
+  for (const item of plannedItems) {
+    if (!item.turnId.startsWith('unknown:')) {
+      turnIdCounts.set(item.turnId, (turnIdCounts.get(item.turnId) ?? 0) + 1);
+    }
+  }
+  const items = plannedItems
+    .map((item) =>
+      (turnIdCounts.get(item.turnId) ?? 0) > 1
+        ? {
+            action: 'conflict' as const,
+            candidate: null,
+            reason: 'Canonical turn events contain a duplicate stable ID.',
+            turnId: item.turnId,
+          }
+        : item,
+    )
+    .filter((item, index, all) => all.findIndex((entry) => entry.turnId === item.turnId) === index)
     .sort((left, right) => left.turnId.localeCompare(right.turnId));
   const profileFields = PROFILE_POLICIES.flatMap((policy) => {
     const value = readPath(input.relationshipProfile, policy.path);
     return hasValue(value) ? [{ ...policy, value }] : [];
   });
   const conflicts = items.filter((item) => item.action === 'conflict').length;
-  return {
+  const sourceGeneration = generation(scopedTurns);
+  const evidenceGeneration = generation(
+    input.replay.evidence.filter((record) => record.scopeKey === input.scopeKey),
+  );
+  const base = {
+    schemaVersion: '1.0.0' as const,
+    kind: 'turn_event_evidence_backfill' as const,
     scopeKey: input.scopeKey,
+    sourceGeneration,
+    evidenceGeneration,
     evidenceBackfill: {
-      canApply: conflicts === 0,
+      canApply:
+        conflicts === 0 &&
+        input.replay.integrityIssues.length === 0 &&
+        input.replay.invalidRecordIds.length === 0,
       conflicts,
       inserts: items.filter((item) => item.action === 'insert').length,
       items,
@@ -131,17 +170,19 @@ export function buildGrilloMigrationPlan(input: GrilloMigrationPlanInput): Grill
     },
     profileFields,
     gates: {
-      claimWritesPlanned: 0,
-      livePromptSwitchPlanned: false,
-      requiresExplicitApprovalToWrite: true,
+      claimWritesPlanned: 0 as const,
+      livePromptSwitchPlanned: false as const,
+      requiresExplicitApprovalToWrite: true as const,
     },
   };
+  return { ...base, planHash: generation(base) };
 }
 
 function planTurnEvidence(
   turn: Record<string, unknown>,
   scopeKey: string,
   existingEvidence: Map<string, GrilloEvidenceRecord>,
+  index: number,
 ): GrilloEvidenceBackfillItem {
   const turnId = text(turn['turn_id'] ?? turn['turnId'] ?? turn['id']);
   const content = text(turn['content'] ?? turn['text']);
@@ -152,7 +193,7 @@ function planTurnEvidence(
       action: 'conflict',
       candidate: null,
       reason: 'Turn is missing a stable ID, content, supported role, or timestamp.',
-      turnId: turnId || 'unknown',
+      turnId: turnId || `unknown:${index}`,
     };
   }
   const participantKey = text(turn['participant_key'] ?? turn['participantKey']);
@@ -177,12 +218,7 @@ function planTurnEvidence(
   if (!existing) {
     return { action: 'insert', candidate, reason: 'Canonical turn has no ledger evidence.', turnId };
   }
-  if (
-    existing.kind === 'turn' &&
-    existing.scopeKey === scopeKey &&
-    existing.role === candidate.role &&
-    normalize(existing.content) === normalize(candidate.content)
-  ) {
+  if (isDeepStrictEqual(existing, candidate)) {
     return { action: 'noop', candidate, reason: 'Equivalent turn evidence already exists.', turnId };
   }
   return {
@@ -224,14 +260,27 @@ function timestamp(value: unknown) {
   return Number.isFinite(parsed) && parsed >= 0 ? Math.trunc(parsed) : null;
 }
 
-function normalize(value: string) {
-  return value.replace(/\s+/g, ' ').trim();
-}
-
 function text(value: unknown) {
   return String(value ?? '').trim();
 }
 
 function toSnakeCase(value: string) {
   return value.replace(/[A-Z]/g, (letter) => `_${letter.toLowerCase()}`);
+}
+
+function generation(value: unknown) {
+  return createHash('sha256').update(stableJson(value)).digest('hex');
+}
+
+function stableJson(value: unknown): string {
+  if (value === null || typeof value !== 'object') return JSON.stringify(value) ?? 'null';
+  if (Array.isArray(value)) {
+    const entries = value.map(stableJson).sort();
+    return `[${entries.join(',')}]`;
+  }
+  const record = value as Record<string, unknown>;
+  return `{${Object.keys(record)
+    .sort()
+    .map((key) => `${JSON.stringify(key)}:${stableJson(record[key])}`)
+    .join(',')}}`;
 }
