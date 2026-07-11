@@ -211,6 +211,18 @@ export function createMemoryRouter() {
     }
   });
 
+  router.get('/grillo/projection/coverage', async (req, res) => {
+    try {
+      res.json({
+        ok: true,
+        backend: getLadybugMemoryService().getBackendLabel(),
+        coverage: await getGrilloWorkerService().getEvidenceProjectionCoverage(req.query.scopeKey),
+      });
+    } catch (error) {
+      sendError(res, error, 'GRILLO projection coverage audit failed.');
+    }
+  });
+
   router.get('/grillo/runtime', (_req, res) => {
     res.json({
       ok: true,

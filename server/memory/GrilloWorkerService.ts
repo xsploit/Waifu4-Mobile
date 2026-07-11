@@ -12,6 +12,7 @@ import {
   type GrilloClaimInput,
 } from './GrilloEvidenceLedger.js';
 import { buildGrilloLedgerProjection } from './GrilloLedgerProjector.js';
+import { auditGrilloProjectionCoverage } from './GrilloProjectionAudit.js';
 import type {
   GrilloContextPacket,
   GrilloEmbeddingIdentity,
@@ -272,6 +273,22 @@ export class GrilloWorkerService {
 
   async getEvidenceLedgerProjection(scopeKey: unknown) {
     return buildGrilloLedgerProjection(await this.getEvidenceLedgerReplay(scopeKey));
+  }
+
+  async getEvidenceProjectionCoverage(scopeKey: unknown) {
+    const normalizedScopeKey = normalizeKey(scopeKey, 'local:persona:default');
+    const [projection, memoryBlocks, memorySlots, relationshipProfiles] = await Promise.all([
+      this.getEvidenceLedgerProjection(normalizedScopeKey),
+      this.memory.readGrilloRecords<Record<string, unknown>>('memory_blocks'),
+      this.memory.readGrilloRecords<Record<string, unknown>>('memory_slots'),
+      this.memory.loadRelationshipProfiles(),
+    ]);
+    return auditGrilloProjectionCoverage(projection, {
+      memoryBlocks,
+      memorySlots,
+      relationshipProfile: asRecord(asRecord(relationshipProfiles)[normalizedScopeKey]),
+      scopeKey: normalizedScopeKey,
+    });
   }
 
   runTick(input: GrilloWorkerTickInput = {}) {

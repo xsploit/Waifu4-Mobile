@@ -29,6 +29,11 @@ const checks: Check[] = [
     expectedStatus: 200,
   },
   {
+    name: 'GRILLO projection coverage',
+    path: '/memory/grillo/projection/coverage?scopeKey=local%3Apersona%3Asmoke',
+    expectedStatus: 200,
+  },
+  {
     name: 'poml render',
     method: 'POST',
     path: '/ai/poml/render',

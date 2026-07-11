@@ -216,7 +216,7 @@ describe('GrilloWorkerService', () => {
           kind: 'preference',
           predicate: 'memory_check_style',
           subject: participantKey,
-          value: 'direct technical checks',
+          value: 'Subsect likes direct technical memory checks.',
         },
         name: 'core.worker_claim_propose',
         participantKey,
@@ -305,7 +305,7 @@ describe('GrilloWorkerService', () => {
       expect(memoryRead.result).toMatchObject({
         claims: [
           expect.objectContaining({
-            effectiveValue: 'direct technical checks',
+            effectiveValue: 'Subsect likes direct technical memory checks.',
             predicate: 'memory_check_style',
           }),
         ],
@@ -318,9 +318,15 @@ describe('GrilloWorkerService', () => {
       });
       expect(String(JSON.stringify(search.result))).toContain('native Ladybug worker tools');
       expect(String(JSON.stringify(search.result))).toContain('Native GRILLO worker tools use Ladybug records');
-      expect(String(JSON.stringify(search.result))).toContain('direct technical checks');
+      expect(String(JSON.stringify(search.result))).toContain('direct technical memory checks');
       expect(candidateList.result).toMatchObject({
         candidates: [expect.objectContaining({ summary: 'Subsect wants native Ladybug worker tools.' })],
+      });
+      const coverage = await grillo.getEvidenceProjectionCoverage(scopeKey);
+      expect(coverage).toMatchObject({
+        ready: false,
+        coverage: { exact: 0, total: 3, valueOnly: 2 },
+        legacyDrift: [],
       });
 
       const graph = await memory.getGraphSummary();

@@ -55,9 +55,13 @@ retrieval controller --> budgeted context packet --> main reply model
   extraction turn IDs, records applied/deferred/rejected decisions, and exposes
   current claims through the existing memory read/search tools. Deferred and
   no-op proposals do not inflate worker write counts.
-- Next Phase 2 work is projection equivalence and migration coverage. Do not
-  switch live prompt injection to ledger projections until tests cover the
-  established blocks, slots, relationship profiles, and temporal timelines.
+- `GET /api/memory/grillo/projection/coverage?scopeKey=...` now audits exact
+  predicate/value coverage for current blocks, slots, and relationship profile
+  fields. Value-only matches stay explicitly uncovered, block/slot drift blocks
+  readiness, and malformed ledger records also force `ready=false`.
+- The next decision is migration/backfill policy for established memory. Do not
+  switch live prompt injection to ledger projections until coverage is ready
+  for real profiles and a shadow comparison proves equivalent prompt context.
 
 ## Project Map
 
