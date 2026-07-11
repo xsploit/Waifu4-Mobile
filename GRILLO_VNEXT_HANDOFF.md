@@ -70,21 +70,35 @@ retrieval controller --> budgeted context packet --> main reply model
   migration report. It reconciles turn events with turn evidence, reports exact
   included/dropped legacy and ledger IDs, and refuses `safeToSwitch` when
   coverage, integrity, reconciliation, or lane-budget gates fail. It is not
-  called by live chat.
+  called by live chat. Optional `participantKeys` query values now apply the
+  same participant filtering used by the live blocks and slots lanes.
 - `GET /api/memory/grillo/migration/plan?scopeKey=...` is a read-only evidence
   migration planner. It proposes only deterministic turn-event-to-evidence
   inserts/no-ops/conflicts, schedules zero claim writes, and classifies legacy
   profile fields as durable claim candidates, rebuildable projections, derived
   runtime state, or records requiring provenance.
-- A live dry run for `local:persona:hikari-chan` found eight deterministic turn
-  evidence inserts, zero conflicts, zero existing ledger claims, and 22 legacy
-  relationship items. Counters, timestamps, current affect, relationship scores,
-  and summaries remain projections; four stored facts require evidence review
-  before they may become claims.
-- The next write boundary is applying the generation-guarded, idempotent turn
-  evidence plan and recording an audit receipt. Do not infer claims during that
-  backfill. Do not switch live prompt injection until real-profile shadow
-  coverage is ready and the user explicitly approves the switch.
+- Migration plans now carry stable source, evidence, and complete-plan hashes.
+  Exact existing evidence becomes a no-op; duplicate source IDs, any canonical
+  mismatch, malformed turns, stale generations, or ledger integrity failures
+  block writes.
+- `POST /api/memory/grillo/migration/apply` rebuilds the plan inside a per-scope
+  queue, appends only `evidence_records`, and writes append-only started,
+  completed, or failed migration receipts. Partial evidence remains canonical
+  and retry-safe; the migration path never deletes evidence as rollback.
+- The approved Hikari backfill completed for
+  `local:persona:hikari-chan`: eight evidence records were inserted, all eight
+  turn IDs reconcile exactly, zero claims were inferred, and a fresh retry is
+  `already_applied`. The relationship shadow correctly remains
+  `safeToSwitch=false` because 22 legacy profile items are not yet represented
+  by evidence-backed claims/projections.
+- Current `safeToSwitch` is deliberately limited to the relationship-memory
+  lane. It does not yet prove parity for channel history, diary, semantic recall,
+  client-side budget reduction, or the final rendered POML prompt.
+- Before any live switch, finish end-to-end prompt receipts, prevent mixed
+  embedding generations, remove arbitrary recent semantic fallback, expose
+  corrections/feedback end to end, and produce repeated participant-aware
+  whole-prompt shadow reports. A live switch still requires separate explicit
+  approval and an off-by-default per-scope rollback flag.
 
 ## Project Map
 
