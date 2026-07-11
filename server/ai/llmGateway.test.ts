@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { buildProviderOptions, toModelMessages } from './llmGateway';
+import { buildProviderOptions, resolveTemperature, toModelMessages } from './llmGateway';
 
 describe('LLM gateway message mapping', () => {
   it('passes Twitch stream frames as user image parts', () => {
@@ -78,5 +78,16 @@ describe('LLM gateway provider options', () => {
         false,
       ),
     ).toBeUndefined();
+  });
+});
+
+describe('LLM gateway generation settings', () => {
+  it('omits unsupported temperature for OpenAI reasoning models', () => {
+    expect(resolveTemperature({ model: 'openai/gpt-5-nano', temperature: 0.85 })).toBeUndefined();
+    expect(resolveTemperature({ model: 'openai/o3-mini', temperature: 0.4 })).toBeUndefined();
+  });
+
+  it('keeps temperature for ordinary chat models', () => {
+    expect(resolveTemperature({ model: 'deepseek/deepseek-v4-flash', temperature: 0.85 })).toBe(0.85);
   });
 });

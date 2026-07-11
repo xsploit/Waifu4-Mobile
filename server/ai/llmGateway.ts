@@ -91,6 +91,12 @@ function isReasoningModel(model: string): boolean {
   return leaf.includes('gpt-5') || /(^|\/)o[134](-|$|\b)/.test(leaf);
 }
 
+export function resolveTemperature(
+  req: Pick<StreamChatRequest, 'model' | 'temperature'>,
+) {
+  return isReasoningModel(req.model) ? undefined : req.temperature;
+}
+
 export type StreamChatResult = {
   visibleText: string;
   metadata: ReplyMetadata | null;
@@ -203,7 +209,7 @@ export async function completeChat(req: CompleteChatRequest): Promise<CompleteCh
     allowSystemInMessages: true,
     model,
     messages: toModelMessages(req.messages),
-    temperature: req.temperature,
+    temperature: resolveTemperature(req),
     maxOutputTokens: req.maxTokens,
     output: req.jsonMode ? jsonTextOutput : undefined,
     tools,
@@ -265,7 +271,7 @@ export async function streamChat(
     allowSystemInMessages: true,
     model,
     messages: toModelMessages(req.messages),
-    temperature: req.temperature,
+    temperature: resolveTemperature(req),
     maxOutputTokens: req.maxTokens,
     output: structured ? createAssistantStructuredOutput() : undefined,
     tools,
