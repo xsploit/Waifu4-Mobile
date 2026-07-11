@@ -94,11 +94,23 @@ retrieval controller --> budgeted context packet --> main reply model
 - Current `safeToSwitch` is deliberately limited to the relationship-memory
   lane. It does not yet prove parity for channel history, diary, semantic recall,
   client-side budget reduction, or the final rendered POML prompt.
-- Before any live switch, finish end-to-end prompt receipts, prevent mixed
-  embedding generations, remove arbitrary recent semantic fallback, expose
-  corrections/feedback end to end, and produce repeated participant-aware
-  whole-prompt shadow reports. A live switch still requires separate explicit
-  approval and an off-by-default per-scope rollback flag.
+- Semantic vector retrieval now filters known model/provider/version
+  generations even when dimensions match. If no exact generation exists, only
+  records with explicitly unknown legacy metadata may be used as a compatibility
+  fallback. Known mismatched generations never mix, and an unrelated query no
+  longer receives arbitrary recent semantic records.
+- `POST /api/memory/grillo/feedback` appends immutable feedback evidence.
+  `POST /api/memory/grillo/correction` appends correction evidence first, then
+  records a scoped correction and worker decision. Participant identity must
+  match the target claim. These writes remain outside live prompt injection.
+- Browser promotion now clusters normalized equivalent claims and requires
+  distinct source-turn evidence. Unrelated facts of the same type and duplicate
+  candidates from one turn cannot satisfy corroboration; multiple approved
+  clusters merge into one block version instead of overwriting each other.
+- Before any live switch, finish end-to-end prompt receipts and produce repeated
+  participant-aware whole-prompt shadow reports. Also add the repair queue,
+  persistent worker lease/watermark contract, and an explicit per-scope switch
+  with rollback. A live switch still requires separate user approval.
 
 ## Project Map
 
