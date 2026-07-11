@@ -1,4 +1,4 @@
-import { randomUUID } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import { z } from 'zod';
 import type {
   LadybugEmotionStateRecord,
@@ -1365,10 +1365,13 @@ export class GrilloWorkerService {
       .filter(inScope)
       .sort((left, right) => recordTimestamp(left) - recordTimestamp(right));
     const scopedTurns = sortedScopeTurns.slice(-14);
-    const scopedCandidates = candidates
-      .filter((record) => inScope(record) && includeParticipant(recordParticipantKey(record)))
-      .sort((left, right) => recordTimestamp(right) - recordTimestamp(left))
-      .slice(0, 8);
+    const sortedScopeCandidates = candidates
+      .filter(inScope)
+      .sort((left, right) => recordTimestamp(right) - recordTimestamp(left));
+    const participantCandidates = sortedScopeCandidates.filter((record) =>
+      includeParticipant(recordParticipantKey(record)),
+    );
+    const scopedCandidates = participantCandidates.slice(0, 8);
     const sortedScopeBlocks = blocks
       .filter(inScope)
       .sort((left, right) => recordUpdatedAt(right) - recordUpdatedAt(left));
@@ -1423,14 +1426,14 @@ export class GrilloWorkerService {
     const requestedRelationshipItems = includeProvenanceReceipt
       ? [
           ...relationshipProfileItems,
-          ...sortedScopeBlocks.flatMap(formatMemoryBlockItems),
-          ...sortedScopeSlots.flatMap(formatMemorySlotItems),
+          ...sortedScopeBlocks.flatMap((record) => formatMemoryBlockItems(record, Infinity)),
+          ...sortedScopeSlots.flatMap((record) => formatMemorySlotItems(record, Infinity)),
         ]
       : [];
     const eligibleRelationshipItems = [
       ...relationshipProfileItems,
-      ...scopedBlocks.flatMap(formatMemoryBlockItems),
-      ...scopedSlots.flatMap(formatMemorySlotItems),
+      ...scopedBlocks.flatMap((record) => formatMemoryBlockItems(record)),
+      ...scopedSlots.flatMap((record) => formatMemorySlotItems(record)),
     ];
     const relationshipItems = eligibleRelationshipItems.slice(0, 16);
     const relationshipMemory = relationshipItems.map((item) => item.text);
@@ -1443,6 +1446,20 @@ export class GrilloWorkerService {
       ].filter((item) => item.text.trim()),
       12,
     );
+    const requestedCandidateItems = includeProvenanceReceipt
+      ? sortedScopeCandidates.map((record) => formatCandidateRecallItem(record, scopeKey))
+      : [];
+    const requestedSemanticItems = includeProvenanceReceipt
+      ? (vectorSemantic.length > 0
+          ? vectorSemantic
+          : query
+            ? normalizedSemanticRecords.map((record) => ({
+                ...record,
+                score: Math.min(1, lexicalScore(record.text, query)),
+              }))
+            : []
+        ).map((record) => formatSemanticRecallItem(record, scopeKey))
+      : [];
     const provenanceReceipt = includeProvenanceReceipt
       ? buildServerContextProvenance({
           channel: {
@@ -1455,29 +1472,67 @@ export class GrilloWorkerService {
           },
           recalled: {
             dropped: [
+              ...participantCandidates
+                .slice(8)
+                .map((record) => provenanceDrop(formatCandidateRecallItem(record, scopeKey).id, 'record_limit')),
+              ...sortedScopeCandidates
+                .filter((record) => !includeParticipant(recordParticipantKey(record)))
+                .map((record) => provenanceDrop(formatCandidateRecallItem(record, scopeKey).id, 'participant_filter')),
+              ...(vectorSemantic.length === 0 && query
+                ? requestedSemanticItems
+                    .filter((item) => (item.score ?? 0) <= 0)
+                    .map((item) => provenanceDrop(item.id, 'semantic_filter'))
+                : []),
+              ...(vectorSemantic.length === 0 && query
+                ? requestedSemanticItems
+                    .filter((item) => (item.score ?? 0) > 0)
+                    .sort(
+                      (left, right) =>
+                        (right.score ?? 0) - (left.score ?? 0) || right.createdAt - left.createdAt,
+                    )
+                    .slice(8)
+                    .map((item) => provenanceDrop(item.id, 'semantic_limit'))
+                : []),
               ...recallSelection.receipt.droppedIds.map((id) => provenanceDrop(id, 'lane_limit')),
               ...recallSelection.receipt.duplicateIds.map((id) => provenanceDrop(id, 'duplicate')),
             ],
             duplicateIds: recallSelection.receipt.duplicateIds,
             included: recallSelection.items.map((item) => ({ id: item.id, text: item.text })),
-            requested: recallSelection.receipt.requestedIds.map((id) => ({ id, text: '' })),
+            requested: [...requestedCandidateItems, ...requestedSemanticItems].map((item) => ({
+              id: item.id,
+              text: item.text,
+            })),
           },
           relationship: {
             dropped: [
               ...droppedItems(
                 sortedScopeBlocks
                   .filter((record) => !includeParticipant(recordParticipantKey(record)))
-                  .flatMap(formatMemoryBlockItems),
+                  .flatMap((record) => formatMemoryBlockItems(record, Infinity)),
                 'participant_filter',
               ),
               ...droppedItems(
                 sortedScopeSlots
                   .filter((record) => !includeParticipant(recordParticipantKey(record)))
-                  .flatMap(formatMemorySlotItems),
+                  .flatMap((record) => formatMemorySlotItems(record, Infinity)),
                 'participant_filter',
               ),
-              ...droppedItems(participantBlocks.slice(8).flatMap(formatMemoryBlockItems), 'record_limit'),
-              ...droppedItems(participantSlots.slice(8).flatMap(formatMemorySlotItems), 'record_limit'),
+              ...droppedItems(
+                participantBlocks.slice(8).flatMap((record) => formatMemoryBlockItems(record, Infinity)),
+                'record_limit',
+              ),
+              ...droppedItems(
+                participantSlots.slice(8).flatMap((record) => formatMemorySlotItems(record, Infinity)),
+                'record_limit',
+              ),
+              ...droppedItems(
+                scopedBlocks.flatMap((record) => formatMemoryBlockItems(record, Infinity).slice(5)),
+                'item_limit',
+              ),
+              ...droppedItems(
+                scopedSlots.flatMap((record) => formatMemorySlotItems(record, Infinity).slice(5)),
+                'item_limit',
+              ),
               ...droppedItems(eligibleRelationshipItems.slice(16), 'lane_limit'),
             ],
             included: relationshipItems,
@@ -2070,7 +2125,7 @@ function formatCandidateRecallItem(
   const content = normalizeText(record['summary'] ?? record['content']);
   const id =
     normalizeText(record['candidate_id'] ?? record['candidateId'] ?? record['id']) ||
-    `candidate:${scopeKey}:${createdAt}:${content.slice(0, 80)}`;
+    provenanceFallbackId(record, 'candidate');
   return {
     createdAt,
     evidenceIds: dedupeStrings([
@@ -2871,29 +2926,37 @@ function formatTurnEventItem(record: Record<string, unknown>): ServerProvenanceI
     .filter(Boolean)
     .join(' ');
   return {
-    id: `turn:${recordTurnId(record) || `at:${recordTimestamp(record)}`}`,
+    id: recordTurnId(record)
+      ? `turn:${recordTurnId(record)}`
+      : provenanceFallbackId(record, 'turn'),
     text: `${author}: ${text}${metadata ? `\nmetadata: ${metadata}` : ''}`,
   };
 }
 
-function formatMemoryBlockItems(record: Record<string, unknown>): ServerProvenanceItem[] {
+function formatMemoryBlockItems(
+  record: Record<string, unknown>,
+  limit = 5,
+): ServerProvenanceItem[] {
   const blockName = normalizeText(record['blockName'] ?? record['block_name']) || 'memory';
   const participantKey = recordParticipantKey(record) || 'unknown';
   const recordId = provenanceRecordId(record, 'block', ['blockId', 'block_id', 'id']);
   return readJsonArray(record['itemsJson'] ?? record['items_json'] ?? record['items'])
-    .slice(0, 5)
+    .slice(0, limit)
     .map((item, index) => ({
       id: `${recordId}:item:${index}`,
       text: `[block:${blockName} ${participantKey}] ${item}`,
     }));
 }
 
-function formatMemorySlotItems(record: Record<string, unknown>): ServerProvenanceItem[] {
+function formatMemorySlotItems(
+  record: Record<string, unknown>,
+  limit = 5,
+): ServerProvenanceItem[] {
   const slotName = normalizeText(record['slotName'] ?? record['slot_name']) || 'slot';
   const participantKey = recordParticipantKey(record) || 'scope';
   const recordId = provenanceRecordId(record, 'slot', ['slotId', 'slot_id', 'id']);
   return readJsonArray(record['contentJson'] ?? record['content_json'])
-    .slice(0, 5)
+    .slice(0, limit)
     .map((item, index) => ({
       id: `${recordId}:item:${index}`,
       text: `[slot:${slotName} ${participantKey}] ${item}`,
@@ -2939,7 +3002,18 @@ function provenanceRecordId(
   keys: string[],
 ) {
   const sourceId = keys.map((key) => normalizeText(record[key])).find(Boolean);
-  return `${prefix}:${sourceId || `at:${recordTimestamp(record)}`}`;
+  return sourceId ? `${prefix}:${sourceId}` : provenanceFallbackId(record, prefix);
+}
+
+function provenanceFallbackId(record: Record<string, unknown>, prefix: string) {
+  const stableEntries = Object.keys(record)
+    .sort()
+    .map((key) => [key, record[key]]);
+  const digest = createHash('sha256')
+    .update(JSON.stringify([prefix, stableEntries]))
+    .digest('hex')
+    .slice(0, 24);
+  return `${prefix}:fallback:${digest}`;
 }
 
 function safeJsonParse(value: string) {

@@ -7,3 +7,8 @@ export function readQueryStringArray(value: unknown) {
       .filter(Boolean),
   )];
 }
+
+export function readQueryBoolean(value: unknown) {
+  const candidate = Array.isArray(value) ? value[0] : value;
+  return candidate === true || candidate === 'true' || candidate === '1';
+}

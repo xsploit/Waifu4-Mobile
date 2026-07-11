@@ -8,7 +8,7 @@ import {
   getLadybugMemoryService,
   type LadybugSemanticMemoryRecord,
 } from './LadybugMemoryService';
-import { readQueryStringArray } from './queryValues';
+import { readQueryBoolean, readQueryStringArray } from './queryValues';
 
 const gatewaySchema = z.enum(['vercel-gateway', 'openrouter-responses']);
 const contextBodySchema = z
@@ -188,6 +188,7 @@ export function createMemoryRouter() {
         ok: true,
         backend: getLadybugMemoryService().getBackendLabel(),
         packet: await getGrilloWorkerService().buildContextPacket({
+          includeProvenanceReceipt: readQueryBoolean(req.query.includeProvenanceReceipt),
           participantKeys: readQueryStringArray(
             req.query.participantKeys ?? req.query.participantKey,
           ),

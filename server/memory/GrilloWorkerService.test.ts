@@ -176,6 +176,11 @@ describe('GrilloWorkerService', () => {
         query: 'native GRILLO packet',
         scopeKey: 'local:persona:hikari-chan',
       });
+      const defaultPacket = await grillo.buildContextPacket({
+        participantKeys: ['local:local:subsect'],
+        query: 'native GRILLO packet',
+        scopeKey: 'local:persona:hikari-chan',
+      });
 
       expect(packet.background_information).toContain('scope_key: local:persona:hikari-chan');
       expect(packet.relationship_memory.join('\n')).toContain(
@@ -213,6 +218,18 @@ describe('GrilloWorkerService', () => {
       expect(packet.provenance_receipt?.lanes.thoughts.includedOccurrences).toHaveLength(
         packet.thoughts.length,
       );
+      expect(defaultPacket.provenance_receipt).toBeUndefined();
+      expect({
+        channel_history: packet.channel_history,
+        recalled_memories: packet.recalled_memories,
+        relationship_memory: packet.relationship_memory,
+        thoughts: packet.thoughts,
+      }).toEqual({
+        channel_history: defaultPacket.channel_history,
+        recalled_memories: defaultPacket.recalled_memories,
+        relationship_memory: defaultPacket.relationship_memory,
+        thoughts: defaultPacket.thoughts,
+      });
     } finally {
       await memory.close();
     }
@@ -236,7 +253,7 @@ describe('GrilloWorkerService', () => {
         await memory.appendGrilloRecord('memory_blocks', {
           block_id: `block-${index}`,
           block_name: 'preferences',
-          items: [`item ${index}-a`, `item ${index}-b`, `item ${index}-c`],
+          items: Array.from({ length: 7 }, (_, itemIndex) => `item ${index}-${itemIndex}`),
           participant_key: participantKey,
           scope_key: scopeKey,
           updated_at: 100 - index,
@@ -249,6 +266,26 @@ describe('GrilloWorkerService', () => {
         participant_key: 'local:local:other',
         scope_key: scopeKey,
         updated_at: 200,
+      });
+      for (let index = 0; index < 10; index += 1) {
+        await memory.appendGrilloRecord('memory_candidates', {
+          candidate_id: `candidate-${index}`,
+          confidence: 1 - index * 0.01,
+          created_at: 100 - index,
+          participant_key: participantKey,
+          scope_key: scopeKey,
+          summary: `candidate ${index}`,
+          type: 'fact',
+        });
+      }
+      await memory.appendGrilloRecord('memory_candidates', {
+        candidate_id: 'candidate-other',
+        confidence: 1,
+        created_at: 200,
+        participant_key: 'local:local:other',
+        scope_key: scopeKey,
+        summary: 'other participant candidate',
+        type: 'fact',
       });
       for (let index = 0; index < 7; index += 1) {
         await memory.appendGrilloRecord('diary_entries', {
@@ -285,7 +322,8 @@ describe('GrilloWorkerService', () => {
           expect.objectContaining({ id: 'block:block-other:item:0', reason: 'participant_filter' }),
           expect.objectContaining({ id: 'block:block-8:item:0', reason: 'record_limit' }),
           expect.objectContaining({ id: 'block:block-9:item:0', reason: 'record_limit' }),
-          expect.objectContaining({ id: 'block:block-5:item:1', reason: 'lane_limit' }),
+          expect.objectContaining({ id: 'block:block-0:item:5', reason: 'item_limit' }),
+          expect.objectContaining({ id: 'block:block-3:item:1', reason: 'lane_limit' }),
         ]),
       );
       expect(packet.thoughts).toHaveLength(5);
@@ -299,6 +337,44 @@ describe('GrilloWorkerService', () => {
       expect(receipt.lanes.relationship_memory.includedOccurrences).toHaveLength(
         packet.relationship_memory.length,
       );
+      expect(receipt.lanes.recalled_memories.dropped).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({ id: 'candidate-other', reason: 'participant_filter' }),
+          expect.objectContaining({ id: 'candidate-8', reason: 'record_limit' }),
+          expect.objectContaining({ id: 'candidate-9', reason: 'record_limit' }),
+        ]),
+      );
+    } finally {
+      await memory.close();
+    }
+  });
+
+  it('uses deterministic collision-resistant provenance IDs for legacy records without IDs', async () => {
+    const { grillo, memory } = createServices();
+    const scopeKey = 'local:persona:legacy-provenance';
+    try {
+      await memory.appendGrilloRecord('turn_events', {
+        content: 'first legacy turn',
+        created_at: 100,
+        role: 'user',
+        scope_key: scopeKey,
+      });
+      await memory.appendGrilloRecord('turn_events', {
+        content: 'second legacy turn',
+        created_at: 100,
+        role: 'user',
+        scope_key: scopeKey,
+      });
+
+      const first = await grillo.buildContextPacket({ includeProvenanceReceipt: true, scopeKey });
+      const second = await grillo.buildContextPacket({ includeProvenanceReceipt: true, scopeKey });
+      const firstIds = first.provenance_receipt!.lanes.channel_history.includedOccurrences;
+      const secondIds = second.provenance_receipt!.lanes.channel_history.includedOccurrences;
+
+      expect(firstIds).toHaveLength(2);
+      expect(new Set(firstIds).size).toBe(2);
+      expect(firstIds.every((id) => id.startsWith('turn:fallback:'))).toBe(true);
+      expect(secondIds).toEqual(firstIds);
     } finally {
       await memory.close();
     }
@@ -1023,6 +1099,7 @@ describe('GrilloWorkerService', () => {
       expect(semanticItems.map((item) => item.id)).not.toContain('semantic-newer-unrelated');
 
       const unrelatedPacket = await grillo.buildContextPacket({
+        includeProvenanceReceipt: true,
         query: 'quantum bananas',
         scopeKey,
       });
@@ -1030,7 +1107,12 @@ describe('GrilloWorkerService', () => {
       expect(
         unrelatedPacket.recalled_memories.filter((item) => item.source === 'semantic'),
       ).toEqual([]);
-      expect(unrelatedPacket.provenance_receipt).toBeUndefined();
+      expect(unrelatedPacket.provenance_receipt?.lanes.recalled_memories.dropped).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({ id: 'semantic-older-relevant', reason: 'semantic_filter' }),
+          expect.objectContaining({ id: 'semantic-newer-unrelated', reason: 'semantic_filter' }),
+        ]),
+      );
     } finally {
       await memory.close();
     }

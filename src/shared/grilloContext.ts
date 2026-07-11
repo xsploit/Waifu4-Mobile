@@ -42,7 +42,14 @@ export type GrilloProvenanceLaneName =
 
 export type GrilloProvenanceDrop = {
   id: string;
-  reason: 'duplicate' | 'lane_limit' | 'participant_filter' | 'record_limit';
+  reason:
+    | 'duplicate'
+    | 'item_limit'
+    | 'lane_limit'
+    | 'participant_filter'
+    | 'record_limit'
+    | 'semantic_filter'
+    | 'semantic_limit';
   stage: 'server_context_packet';
 };
 

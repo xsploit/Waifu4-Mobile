@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { readQueryStringArray } from './queryValues';
+import { readQueryBoolean, readQueryStringArray } from './queryValues';
 
 describe('readQueryStringArray', () => {
   it('accepts a single query value', () => {
@@ -15,5 +15,14 @@ describe('readQueryStringArray', () => {
 
   it('ignores non-string and empty values', () => {
     expect(readQueryStringArray([null, '', '  '])).toEqual([]);
+  });
+});
+
+describe('readQueryBoolean', () => {
+  it('accepts explicit true query values only', () => {
+    expect(readQueryBoolean('true')).toBe(true);
+    expect(readQueryBoolean(['1'])).toBe(true);
+    expect(readQueryBoolean('false')).toBe(false);
+    expect(readQueryBoolean(undefined)).toBe(false);
   });
 });
