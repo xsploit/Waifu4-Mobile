@@ -56,7 +56,7 @@ const LANE_ITEMS_PER_RECORD = 5;
  * Read-only shadow comparison between the legacy relationship-memory prompt
  * lane and the evidence-ledger projection. The legacy rendering below is a
  * byte-for-byte mirror of the `relationship_memory` lane assembled by
- * GrilloWorkerService.buildContextPacket (with no participant filter); it
+ * GrilloWorkerService.buildContextPacket for the requested participants; it
  * never feeds live prompt injection and never writes anything.
  */
 export function buildGrilloShadowComparison(
@@ -66,8 +66,8 @@ export function buildGrilloShadowComparison(
     (input.participantKeys ?? []).map((key) => key.trim().toLowerCase()).filter(Boolean),
   ).sort();
   const participantSet = new Set(participantKeys);
-  const includeParticipant = (participantKey: string | null, includeScope = false) =>
-    participantSet.size === 0 || (includeScope && !participantKey) || participantSet.has((participantKey ?? '').toLowerCase());
+  const includeParticipant = (participantKey: string | null) =>
+    participantSet.size === 0 || participantSet.has((participantKey ?? '').toLowerCase());
   const filteredBlocks = input.memoryBlocks.filter((record) =>
     includeParticipant(recordParticipantKey(record) || null),
   );
@@ -89,7 +89,7 @@ export function buildGrilloShadowComparison(
   const includedLegacy = legacyLines.slice(0, LANE_LINE_LIMIT);
   const droppedLegacy = legacyLines.slice(LANE_LINE_LIMIT);
   const ledgerLines = projection.slots
-    .filter((slot) => includeParticipant(slot.current.participantKey, true))
+    .filter((slot) => includeParticipant(slot.current.participantKey))
     .map((slot) => ({
       sourceId: slot.current.claimId,
       text: renderProjectedClaimLine(slot.current),

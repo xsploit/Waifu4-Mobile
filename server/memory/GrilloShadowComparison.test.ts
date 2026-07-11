@@ -144,6 +144,17 @@ describe('buildGrilloShadowComparison', () => {
       participant_key: 'local:local:someone-else',
       scope_key: SCOPE_KEY,
     });
+    const scopeClaim = claim('claim-scope', 'fact', 'scope_only', 'scope value');
+    delete scopeClaim.participantKey;
+    scopeClaim.subject = SCOPE_KEY;
+    input.replay.claims.push(scopeClaim);
+    input.replay.claimStates.push({
+      claim: scopeClaim,
+      effectiveValue: scopeClaim.value,
+      status: 'active',
+      validTo: null,
+    });
+    input.replay.activeClaims = input.replay.claimStates;
     const report = buildGrilloShadowComparison(input);
 
     expect(report.participantKeys).toEqual([PARTICIPANT_KEY]);
@@ -152,6 +163,7 @@ describe('buildGrilloShadowComparison', () => {
       '[block:preferences local:local:someone-else] unrelated preference',
     );
     expect(report.legacyPrompt.includedRecordIds).not.toContain('block-someone-else');
+    expect(report.ledgerPrompt.includedClaimIds).not.toContain('claim-scope');
   });
 });
 

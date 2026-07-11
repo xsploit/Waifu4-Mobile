@@ -292,6 +292,48 @@ describe('GrilloEvidenceLedger', () => {
     }
   });
 
+  it('requires correction participant identity to match the target claim exactly', async () => {
+    const { ledger, memory } = createLedger();
+    const scopeKey = 'local:persona:hikari-chan';
+    const participantKey = 'local:local:subsect';
+    try {
+      const evidence = await ledger.appendEvidence({
+        content: 'My favorite color is blue.',
+        kind: 'turn',
+        participantKey,
+        role: 'user',
+        scopeKey,
+        source: 'local',
+      });
+      const claim = await ledger.evaluateClaim({
+        confidence: 0.95,
+        evidenceIds: [evidence.id],
+        kind: 'preference',
+        participantKey,
+        predicate: 'favorite_color',
+        scopeKey,
+        subject: participantKey,
+        value: 'blue',
+      });
+      const correction = await ledger.recordCorrection({
+        correctedValue: 'navy blue',
+        evidenceIds: [evidence.id],
+        reason: 'More precise value.',
+        scopeKey,
+        targetClaimId: claim.claim!.id,
+      });
+
+      expect(correction.correction).toBeNull();
+      expect(correction.decision).toMatchObject({
+        operation: 'REJECT',
+        outcome: 'rejected',
+        publicReason: 'A correction participant must match its target claim.',
+      });
+    } finally {
+      await memory.close();
+    }
+  });
+
   it('replays supersession chains identically regardless of storage order', async () => {
     const scopeKey = 'local:persona:hikari-chan';
     const evidence = rawEvidence(scopeKey, 'evidence-1', 5);

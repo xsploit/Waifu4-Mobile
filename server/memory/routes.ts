@@ -8,6 +8,7 @@ import {
   getLadybugMemoryService,
   type LadybugSemanticMemoryRecord,
 } from './LadybugMemoryService';
+import { readQueryStringArray } from './queryValues';
 
 const gatewaySchema = z.enum(['vercel-gateway', 'openrouter-responses']);
 const contextBodySchema = z
@@ -186,7 +187,9 @@ export function createMemoryRouter() {
         ok: true,
         backend: getLadybugMemoryService().getBackendLabel(),
         packet: await getGrilloWorkerService().buildContextPacket({
-          participantKeys: req.query.participantKey,
+          participantKeys: readQueryStringArray(
+            req.query.participantKeys ?? req.query.participantKey,
+          ),
           query: req.query.query,
           scopeKey: req.query.scopeKey,
         }),
@@ -254,7 +257,7 @@ export function createMemoryRouter() {
         backend: getLadybugMemoryService().getBackendLabel(),
         shadow: await getGrilloWorkerService().getPromptShadowComparison(
           req.query.scopeKey,
-          req.query.participantKeys,
+          readQueryStringArray(req.query.participantKeys ?? req.query.participantKey),
         ),
       });
     } catch (error) {

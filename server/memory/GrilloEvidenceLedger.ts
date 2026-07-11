@@ -402,10 +402,7 @@ export class GrilloEvidenceLedger {
         scopeKey: parsed.scopeKey,
       });
     }
-    if (
-      parsed.participantKey &&
-      (targetClaim.participantKey ?? '') !== parsed.participantKey
-    ) {
+    if ((targetClaim.participantKey ?? '') !== (parsed.participantKey ?? '')) {
       return this.correctionDecision({
         correctionId,
         evidenceIds,

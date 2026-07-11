@@ -26,7 +26,7 @@ type GrilloMigrationReceipt = {
 };
 
 export type GrilloMigrationApplyResult = {
-  status: 'already_applied' | 'blocked' | 'completed' | 'dry_run' | 'failed' | 'stale';
+  status: 'already_applied' | 'blocked' | 'completed' | 'dry_run' | 'empty' | 'failed' | 'stale';
   scopeKey: string;
   runId: string | null;
   insertedTurnIds: string[];
@@ -65,6 +65,9 @@ export async function executeGrilloMigrationPlan(
   }
   if (input.dryRun) {
     return result(plan, 'dry_run', null, [], 'Generation guards match; no records were written.');
+  }
+  if (plan.evidenceBackfill.items.length === 0) {
+    return result(plan, 'empty', null, [], 'No canonical turn events exist in this scope.');
   }
   if (plan.evidenceBackfill.inserts === 0) {
     return result(plan, 'already_applied', null, [], 'All planned evidence already exists.');

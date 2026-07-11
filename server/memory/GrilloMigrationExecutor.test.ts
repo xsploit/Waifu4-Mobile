@@ -83,6 +83,18 @@ describe('executeGrilloMigrationPlan', () => {
     expect(dependencies.appendEvidence).not.toHaveBeenCalled();
     expect(dependencies.appendReceipt).not.toHaveBeenCalled();
   });
+
+  it('distinguishes an empty scope from an already-applied migration', async () => {
+    const plan = migrationPlan([]);
+    const dependencies = deps();
+    const result = await executeGrilloMigrationPlan(plan, request(plan, false), dependencies);
+    expect(result).toMatchObject({
+      status: 'empty',
+      publicReason: 'No canonical turn events exist in this scope.',
+    });
+    expect(dependencies.appendEvidence).not.toHaveBeenCalled();
+    expect(dependencies.appendReceipt).not.toHaveBeenCalled();
+  });
 });
 
 function migrationPlan(ids = ['turn-1']) {
