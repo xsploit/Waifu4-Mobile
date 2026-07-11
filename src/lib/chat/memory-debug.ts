@@ -1,4 +1,8 @@
-import type { GrilloRetrievalReceipt } from '../../shared/grilloContext';
+import type {
+  GrilloContextProvenanceReceipt,
+  GrilloRetrievalReceipt,
+} from '../../shared/grilloContext';
+import type { PromptProvenanceReceipt } from './prompt-provenance';
 
 export type MemoryPromptDebugSnapshot = {
   grilloContextPacket?: {
@@ -7,9 +11,11 @@ export type MemoryPromptDebugSnapshot = {
     output_description: string[];
     recalled_memories: string[];
     relationship_memory: string[];
+    provenance_receipt?: GrilloContextProvenanceReceipt;
     retrieval_receipt: GrilloRetrievalReceipt;
     thoughts: string[];
   } | null;
+  promptProvenance?: PromptProvenanceReceipt;
   grilloDiaryThoughts: string[];
   grilloRecalledMemories: string[];
   grilloRelationshipMemory: string[];

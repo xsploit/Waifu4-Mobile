@@ -932,6 +932,26 @@ export function ContextTab({
                 <p>No native Ladybug GRILLO packet loaded for the last prompt.</p>
               )}
             </div>
+            <div className="memory-entry">
+              <div className="memory-entry-header">
+                <strong>prompt_provenance</strong>
+                <span>{memoryPromptDebug.promptProvenance?.outboundProof ?? 'pending'}</span>
+              </div>
+              {memoryPromptDebug.promptProvenance ? (
+                <>
+                  <p>
+                    block {memoryPromptDebug.promptProvenance.blockProof} / occurrences{' '}
+                    {memoryPromptDebug.promptProvenance.blockOccurrenceCount} / hash{' '}
+                    {memoryPromptDebug.promptProvenance.hashAlgorithm}
+                  </p>
+                  <pre className="context-preview compact">
+                    {JSON.stringify(memoryPromptDebug.promptProvenance, null, 2)}
+                  </pre>
+                </>
+              ) : (
+                <p>Prompt provenance is calculated after the chat request starts.</p>
+              )}
+            </div>
           </div>
         ) : (
           <div className="status-copy">No completed prompt injection captured yet.</div>

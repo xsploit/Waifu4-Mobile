@@ -71,7 +71,8 @@ import {
   extractGrilloWorkerRelationshipJson,
   runGrilloMemoryWorkerLoop,
 } from './lib/chat/grillo-memory-loop';
-import { buildChatCompletionMessages, trimChatHistory } from './lib/chat/prompt';
+import { buildChatCompletionMessagesWithReceipt, trimChatHistory } from './lib/chat/prompt';
+import { buildPromptProvenanceReceipt } from './lib/chat/prompt-provenance';
 import { getTurnReplyLengthInstruction } from './lib/chat/reply-length';
 import {
   ASSISTANT_REPLY_JSON_FORMAT,
@@ -6109,6 +6110,7 @@ function App() {
               embeddingModel: embeddingResult?.model,
               embeddingProvider: embeddingResult?.provider,
               embeddingVersion: embeddingResult?.version,
+              includeProvenanceReceipt: true,
               participantKeys,
               query: userContent,
               queryEmbedding: embeddingResult?.embedding ?? null,
@@ -6155,12 +6157,14 @@ function App() {
                 console.warn('[App] Failed to load local GRILLO prompt memory', error);
               },
             );
+        const memoryPromptUpdatedAt = Date.now();
         setMemoryPromptDebug({
           grilloContextPacket: grilloContextPacket
             ? {
                 background_information: grilloContextPacket.background_information,
                 channel_history: grilloContextPacket.channel_history,
                 output_description: grilloContextPacket.output_description,
+                provenance_receipt: grilloContextPacket.provenance_receipt,
                 recalled_memories: grilloContextPacket.recalled_memories.map((item) => item.text),
                 relationship_memory: grilloContextPacket.relationship_memory,
                 retrieval_receipt: grilloContextPacket.retrieval_receipt,
@@ -6176,7 +6180,7 @@ function App() {
           source: targetMessage?.source ?? 'twitch',
           stateKey,
           turnText: userContent.slice(0, 600),
-          updatedAt: Date.now(),
+          updatedAt: memoryPromptUpdatedAt,
         });
         const promptVisionFrame = getFreshTwitchStreamFrameForPrompt({
           frame: twitchStreamFrameRef.current,
@@ -6186,8 +6190,7 @@ function App() {
           modelMetadata: availableModelMetadataRef.current.get(selectedModel) ?? null,
           visionEnabled: currentTwitchSettings.streamVisionContextEnabled,
         });
-        const promptMessages = attachStreamVisionFrame(
-          await buildChatCompletionMessages({
+        const promptBuild = await buildChatCompletionMessagesWithReceipt({
             animationCatalogContext: buildAnimationCatalogInstruction(
               sequencerSettingsRef.current.playlist,
             ),
@@ -6235,7 +6238,9 @@ function App() {
                   ? settings.inworldModelId
                   : '',
             ttsProvider: settings.ttsProvider,
-          }),
+          });
+        const promptMessages = attachStreamVisionFrame(
+          promptBuild.messages,
           promptVisionFrame,
         );
         if (isAppDiagnosticsEnabled()) {
@@ -6249,7 +6254,7 @@ function App() {
             promptChars: promptMessages.reduce((total, message) => total + message.content.length, 0),
           });
         }
-        const response = await requestChatCompletion({
+        const responsePromise = requestChatCompletion({
           activeChatters: job.activeChatterCount,
           mode: job.mode,
           model: selectedModel,
@@ -6270,6 +6275,23 @@ function App() {
           openRouterRouting: buildOpenRouterRouting(settings),
           signal: chatAbortController.signal,
         });
+        void buildPromptProvenanceReceipt({
+          grilloContext: promptBuild.grilloContext,
+          grilloReceipt: promptBuild.grilloReceipt,
+          outboundMessages: promptMessages,
+          pomlMessages: promptBuild.messages,
+          postPomlTransform: promptVisionFrame ? 'stream-vision' : 'none',
+          scopeKey: stateKey,
+        })
+          .then((promptProvenance) => {
+            setMemoryPromptDebug((current) =>
+              current?.updatedAt === memoryPromptUpdatedAt
+                ? { ...current, promptProvenance }
+                : current,
+            );
+          })
+          .catch(() => undefined);
+        const response = await responsePromise;
         if (response.meta) {
           setAiProxyHealth((current) => ({
             ...(current ?? {}),
