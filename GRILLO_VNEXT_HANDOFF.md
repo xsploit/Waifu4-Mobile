@@ -156,6 +156,10 @@ retrieval controller --> budgeted context packet --> main reply model
 - Sufficiency remains outside live chat preflight. Normal context packets do not
   compute or carry the receipt, probes do not trigger a second retrieval, and
   partial/insufficient receipts do not write repair events.
+- Live chat no longer requests the optional server provenance receipt. This
+  removes its extra ID formatting and response payload from preflight while
+  leaving context content and retrieval unchanged. Provenance and sufficiency
+  remain available through explicit diagnostics.
 - Before any live switch, produce repeated participant-aware whole-prompt shadow
   reports. Also add the repair queue, a real atomic persistent worker lease,
   and an explicit per-scope switch with rollback. A live switch still requires

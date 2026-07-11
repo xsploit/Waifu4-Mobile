@@ -6110,7 +6110,6 @@ function App() {
               embeddingModel: embeddingResult?.model,
               embeddingProvider: embeddingResult?.provider,
               embeddingVersion: embeddingResult?.version,
-              includeProvenanceReceipt: true,
               participantKeys,
               query: userContent,
               queryEmbedding: embeddingResult?.embedding ?? null,
