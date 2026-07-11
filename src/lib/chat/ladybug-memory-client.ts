@@ -128,6 +128,7 @@ export async function loadLadybugGrilloContextPacket(
     embeddingModel?: string;
     embeddingProvider?: string;
     embeddingVersion?: string;
+    includeProvenanceReceipt?: boolean;
     participantKeys?: string[];
     query?: string;
     queryEmbedding?: number[] | null;
@@ -140,6 +141,7 @@ export async function loadLadybugGrilloContextPacket(
         embeddingModel: options.embeddingModel?.trim() || undefined,
         embeddingProvider: options.embeddingProvider?.trim() || undefined,
         embeddingVersion: options.embeddingVersion?.trim() || undefined,
+        includeProvenanceReceipt: options.includeProvenanceReceipt || undefined,
         participantKeys: (options.participantKeys ?? []).map((key) => key.trim()).filter(Boolean),
         query: options.query?.trim() || undefined,
         queryEmbedding: options.queryEmbedding?.filter(Number.isFinite) ?? undefined,

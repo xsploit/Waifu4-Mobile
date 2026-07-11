@@ -75,6 +75,7 @@ describe('ladybug memory client', () => {
         embeddingModel: 'all-MiniLM-L6-v2',
         embeddingProvider: 'transformers-local',
         embeddingVersion: 'model-revision-unspecified',
+        includeProvenanceReceipt: true,
         participantKeys: ['local:local:subsect'],
         query: 'synthwave focus',
         queryEmbedding: [1, 0, 0],
@@ -86,6 +87,7 @@ describe('ladybug memory client', () => {
     expect(JSON.parse(String(init?.body))).toMatchObject({
       embeddingModel: 'all-MiniLM-L6-v2',
       embeddingProvider: 'transformers-local',
+      includeProvenanceReceipt: true,
       participantKeys: ['local:local:subsect'],
       query: 'synthwave focus',
       queryEmbedding: [1, 0, 0],
