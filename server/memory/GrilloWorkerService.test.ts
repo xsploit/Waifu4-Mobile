@@ -1,4 +1,5 @@
 import { rm } from 'node:fs/promises';
+import { randomUUID } from 'node:crypto';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
@@ -8,7 +9,7 @@ import { LadybugMemoryService } from './LadybugMemoryService';
 const dbPaths: string[] = [];
 
 function createServices() {
-  const dbPath = join(tmpdir(), `webwaifu4-grillo-worker-test-${process.pid}-${Date.now()}.db`);
+  const dbPath = join(tmpdir(), `webwaifu4-grillo-worker-test-${process.pid}-${randomUUID()}.db`);
   dbPaths.push(dbPath);
   const memory = new LadybugMemoryService(dbPath);
   let id = 0;
@@ -773,9 +774,9 @@ describe('GrilloWorkerService', () => {
       ]);
 
       const packet = await grillo.buildContextPacket({
-        embeddingModel: 'test-query-model',
-        embeddingProvider: 'test-query-provider',
-        embeddingVersion: 'query-v1',
+        embeddingModel: 'test-embedding',
+        embeddingProvider: 'test-provider',
+        embeddingVersion: 'v1',
         query: 'What music helps me focus while coding?',
         queryEmbedding: [1, 0, 0],
         scopeKey,
@@ -796,7 +797,7 @@ describe('GrilloWorkerService', () => {
       expect(packet.retrieval_receipt).toMatchObject({
         embedding: {
           dimensions: 3,
-          generation: 'test-query-provider:test-query-model:query-v1:3',
+          generation: 'test-provider:test-embedding:v1:3',
         },
         query: 'What music helps me focus while coding?',
         strategy: 'semantic_vector',
@@ -845,6 +846,15 @@ describe('GrilloWorkerService', () => {
       expect(packet.retrieval_receipt.strategy).toBe('lexical_fallback');
       expect(semanticItems[0]?.id).toBe('semantic-older-relevant');
       expect(semanticItems.map((item) => item.id)).not.toContain('semantic-newer-unrelated');
+
+      const unrelatedPacket = await grillo.buildContextPacket({
+        query: 'quantum bananas',
+        scopeKey,
+      });
+      expect(unrelatedPacket.retrieval_receipt.strategy).toBe('none');
+      expect(
+        unrelatedPacket.recalled_memories.filter((item) => item.source === 'semantic'),
+      ).toEqual([]);
     } finally {
       await memory.close();
     }

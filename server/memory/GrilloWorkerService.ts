@@ -1337,7 +1337,11 @@ export class GrilloWorkerService {
       this.memory.readGrilloRecords<Record<string, unknown>>('diary_entries'),
       this.memory.loadSemanticRecords(scopeKey),
       queryEmbedding.length > 0
-        ? this.memory.querySemanticVectors(scopeKey, queryEmbedding, 8)
+        ? this.memory.querySemanticVectors(scopeKey, queryEmbedding, 8, {
+            model: normalizeText(input.embeddingModel),
+            provider: normalizeText(input.embeddingProvider),
+            version: normalizeText(input.embeddingVersion),
+          })
         : Promise.resolve([]),
       this.memory.loadRelationshipProfiles(),
     ]);
@@ -1381,15 +1385,13 @@ export class GrilloWorkerService {
         ? 'semantic_vector'
         : lexicalSemantic.length > 0
           ? 'lexical_fallback'
-          : normalizedSemanticRecords.length > 0
-            ? 'recent_fallback'
-            : 'none';
+          : 'none';
     const semantic =
       vectorSemantic.length > 0
         ? vectorSemantic
         : lexicalSemantic.length > 0
           ? lexicalSemantic
-          : normalizedSemanticRecords.slice(0, 6).map((record) => ({ ...record, score: undefined }));
+          : [];
 
     const relationshipMemory = [
       ...formatRelationshipProfile(relationshipProfile),

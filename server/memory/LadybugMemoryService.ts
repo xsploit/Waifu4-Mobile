@@ -22,6 +22,7 @@ export type LadybugSemanticMemoryRecord = {
 
 export type LadybugSemanticMemoryMatch = LadybugSemanticMemoryRecord & {
   distance: number;
+  embeddingCompatibility: 'exact' | 'legacy_unknown';
   score: number;
 };
 
@@ -389,6 +390,7 @@ export class LadybugMemoryService {
     scopeKey: string,
     embedding: number[],
     limit = 4,
+    identity: { model?: string; provider?: string; version?: string } = {},
   ): Promise<LadybugSemanticMemoryMatch[]> {
     const normalizedEmbedding = normalizeEmbeddingArray(embedding);
     if (normalizedEmbedding.length === 0) {
@@ -403,16 +405,20 @@ export class LadybugMemoryService {
         normalizedScopeKey,
         normalizedEmbedding,
         limit,
+        identity,
         error,
       );
     }
     const vectorTable = semanticVectorTableName(normalizedEmbedding.length);
     const vectorIndex = semanticVectorIndexName(normalizedEmbedding.length);
     const rows = await this.all(
-      `CALL QUERY_VECTOR_INDEX('${vectorTable}', '${vectorIndex}', ${vectorLiteral(normalizedEmbedding)}, ${Math.max(limit * 8, limit)}) WITH node AS n, distance WHERE n.scopeKey = ${q(normalizedScopeKey)} RETURN n.id AS id, n.scopeKey AS scopeKey, n.personaId AS personaId, n.text AS text, n.userText AS userText, n.assistantText AS assistantText, n.embedding AS embedding, n.createdAt AS createdAt, distance ORDER BY distance LIMIT ${Math.max(1, Math.min(20, Math.trunc(limit)))}`,
+      `CALL QUERY_VECTOR_INDEX('${vectorTable}', '${vectorIndex}', ${vectorLiteral(normalizedEmbedding)}, ${Math.max(limit * 8, limit)}) WITH node AS n, distance WHERE n.scopeKey = ${q(normalizedScopeKey)} RETURN n.id AS id, n.scopeKey AS scopeKey, n.personaId AS personaId, n.text AS text, n.userText AS userText, n.assistantText AS assistantText, n.embedding AS embedding, n.createdAt AS createdAt, distance ORDER BY distance LIMIT ${Math.max(1, Math.min(160, Math.trunc(limit) * 8))}`,
     ).catch(() => []);
-    return rows.map((row) => {
+    const semanticRecords = await this.loadSemanticRecords(normalizedScopeKey);
+    const semanticRecordById = new Map((semanticRecords ?? []).map((record) => [record.id, record]));
+    const matches = rows.map((row) => {
       const distance = numberValue(row['distance'], 1);
+      const semanticRecord = semanticRecordById.get(stringValue(row['id']));
       const embeddingValue = Array.isArray(row['embedding'])
         ? normalizeEmbeddingArray(row['embedding'])
         : [];
@@ -421,6 +427,10 @@ export class LadybugMemoryService {
         createdAt: intValue(row['createdAt']),
         distance,
         embedding: embeddingValue.length ? embeddingValue : null,
+        embeddingModel: semanticRecord?.embeddingModel ?? '',
+        embeddingProvider: semanticRecord?.embeddingProvider ?? '',
+        embeddingVersion: semanticRecord?.embeddingVersion ?? '',
+        embeddingCompatibility: 'exact' as const,
         id: stringValue(row['id']),
         personaId: stringValue(row['personaId']) || 'unknown',
         scopeKey: stringValue(row['scopeKey']) || normalizedScopeKey,
@@ -429,6 +439,7 @@ export class LadybugMemoryService {
         userText: stringValue(row['userText']).slice(0, 1200),
       };
     });
+    return selectCompatibleSemanticMatches(matches, identity, limit);
   }
 
   async deleteSemanticRecords(scopeKey: string) {
@@ -1576,22 +1587,24 @@ export class LadybugMemoryService {
     scopeKey: string,
     embedding: number[],
     limit: number,
+    identity: { model?: string; provider?: string; version?: string },
     error: unknown,
   ): Promise<LadybugSemanticMemoryMatch[]> {
     await this.enableFallback(error);
     const records = await this.loadSemanticRecords(scopeKey);
-    return (records ?? [])
+    const matches = (records ?? [])
       .map((record) => {
         const distance = cosineDistance(embedding, normalizeEmbeddingArray(record.embedding));
         return {
           ...record,
           distance,
+          embeddingCompatibility: 'exact' as const,
           score: Math.max(0, 1 - distance),
         };
       })
       .filter((record) => Number.isFinite(record.distance))
-      .sort((left, right) => left.distance - right.distance)
-      .slice(0, Math.max(1, Math.min(20, Math.trunc(limit))));
+      .sort((left, right) => left.distance - right.distance);
+    return selectCompatibleSemanticMatches(matches, identity, limit);
   }
 
   private async enableFallback(error: unknown) {
@@ -2776,6 +2789,40 @@ function normalizeEmbeddingArray(value: unknown) {
   return value
     .map((item) => (typeof item === 'number' && Number.isFinite(item) ? item : null))
     .filter((item): item is number => item !== null);
+}
+
+function selectCompatibleSemanticMatches(
+  matches: LadybugSemanticMemoryMatch[],
+  identity: { model?: string; provider?: string; version?: string },
+  limit: number,
+) {
+  const requested = {
+    model: stringValue(identity.model),
+    provider: stringValue(identity.provider),
+    version: stringValue(identity.version),
+  };
+  const boundedLimit = Math.max(1, Math.min(20, Math.trunc(limit)));
+  if (!requested.model && !requested.provider && !requested.version) {
+    return matches.slice(0, boundedLimit);
+  }
+  const exact = matches.filter(
+    (record) =>
+      (!requested.model || record.embeddingModel === requested.model) &&
+      (!requested.provider || record.embeddingProvider === requested.provider) &&
+      (!requested.version || record.embeddingVersion === requested.version),
+  );
+  if (exact.length > 0) {
+    return exact
+      .map((record) => ({ ...record, embeddingCompatibility: 'exact' as const }))
+      .slice(0, boundedLimit);
+  }
+  return matches
+    .filter(
+      (record) =>
+        !record.embeddingModel && !record.embeddingProvider && !record.embeddingVersion,
+    )
+    .map((record) => ({ ...record, embeddingCompatibility: 'legacy_unknown' as const }))
+    .slice(0, boundedLimit);
 }
 
 function vectorLiteral(values: number[]) {

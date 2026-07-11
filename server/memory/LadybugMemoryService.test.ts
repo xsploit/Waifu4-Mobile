@@ -1,4 +1,5 @@
 import { rm } from 'node:fs/promises';
+import { randomUUID } from 'node:crypto';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { afterEach, describe, expect, it } from 'vitest';
@@ -7,7 +8,7 @@ import { LadybugMemoryService } from './LadybugMemoryService';
 const dbPaths: string[] = [];
 
 function createService() {
-  const dbPath = join(tmpdir(), `webwaifu4-ladybug-test-${process.pid}-${Date.now()}.db`);
+  const dbPath = join(tmpdir(), `webwaifu4-ladybug-test-${process.pid}-${randomUUID()}.db`);
   dbPaths.push(dbPath);
   return new LadybugMemoryService(dbPath);
 }
@@ -352,6 +353,63 @@ describe('LadybugMemoryService', () => {
       const clearedStatus = await service.getStatus();
       expect(clearedStatus.semanticRecords).toBe(0);
       expect(clearedStatus.semanticVectors).toBe(0);
+    } finally {
+      await service.close();
+    }
+  });
+
+  it('isolates same-dimension semantic vectors by embedding generation', async () => {
+    const service = createService();
+    const scopeKey = 'local:persona:embedding-isolation';
+    try {
+      await service.saveSemanticRecords(scopeKey, [
+        {
+          assistantText: 'model a answer',
+          createdAt: 10,
+          embedding: [1, 0, 0],
+          embeddingModel: 'model-a',
+          embeddingProvider: 'provider-a',
+          embeddingVersion: 'v1',
+          id: 'semantic-model-a',
+          personaId: 'embedding-isolation',
+          scopeKey,
+          text: 'model a memory',
+          userText: 'model a',
+        },
+        {
+          assistantText: 'model b answer',
+          createdAt: 11,
+          embedding: [1, 0, 0],
+          embeddingModel: 'model-b',
+          embeddingProvider: 'provider-b',
+          embeddingVersion: 'v2',
+          id: 'semantic-model-b',
+          personaId: 'embedding-isolation',
+          scopeKey,
+          text: 'model b memory',
+          userText: 'model b',
+        },
+      ]);
+
+      expect(
+        await service.querySemanticVectors(scopeKey, [1, 0, 0], 4, {
+          model: 'model-a',
+          provider: 'provider-a',
+          version: 'v1',
+        }),
+      ).toEqual([
+        expect.objectContaining({
+          embeddingCompatibility: 'exact',
+          id: 'semantic-model-a',
+        }),
+      ]);
+      expect(
+        await service.querySemanticVectors(scopeKey, [1, 0, 0], 4, {
+          model: 'model-c',
+          provider: 'provider-c',
+          version: 'v3',
+        }),
+      ).toEqual([]);
     } finally {
       await service.close();
     }
