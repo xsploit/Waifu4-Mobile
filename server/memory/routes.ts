@@ -237,6 +237,18 @@ export function createMemoryRouter() {
     }
   });
 
+  router.get('/grillo/migration/plan', async (req, res) => {
+    try {
+      res.json({
+        ok: true,
+        backend: getLadybugMemoryService().getBackendLabel(),
+        plan: await getGrilloWorkerService().getEvidenceMigrationPlan(req.query.scopeKey),
+      });
+    } catch (error) {
+      sendError(res, error, 'GRILLO migration planning failed.');
+    }
+  });
+
   router.get('/grillo/runtime', (_req, res) => {
     res.json({
       ok: true,

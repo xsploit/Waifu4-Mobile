@@ -12,6 +12,7 @@ import {
   type GrilloClaimInput,
 } from './GrilloEvidenceLedger.js';
 import { buildGrilloLedgerProjection } from './GrilloLedgerProjector.js';
+import { buildGrilloMigrationPlan } from './GrilloMigrationPlan.js';
 import { auditGrilloProjectionCoverage } from './GrilloProjectionAudit.js';
 import { buildGrilloShadowComparison } from './GrilloShadowComparison.js';
 import type {
@@ -312,6 +313,23 @@ export class GrilloWorkerService {
       generatedAt: this.nowMs(),
       memoryBlocks,
       memorySlots,
+      relationshipProfile: asRecord(asRecord(relationshipProfiles)[normalizedScopeKey]),
+      replay,
+      scopeKey: normalizedScopeKey,
+      turnEvents,
+    });
+  }
+
+  /** Read-only plan. It does not backfill evidence or write claims. */
+  // fallow-ignore-next-line unused-class-member
+  async getEvidenceMigrationPlan(scopeKey: unknown) {
+    const normalizedScopeKey = normalizeKey(scopeKey, 'local:persona:default');
+    const [replay, turnEvents, relationshipProfiles] = await Promise.all([
+      this.evidenceLedger.replay(normalizedScopeKey),
+      this.memory.readGrilloRecords<Record<string, unknown>>('turn_events'),
+      this.memory.loadRelationshipProfiles(),
+    ]);
+    return buildGrilloMigrationPlan({
       relationshipProfile: asRecord(asRecord(relationshipProfiles)[normalizedScopeKey]),
       replay,
       scopeKey: normalizedScopeKey,

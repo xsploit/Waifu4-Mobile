@@ -39,6 +39,11 @@ const checks: Check[] = [
     expectedStatus: 200,
   },
   {
+    name: 'GRILLO migration plan',
+    path: '/memory/grillo/migration/plan?scopeKey=local%3Apersona%3Asmoke',
+    expectedStatus: 200,
+  },
+  {
     name: 'poml render',
     method: 'POST',
     path: '/ai/poml/render',
