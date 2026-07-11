@@ -12,6 +12,11 @@ import {
   type GrilloClaimInput,
 } from './GrilloEvidenceLedger.js';
 import { buildGrilloLedgerProjection } from './GrilloLedgerProjector.js';
+import {
+  executeGrilloMigrationPlan,
+  type GrilloMigrationApplyInput,
+  type GrilloMigrationApplyResult,
+} from './GrilloMigrationExecutor.js';
 import { buildGrilloMigrationPlan } from './GrilloMigrationPlan.js';
 import { auditGrilloProjectionCoverage } from './GrilloProjectionAudit.js';
 import { buildGrilloShadowComparison } from './GrilloShadowComparison.js';
@@ -204,6 +209,7 @@ type GrilloWorkerTaskResult = {
 
 export class GrilloWorkerService {
   private readonly evidenceLedger: GrilloEvidenceLedger;
+  private readonly migrationQueues = new Map<string, Promise<void>>();
   private activeTickPromise: Promise<GrilloWorkerTickResult> | null = null;
   private runtime: GrilloWorkerRuntimeState = {
     enabled: false,
@@ -321,7 +327,6 @@ export class GrilloWorkerService {
   }
 
   /** Read-only plan. It does not backfill evidence or write claims. */
-  // fallow-ignore-next-line unused-class-member
   async getEvidenceMigrationPlan(scopeKey: unknown) {
     const normalizedScopeKey = normalizeKey(scopeKey, 'local:persona:default');
     const [replay, turnEvents, relationshipProfiles] = await Promise.all([
@@ -334,6 +339,22 @@ export class GrilloWorkerService {
       replay,
       scopeKey: normalizedScopeKey,
       turnEvents,
+    });
+  }
+
+  applyEvidenceMigration(
+    scopeKey: unknown,
+    input: GrilloMigrationApplyInput,
+  ): Promise<GrilloMigrationApplyResult> {
+    const normalizedScopeKey = normalizeKey(scopeKey, 'local:persona:default');
+    return this.withMigrationQueue(normalizedScopeKey, async () => {
+      const plan = await this.getEvidenceMigrationPlan(normalizedScopeKey);
+      return executeGrilloMigrationPlan(plan, input, {
+        appendEvidence: (record) => this.evidenceLedger.appendEvidence(record),
+        appendReceipt: (receipt) => this.memory.appendGrilloRecord('migration_receipts', receipt),
+        idFactory: this.idFactory,
+        nowMs: this.nowMs,
+      });
     });
   }
 
@@ -1852,6 +1873,21 @@ export class GrilloWorkerService {
       scope_key: input.scopeKey,
       tool_name: input.name,
       user_id: input.scopeKey,
+    });
+  }
+
+  private withMigrationQueue<T>(scopeKey: string, task: () => Promise<T>) {
+    const previous = this.migrationQueues.get(scopeKey) ?? Promise.resolve();
+    const run = previous.catch(() => undefined).then(task);
+    const settled = run.then(
+      () => undefined,
+      () => undefined,
+    );
+    this.migrationQueues.set(scopeKey, settled);
+    return run.finally(() => {
+      if (this.migrationQueues.get(scopeKey) === settled) {
+        this.migrationQueues.delete(scopeKey);
+      }
     });
   }
 }

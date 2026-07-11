@@ -37,6 +37,15 @@ const runtimeBodySchema = z
     scopeKey: z.unknown().optional(),
   })
   .passthrough();
+const migrationApplyBodySchema = z
+  .object({
+    dryRun: z.boolean(),
+    evidenceGeneration: z.string().regex(/^[a-f0-9]{64}$/),
+    planHash: z.string().regex(/^[a-f0-9]{64}$/),
+    scopeKey: z.string().trim().min(1).max(240),
+    sourceGeneration: z.string().regex(/^[a-f0-9]{64}$/),
+  })
+  .strict();
 
 let grilloWorkerService: GrilloWorkerService | null = null;
 
@@ -246,6 +255,31 @@ export function createMemoryRouter() {
       });
     } catch (error) {
       sendError(res, error, 'GRILLO migration planning failed.');
+    }
+  });
+
+  router.post('/grillo/migration/apply', async (req, res) => {
+    try {
+      const body = migrationApplyBodySchema.parse(req.body ?? {});
+      const result = await getGrilloWorkerService().applyEvidenceMigration(body.scopeKey, body);
+      const status =
+        result.status === 'stale' || result.status === 'blocked'
+          ? 409
+          : result.status === 'failed'
+            ? 500
+            : 200;
+      res.status(status).json({
+        ok: status === 200,
+        backend: getLadybugMemoryService().getBackendLabel(),
+        result,
+      });
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        res.status(400).json({ ok: false, error: 'Invalid GRILLO migration request.' });
+        return;
+      }
+      res.status(500);
+      sendError(res, error, 'GRILLO migration apply failed.');
     }
   });
 

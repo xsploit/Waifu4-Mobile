@@ -684,6 +684,51 @@ describe('GrilloWorkerService', () => {
     }
   });
 
+  it('serializes guarded evidence migrations and backfills each turn once', async () => {
+    const { grillo, memory } = createServices();
+    const scopeKey = 'local:persona:hikari-chan';
+    try {
+      await memory.appendGrilloRecord('turn_events', {
+        turn_id: 'legacy-turn-1',
+        content: 'A historical turn that predates the evidence ledger.',
+        created_at: 1760000000000,
+        role: 'user',
+        scope_key: scopeKey,
+        source: 'local',
+      });
+      const plan = await grillo.getEvidenceMigrationPlan(scopeKey);
+      const request = {
+        dryRun: false,
+        evidenceGeneration: plan.evidenceGeneration,
+        planHash: plan.planHash,
+        sourceGeneration: plan.sourceGeneration,
+      };
+      const results = await Promise.all([
+        grillo.applyEvidenceMigration(scopeKey, request),
+        grillo.applyEvidenceMigration(scopeKey, request),
+      ]);
+
+      expect(results.map((result) => result.status).sort()).toEqual(['completed', 'stale']);
+      const replay = await grillo.getEvidenceLedgerReplay(scopeKey);
+      expect(replay.evidence.map((record) => record.id)).toEqual(['legacy-turn-1']);
+      const receipts = await memory.readGrilloRecords<Record<string, unknown>>('migration_receipts');
+      expect(receipts.map((record) => record['event'])).toEqual(['started', 'completed']);
+
+      const freshPlan = await grillo.getEvidenceMigrationPlan(scopeKey);
+      expect(
+        await grillo.applyEvidenceMigration(scopeKey, {
+          dryRun: false,
+          evidenceGeneration: freshPlan.evidenceGeneration,
+          planHash: freshPlan.planHash,
+          sourceGeneration: freshPlan.sourceGeneration,
+        }),
+      ).toMatchObject({ status: 'already_applied', insertedTurnIds: [] });
+      expect(await memory.readGrilloRecords('migration_receipts')).toHaveLength(2);
+    } finally {
+      await memory.close();
+    }
+  });
+
   it('ranks current-query semantic vectors with stable provenance and scope isolation', async () => {
     const { grillo, memory } = createServices();
     const scopeKey = 'local:persona:hikari-vector-recall';

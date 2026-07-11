@@ -44,6 +44,13 @@ const checks: Check[] = [
     expectedStatus: 200,
   },
   {
+    name: 'GRILLO migration apply validation guard',
+    method: 'POST',
+    path: '/memory/grillo/migration/apply',
+    expectedStatus: 400,
+    body: {},
+  },
+  {
     name: 'poml render',
     method: 'POST',
     path: '/ai/poml/render',
