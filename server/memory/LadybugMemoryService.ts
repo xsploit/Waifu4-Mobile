@@ -32,6 +32,7 @@ export type LadybugGrilloRecordEntity =
   | 'memory_claims'
   | 'memory_corrections'
   | 'worker_decisions'
+  | 'repair_queue_events'
   | 'migration_receipts'
   | 'memory_candidates'
   | 'diary_entries'
@@ -2425,6 +2426,7 @@ const GRILLO_RECORD_ENTITIES = new Set<LadybugGrilloRecordEntity>([
   'memory_claims',
   'memory_corrections',
   'worker_decisions',
+  'repair_queue_events',
   'migration_receipts',
   'memory_candidates',
   'diary_entries',

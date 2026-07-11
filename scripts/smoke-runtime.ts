@@ -65,6 +65,11 @@ const checks: Check[] = [
     body: {},
   },
   {
+    name: 'GRILLO repair queue',
+    path: '/memory/grillo/repair-queue?scopeKey=local%3Apersona%3Asmoke&status=open',
+    expectedStatus: 200,
+  },
+  {
     name: 'poml render',
     method: 'POST',
     path: '/ai/poml/render',

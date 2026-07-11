@@ -964,6 +964,18 @@ describe('GrilloWorkerService', () => {
 
       expect(feedback).toMatchObject({ kind: 'feedback', role: 'user', scopeKey });
       expect(correction.decision).toMatchObject({ outcome: 'applied', operation: 'UPDATE' });
+      const repairTasks = await grillo.listRepairQueue(scopeKey, 'open');
+      expect(repairTasks).toHaveLength(2);
+      expect(repairTasks).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            signalKind: 'correction',
+            sourceRecordIds: ['claim-color'],
+            status: 'open',
+          }),
+          expect.objectContaining({ signalKind: 'feedback', status: 'open' }),
+        ]),
+      );
       expect(replay.activeClaims).toEqual([
         expect.objectContaining({
           effectiveValue: 'blue',

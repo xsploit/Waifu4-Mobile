@@ -11,6 +11,7 @@ import {
   GrilloEvidenceLedger,
   type GrilloClaimInput,
 } from './GrilloEvidenceLedger.js';
+import { GrilloRepairQueue, type GrilloRepairTask } from './GrilloRepairQueue.js';
 import { buildGrilloLedgerProjection } from './GrilloLedgerProjector.js';
 import {
   executeGrilloMigrationPlan,
@@ -225,6 +226,7 @@ type GrilloWorkerTaskResult = {
 
 export class GrilloWorkerService {
   private readonly evidenceLedger: GrilloEvidenceLedger;
+  private readonly repairQueue: GrilloRepairQueue;
   private readonly migrationQueues = new Map<string, Promise<void>>();
   private activeTickPromise: Promise<GrilloWorkerTickResult> | null = null;
   private runtime: GrilloWorkerRuntimeState = {
@@ -253,6 +255,7 @@ export class GrilloWorkerService {
       nowMs,
       idFactory: () => idFactory(),
     });
+    this.repairQueue = new GrilloRepairQueue(memory, { nowMs, idFactory });
   }
 
   start(options: GrilloWorkerRuntimeOptions = {}) {
@@ -2055,7 +2058,7 @@ export class GrilloWorkerService {
     const content = normalizeText(input.content);
     if (!content) throw new Error('feedback content is required');
     const participantKey = normalizeKey(input.participantKey, '');
-    return this.evidenceLedger.appendEvidence({
+    const evidence = await this.evidenceLedger.appendEvidence({
       id: this.idFactory(),
       content,
       createdAt: this.nowMs(),
@@ -2067,6 +2070,17 @@ export class GrilloWorkerService {
       source: normalizeKey(input.source, 'manual-feedback'),
       sourceRecordIds: [],
     });
+    await this.repairQueue.enqueue({
+      id: `repair-event:${evidence.id}:enqueue`,
+      taskId: `repair:${evidence.id}`,
+      scopeKey,
+      ...(participantKey ? { participantKey } : {}),
+      signalKind: 'feedback',
+      summary: content,
+      evidenceIds: [evidence.id],
+      sourceRecordIds: evidence.sourceRecordIds,
+    });
+    return evidence;
   }
 
   async recordMemoryCorrection(input: GrilloMemoryCorrectionInput) {
@@ -2091,7 +2105,7 @@ export class GrilloWorkerService {
       source: normalizeKey(input.source, 'manual-correction'),
       sourceRecordIds: [],
     });
-    return this.evidenceLedger.recordCorrection({
+    const result = await this.evidenceLedger.recordCorrection({
       correctedValue,
       evidenceIds: [evidence.id],
       ...(participantKey ? { participantKey } : {}),
@@ -2099,6 +2113,21 @@ export class GrilloWorkerService {
       scopeKey,
       targetClaimId,
     });
+    await this.repairQueue.enqueue({
+      id: `repair-event:${evidence.id}:enqueue`,
+      taskId: `repair:${evidence.id}`,
+      scopeKey,
+      ...(participantKey ? { participantKey } : {}),
+      signalKind: 'correction',
+      summary: reason,
+      evidenceIds: [evidence.id],
+      sourceRecordIds: [targetClaimId],
+    });
+    return result;
+  }
+
+  listRepairQueue(scopeKey: string, status?: GrilloRepairTask['status']) {
+    return this.repairQueue.list(normalizeKey(scopeKey, 'local:persona:default'), status);
   }
 
   private withMigrationQueue<T>(scopeKey: string, task: () => Promise<T>) {

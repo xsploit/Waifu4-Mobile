@@ -61,6 +61,7 @@ const memoryCorrectionBodySchema = memoryFeedbackBodySchema.extend({
   reason: z.string().trim().min(1).max(2_000),
   targetClaimId: z.string().trim().min(1).max(240),
 });
+const repairQueueStatusSchema = z.enum(['open', 'resolved', 'deferred']);
 
 let grilloWorkerService: GrilloWorkerService | null = null;
 
@@ -338,6 +339,26 @@ export function createMemoryRouter() {
       }
       res.status(500);
       sendError(res, error, 'GRILLO correction write failed.');
+    }
+  });
+
+  router.get('/grillo/repair-queue', async (req, res) => {
+    try {
+      const scopeKey = normalizeScopeKey(req.query['scopeKey']);
+      const rawStatus = typeof req.query['status'] === 'string' ? req.query['status'] : undefined;
+      const status = rawStatus ? repairQueueStatusSchema.parse(rawStatus) : undefined;
+      res.json({
+        ok: true,
+        backend: getLadybugMemoryService().getBackendLabel(),
+        tasks: await getGrilloWorkerService().listRepairQueue(scopeKey, status),
+      });
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        res.status(400).json({ ok: false, error: 'Invalid GRILLO repair queue request.' });
+        return;
+      }
+      res.status(500);
+      sendError(res, error, 'GRILLO repair queue read failed.');
     }
   });
 
