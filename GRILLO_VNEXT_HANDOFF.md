@@ -107,6 +107,12 @@ retrieval controller --> budgeted context packet --> main reply model
   distinct source-turn evidence. Unrelated facts of the same type and duplicate
   candidates from one turn cannot satisfy corroboration; multiple approved
   clusters merge into one block version instead of overwriting each other.
+- Fable verification of `0b1f4db` found no actionable issues. Scalar and
+  comma-separated participant query values now reach both context and shadow
+  routes, corrections require exact participant identity, participant-filtered
+  shadow output mirrors the live lane, and empty migration scopes are distinct
+  from completed no-op migrations. The full release audit passed with 72 test
+  files and 355 tests.
 - Before any live switch, finish end-to-end prompt receipts and produce repeated
   participant-aware whole-prompt shadow reports. Also add the repair queue,
   persistent worker lease/watermark contract, and an explicit per-scope switch
@@ -198,24 +204,28 @@ features under new names:
 - Per-lane and global context budgets with reduction summaries.
 - Browser/local fallback behavior when the native backend is unavailable.
 
-## Confirmed Recall Defect
+## Resolved Recall Defect
 
-Fix this before adding more cognition.
+The original native-packet path discarded the browser's query-based semantic
+result and substituted recent records with synthetic scores. Phase 1 repaired
+that path: the native packet now receives current-query vector matches with
+stable record and evidence IDs, scores, timestamps, scope metadata, and exact
+embedding model/provider/version filtering. Known incompatible generations do
+not mix, and unrelated queries no longer receive arbitrary recent records.
 
-1. `src/App.tsx` calls `getSemanticMemoryContext(...)` with the current user
-   query and separately loads the native Ladybug GRILLO context packet.
-2. When the native packet succeeds, `src/lib/chat/grillo-context.ts` sets
-   `useNativePacket=true` and excludes `semanticMemoryContext`.
-3. `GrilloWorkerService.buildContextPacket(...)` does not perform query-vector
-   retrieval. It loads semantic records, takes the first six, and assigns
-   synthetic descending scores.
-4. Therefore the good query-based semantic result is calculated and then
-   discarded during the normal native-backend path.
+The remaining observability gap is later in the same pipeline. Server receipts
+are complete only for `recalled_memories`; channel history, relationship lines,
+and diary lines become bare strings. The client then performs another budget
+reduction that reports counts but not IDs, and the final POML render returns
+plain messages without proving which GRILLO records reached the outbound system
+message.
 
-The native packet should receive real semantic vector matches for the current
-query, including stable record IDs, scores, evidence IDs, timestamps, embedding
-model/version metadata, and scope metadata. Do not fix this by merely increasing
-the number of recent records.
+The next slice must remain diagnostic-only and preserve byte-identical prompt
+text. Give every lane item a stable source ID, record ordered included, dropped,
+and duplicate IDs at server and client reducer stages, and produce an in-memory
+receipt proving the finalized GRILLO block occurs exactly once in the rendered
+POML system message. Do not persist raw prompts, switch projections, gate
+injection, or add network telemetry without separate approval.
 
 ## Structural Weaknesses To Address
 
