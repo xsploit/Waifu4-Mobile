@@ -12,6 +12,7 @@ import {
   type GrilloClaimInput,
 } from './GrilloEvidenceLedger.js';
 import { GrilloRepairQueue, type GrilloRepairTask } from './GrilloRepairQueue.js';
+import { assessGrilloMemorySufficiency } from './GrilloRetrievalController.js';
 import { buildGrilloLedgerProjection } from './GrilloLedgerProjector.js';
 import {
   executeGrilloMigrationPlan,
@@ -1581,7 +1582,7 @@ export class GrilloWorkerService {
         })
       : undefined;
 
-    return {
+    const packet: GrilloContextPacket = {
       background_information: [
         `scope_key: ${scopeKey}`,
         `source: ${inferSource(scopeKey)}`,
@@ -1615,6 +1616,12 @@ export class GrilloWorkerService {
       scopeKey,
       thoughts: thoughtItems.map((item) => item.text),
     };
+    return includeProvenanceReceipt
+      ? {
+          ...packet,
+          memory_sufficiency_receipt: assessGrilloMemorySufficiency(query, packet),
+        }
+      : packet;
   }
 
   private async executeWorkerTool(

@@ -202,6 +202,11 @@ describe('GrilloWorkerService', () => {
         stage: 'server_context_packet',
         version: '1.0.0',
       });
+      expect(packet.memory_sufficiency_receipt).toMatchObject({
+        intents: ['general'],
+        status: 'sufficient',
+        version: '1.0.0',
+      });
       expect(packet.provenance_receipt?.lanes.channel_history.includedOccurrences).toHaveLength(
         packet.channel_history.length,
       );
@@ -219,6 +224,7 @@ describe('GrilloWorkerService', () => {
         packet.thoughts.length,
       );
       expect(defaultPacket.provenance_receipt).toBeUndefined();
+      expect(defaultPacket.memory_sufficiency_receipt).toBeUndefined();
       expect({
         channel_history: packet.channel_history,
         recalled_memories: packet.recalled_memories,

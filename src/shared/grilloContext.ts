@@ -65,12 +65,33 @@ export type GrilloContextProvenanceReceipt = {
   version: '1.0.0';
 };
 
+export type GrilloRetrievalIntent =
+  | 'general'
+  | 'correction'
+  | 'temporal'
+  | 'commitment'
+  | 'relationship'
+  | 'personal'
+  | 'metacognitive';
+
+export type GrilloMemorySufficiencyReceipt = {
+  intents: GrilloRetrievalIntent[];
+  probes: string[];
+  requiredLanes: Array<'channel_history' | 'relationship_memory' | 'recalled_memories'>;
+  missingLanes: Array<'channel_history' | 'relationship_memory' | 'recalled_memories'>;
+  droppedRelevantIds: string[];
+  reasons: string[];
+  status: 'sufficient' | 'partial' | 'insufficient';
+  version: '1.0.0';
+};
+
 export type GrilloContextPacket = {
   background_information: string[];
   channel_history: string[];
   generatedAt: number;
   output_description: string[];
   provenance_receipt?: GrilloContextProvenanceReceipt;
+  memory_sufficiency_receipt?: GrilloMemorySufficiencyReceipt;
   recalled_memories: GrilloRecallItem[];
   relationship_memory: string[];
   retrieval_receipt: GrilloRetrievalReceipt;
