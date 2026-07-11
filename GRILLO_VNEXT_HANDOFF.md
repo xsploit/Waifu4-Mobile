@@ -137,6 +137,15 @@ retrieval controller --> budgeted context packet --> main reply model
   compare-and-swap API, the JSON fallback serializes writes only inside one
   process, and deployment does not enforce one instance. Do not substitute a
   read-then-write singleton lock: it can grant the lease to two processes.
+- The repair queue foundation is live as append-only `repair_queue_events`.
+  Manual feedback and correction evidence enqueue deterministic scoped tasks;
+  `GET /api/memory/grillo/repair-queue` exposes replayed open, deferred, or
+  resolved state. The GRILLO worker has participant-filtered `repair_list` and
+  ownership-checked `repair_transition` tools. Commits `34ab97a` and `233e119`
+  passed the full release gate with 75 test files and 370 tests.
+- Repair diagnosis is not yet automatic. Add deterministic enqueue rules for
+  weak grounding, missing lanes, dropped evidence, and unresolved questions;
+  do not let model-written summaries alone create these signals.
 - Before any live switch, produce repeated participant-aware whole-prompt shadow
   reports. Also add the repair queue, a real atomic persistent worker lease,
   and an explicit per-scope switch with rollback. A live switch still requires
@@ -335,8 +344,10 @@ attempt to extract or persist hidden chain-of-thought.
    metacognitive retrieval intent.
 2. Produce deterministic intent-specific retrieval probes.
 3. Compute a memory-sufficiency receipt before answering.
-4. Feed corrections, weak grounding, missing lanes, dropped evidence, answer
-   feedback, and unresolved questions into a worker repair queue.
+4. The append-only worker repair queue, explicit feedback/correction producers,
+   and participant-safe worker tools are complete. Add deterministic producers
+   for weak grounding, missing lanes, dropped evidence, and unresolved
+   questions.
 5. Per-scope watermarks are complete. Add a persistent lease only after the
    storage layer has an atomic acquire/renew/release primitive (or deployment
    explicitly guarantees one worker instance) so overlapping processes cannot
