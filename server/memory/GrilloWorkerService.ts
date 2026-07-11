@@ -64,6 +64,19 @@ export type GrilloManualRunResult = {
   writes: number;
 };
 
+export type GrilloMemoryFeedbackInput = {
+  content?: unknown;
+  participantKey?: unknown;
+  scopeKey?: unknown;
+  source?: unknown;
+};
+
+export type GrilloMemoryCorrectionInput = GrilloMemoryFeedbackInput & {
+  correctedValue?: unknown;
+  reason?: unknown;
+  targetClaimId?: unknown;
+};
+
 export type GrilloContextPacketInput = {
   embeddingModel?: unknown;
   embeddingProvider?: unknown;
@@ -1876,6 +1889,57 @@ export class GrilloWorkerService {
       scope_key: input.scopeKey,
       tool_name: input.name,
       user_id: input.scopeKey,
+    });
+  }
+
+  async recordMemoryFeedback(input: GrilloMemoryFeedbackInput) {
+    const scopeKey = normalizeKey(input.scopeKey, 'local:persona:default');
+    const content = normalizeText(input.content);
+    if (!content) throw new Error('feedback content is required');
+    const participantKey = normalizeKey(input.participantKey, '');
+    return this.evidenceLedger.appendEvidence({
+      id: this.idFactory(),
+      content,
+      createdAt: this.nowMs(),
+      kind: 'feedback',
+      metadata: {},
+      ...(participantKey ? { participantKey } : {}),
+      role: 'user',
+      scopeKey,
+      source: normalizeKey(input.source, 'manual-feedback'),
+      sourceRecordIds: [],
+    });
+  }
+
+  async recordMemoryCorrection(input: GrilloMemoryCorrectionInput) {
+    const scopeKey = normalizeKey(input.scopeKey, 'local:persona:default');
+    const targetClaimId = normalizeText(input.targetClaimId);
+    const reason = normalizeText(input.reason);
+    const content = normalizeText(input.content) || reason;
+    if (!targetClaimId) throw new Error('correction targetClaimId is required');
+    if (!reason) throw new Error('correction reason is required');
+    if (input.correctedValue === undefined) throw new Error('correction correctedValue is required');
+    const correctedValue = z.json().parse(input.correctedValue);
+    const participantKey = normalizeKey(input.participantKey, '');
+    const evidence = await this.evidenceLedger.appendEvidence({
+      id: this.idFactory(),
+      content,
+      createdAt: this.nowMs(),
+      kind: 'correction',
+      metadata: { targetClaimId },
+      ...(participantKey ? { participantKey } : {}),
+      role: 'user',
+      scopeKey,
+      source: normalizeKey(input.source, 'manual-correction'),
+      sourceRecordIds: [],
+    });
+    return this.evidenceLedger.recordCorrection({
+      correctedValue,
+      evidenceIds: [evidence.id],
+      ...(participantKey ? { participantKey } : {}),
+      reason,
+      scopeKey,
+      targetClaimId,
     });
   }
 

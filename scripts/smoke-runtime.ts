@@ -51,6 +51,20 @@ const checks: Check[] = [
     body: {},
   },
   {
+    name: 'GRILLO feedback validation guard',
+    method: 'POST',
+    path: '/memory/grillo/feedback',
+    expectedStatus: 400,
+    body: {},
+  },
+  {
+    name: 'GRILLO correction validation guard',
+    method: 'POST',
+    path: '/memory/grillo/correction',
+    expectedStatus: 400,
+    body: {},
+  },
+  {
     name: 'poml render',
     method: 'POST',
     path: '/ai/poml/render',

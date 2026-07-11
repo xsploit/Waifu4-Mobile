@@ -730,6 +730,74 @@ describe('GrilloWorkerService', () => {
     }
   });
 
+  it('records feedback and applies evidence-backed corrections without changing prompt wiring', async () => {
+    const { grillo, memory } = createServices();
+    const scopeKey = 'local:persona:hikari-correction';
+    const participantKey = 'local:local:subsect';
+    try {
+      await memory.appendGrilloRecord('evidence_records', {
+        id: 'evidence-original',
+        content: 'My favorite color is green.',
+        createdAt: 10,
+        kind: 'turn',
+        metadata: {},
+        participantKey,
+        role: 'user',
+        scopeKey,
+        source: 'local',
+        sourceRecordIds: ['turn-original'],
+      });
+      await memory.appendGrilloRecord('memory_claims', {
+        id: 'claim-color',
+        confidence: 0.8,
+        createdAt: 11,
+        evidenceIds: ['evidence-original'],
+        kind: 'preference',
+        operation: 'ADD',
+        participantKey,
+        predicate: 'favorite_color',
+        scopeKey,
+        subject: 'subsect',
+        supersedesRecordIds: [],
+        validFrom: 10,
+        validTo: null,
+        value: 'green',
+      });
+
+      const feedback = await grillo.recordMemoryFeedback({
+        content: 'That answer used the wrong memory.',
+        participantKey,
+        scopeKey,
+      });
+      const correction = await grillo.recordMemoryCorrection({
+        content: 'My favorite color is blue now.',
+        correctedValue: 'blue',
+        participantKey,
+        reason: 'The user directly corrected the stored preference.',
+        scopeKey,
+        targetClaimId: 'claim-color',
+      });
+      const replay = await grillo.getEvidenceLedgerReplay(scopeKey);
+
+      expect(feedback).toMatchObject({ kind: 'feedback', role: 'user', scopeKey });
+      expect(correction.decision).toMatchObject({ outcome: 'applied', operation: 'UPDATE' });
+      expect(replay.activeClaims).toEqual([
+        expect.objectContaining({
+          effectiveValue: 'blue',
+          status: 'corrected',
+          claim: expect.objectContaining({ id: 'claim-color' }),
+        }),
+      ]);
+      expect(replay.evidence.map((record) => record.kind)).toEqual([
+        'turn',
+        'feedback',
+        'correction',
+      ]);
+    } finally {
+      await memory.close();
+    }
+  });
+
   it('ranks current-query semantic vectors with stable provenance and scope isolation', async () => {
     const { grillo, memory } = createServices();
     const scopeKey = 'local:persona:hikari-vector-recall';

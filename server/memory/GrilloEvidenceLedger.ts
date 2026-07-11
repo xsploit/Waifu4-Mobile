@@ -386,10 +386,10 @@ export class GrilloEvidenceLedger {
       evidence.filter((record) => record.scopeKey === parsed.scopeKey).map((record) => record.id),
     );
     const missingEvidenceIds = evidenceIds.filter((id) => !knownEvidence.has(id));
-    const targetExists = claims.some(
+    const targetClaim = claims.find(
       (record) => record.scopeKey === parsed.scopeKey && record.id === parsed.targetClaimId,
     );
-    if (missingEvidenceIds.length || !targetExists) {
+    if (missingEvidenceIds.length || !targetClaim) {
       return this.correctionDecision({
         correctionId,
         evidenceIds,
@@ -398,6 +398,20 @@ export class GrilloEvidenceLedger {
         publicReason: missingEvidenceIds.length
           ? `Correction evidence is not available in this scope: ${missingEvidenceIds.join(', ')}`
           : `Target claim is not available in this scope: ${parsed.targetClaimId}`,
+        runId,
+        scopeKey: parsed.scopeKey,
+      });
+    }
+    if (
+      parsed.participantKey &&
+      (targetClaim.participantKey ?? '') !== parsed.participantKey
+    ) {
+      return this.correctionDecision({
+        correctionId,
+        evidenceIds,
+        operation: 'REJECT',
+        outcome: 'rejected',
+        publicReason: 'A correction participant must match its target claim.',
         runId,
         scopeKey: parsed.scopeKey,
       });

@@ -46,6 +46,19 @@ const migrationApplyBodySchema = z
     sourceGeneration: z.string().regex(/^[a-f0-9]{64}$/),
   })
   .strict();
+const memoryFeedbackBodySchema = z
+  .object({
+    content: z.string().trim().min(1).max(100_000),
+    participantKey: z.string().trim().max(180).optional(),
+    scopeKey: z.string().trim().min(1).max(240),
+    source: z.string().trim().max(120).optional(),
+  })
+  .strict();
+const memoryCorrectionBodySchema = memoryFeedbackBodySchema.extend({
+  correctedValue: z.json(),
+  reason: z.string().trim().min(1).max(2_000),
+  targetClaimId: z.string().trim().min(1).max(240),
+});
 
 let grilloWorkerService: GrilloWorkerService | null = null;
 
@@ -283,6 +296,43 @@ export function createMemoryRouter() {
       }
       res.status(500);
       sendError(res, error, 'GRILLO migration apply failed.');
+    }
+  });
+
+  router.post('/grillo/feedback', async (req, res) => {
+    try {
+      const body = memoryFeedbackBodySchema.parse(req.body ?? {});
+      res.json({
+        ok: true,
+        backend: getLadybugMemoryService().getBackendLabel(),
+        evidence: await getGrilloWorkerService().recordMemoryFeedback(body),
+      });
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        res.status(400).json({ ok: false, error: 'Invalid GRILLO feedback request.' });
+        return;
+      }
+      res.status(500);
+      sendError(res, error, 'GRILLO feedback write failed.');
+    }
+  });
+
+  router.post('/grillo/correction', async (req, res) => {
+    try {
+      const body = memoryCorrectionBodySchema.parse(req.body ?? {});
+      const result = await getGrilloWorkerService().recordMemoryCorrection(body);
+      res.status(result.decision.outcome === 'applied' ? 200 : 409).json({
+        ok: result.decision.outcome === 'applied',
+        backend: getLadybugMemoryService().getBackendLabel(),
+        result,
+      });
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        res.status(400).json({ ok: false, error: 'Invalid GRILLO correction request.' });
+        return;
+      }
+      res.status(500);
+      sendError(res, error, 'GRILLO correction write failed.');
     }
   });
 
