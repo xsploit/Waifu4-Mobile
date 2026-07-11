@@ -75,6 +75,7 @@ async function readFirstExistingTemplate() {
   const candidates = [
     process.env['WEBWAIFU_POML_TEMPLATE_PATH']?.trim(),
     path.resolve(process.cwd(), relativeTemplatePath),
+    path.resolve(moduleDir, '../..', relativeTemplatePath),
     path.resolve(moduleDir, '../../..', relativeTemplatePath),
     path.resolve(moduleDir, '../../../..', 'app.asar', relativeTemplatePath),
   ].filter((candidate): candidate is string => Boolean(candidate));

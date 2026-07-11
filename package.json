@@ -1,20 +1,36 @@
 {
   "name": "webwaifu-rebuild",
   "private": true,
-  "version": "0.0.0",
+  "version": "1.0.0",
   "type": "module",
+  "main": "electron/main.mjs",
   "description": "Clean rebuild of the WebWaifu main brain. Core loop first: input -> LLM -> text -> TTS -> mouth -> avatar.",
   "scripts": {
     "dev": "concurrently -n web,server -c cyan,magenta \"npm:dev:web\" \"npm:dev:server\"",
     "dev:web": "vite",
     "dev:server": "tsx watch server/index.ts",
+    "desktop:clean": "node scripts/clean-desktop-release.mjs",
+    "desktop:dev": "concurrently -k -n web,server,electron -c cyan,magenta,yellow \"npm:dev:web\" \"npm:dev:server\" \"wait-on http://127.0.0.1:5173/ http://127.0.0.1:8797/health && cross-env ELECTRON_DEV_SERVER_URL=http://127.0.0.1:5173 ELECTRON_BACKEND_EXTERNAL=true ELECTRON_BOT_PORT=8797 electron electron/main.mjs\"",
+    "desktop:dist": "npm run build && npm run desktop:runtime && npm run desktop:clean && electron-builder",
+    "desktop:pack": "npm run build && npm run desktop:runtime && npm run desktop:clean && electron-builder --dir",
+    "desktop:runtime": "node scripts/prepare-desktop-runtime.mjs",
+    "desktop:start": "npm run build && cross-env ELECTRON_BOT_PORT=8797 electron electron/main.mjs",
+    "desktop:test:transparent": "electron electron/transparent-test.mjs",
+    "desktop:test:transparent:bare": "electron electron/transparent-test.mjs --bare",
+    "desktop:test:transparent:software": "cross-env ELECTRON_TRANSPARENT_SOFTWARE=true electron electron/transparent-test.mjs",
     "server": "tsx server/index.ts",
-    "start": "node --import tsx server/index.ts",
-    "build": "tsc --noEmit && vite build",
+    "start": "node server/dist/index.js",
+    "build": "npm run typecheck && npm run build:server && vite build",
+    "build:server": "esbuild server/index.ts --bundle --platform=node --format=esm --target=node22 --outfile=server/dist/index.js --packages=external",
     "bench:tts": "tsx scripts/bench-tts.ts",
     "audit:dead-code": "fallow dead-code --fail-on-issues",
     "audit:dist": "tsx scripts/dist-audit.ts",
     "audit:release": "tsx scripts/release-audit.ts && npm run audit:dead-code && npm run typecheck && npm test -- --run && npm run build && npm run audit:dist && npm run smoke:runtime",
+    "smoke:desktop-owned-backend-reuse": "node scripts/smoke-desktop-owned-backend-reuse.mjs",
+    "smoke:desktop-port-fallback": "node scripts/smoke-desktop-port-fallback.mjs",
+    "smoke:desktop-relaunch": "node scripts/smoke-desktop-relaunch.mjs",
+    "smoke:packaged-ui": "node scripts/smoke-packaged-ui.mjs",
+    "smoke:packaged-ui:desktop": "node scripts/smoke-packaged-ui.mjs --window-mode=desktop --exercise-desktop-controls",
     "smoke:runtime": "tsx scripts/smoke-runtime.ts",
     "typecheck": "tsc --noEmit --pretty",
     "test": "vitest run",
@@ -55,10 +71,47 @@
     "@types/ws": "^8.18.1",
     "@vitejs/plugin-react": "^4.3.4",
     "concurrently": "^9.1.2",
+    "cross-env": "^7.0.3",
+    "electron": "^42.2.0",
+    "electron-builder": "^26.8.1",
+    "esbuild": "^0.28.0",
     "fallow": "^2.88.3",
     "tsx": "^4.19.2",
     "typescript": "^5.7.3",
     "vite": "^6.0.7",
-    "vitest": "^3.0.2"
+    "vitest": "^3.0.2",
+    "wait-on": "^9.0.10"
+  },
+  "build": {
+    "appId": "ai.webwaifu.webwaifu4",
+    "productName": "WebWaifu 4",
+    "afterPack": "scripts/after-pack.mjs",
+    "directories": {
+      "output": "release"
+    },
+    "files": [
+      "dist/**",
+      "electron/**",
+      "server/dist/**",
+      "src/lib/chat/templates/**",
+      "vendor/**",
+      "package.json"
+    ],
+    "extraResources": [
+      {
+        "from": "desktop-runtime",
+        "to": "desktop-runtime",
+        "filter": ["**/*"]
+      }
+    ],
+    "asarUnpack": [
+      "node_modules/**",
+      "server/dist/**",
+      "src/lib/chat/templates/**"
+    ],
+    "npmRebuild": false,
+    "win": {
+      "target": ["nsis", "portable"]
+    }
   }
 }

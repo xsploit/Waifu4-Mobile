@@ -19,6 +19,12 @@ import { createMemoryRouter } from './memory/routes';
 import { OverlaySocket } from './overlay/OverlaySocket';
 import { createTwitchRouter } from './twitch/routes';
 import { createTwitchRuntime } from './twitch/runtime';
+import {
+  getAllowedDesktopCorsOrigin,
+  getDesktopBackendIdentity,
+  isDesktopShutdownAuthorized,
+} from './desktop';
+import { getLadybugMemoryService } from './memory/LadybugMemoryService';
 
 const PORT = Number(process.env.PORT ?? 8797);
 const HOST = process.env.HOST?.trim() || '127.0.0.1';
@@ -27,11 +33,49 @@ const DIST_INDEX = path.join(DIST_DIR, 'index.html');
 
 const app = express();
 const backendRouter = express.Router();
+app.use((req, res, next) => {
+  const origin = typeof req.headers.origin === 'string' ? req.headers.origin : undefined;
+  const allowedOrigin = getAllowedDesktopCorsOrigin(origin);
+  if (allowedOrigin) {
+    res.setHeader('Access-Control-Allow-Origin', allowedOrigin);
+    res.setHeader('Access-Control-Allow-Private-Network', 'true');
+    res.setHeader('Vary', 'Origin, Access-Control-Request-Headers');
+  }
+  if (req.method === 'OPTIONS') {
+    if (origin && !allowedOrigin) {
+      res.sendStatus(403);
+      return;
+    }
+    res.setHeader(
+      'Access-Control-Allow-Headers',
+      typeof req.headers['access-control-request-headers'] === 'string'
+        ? req.headers['access-control-request-headers']
+        : 'Content-Type, Authorization, x-yourwifey-llm-key, x-yourwifey-tts-key',
+    );
+    res.setHeader('Access-Control-Allow-Methods', 'GET,POST,PUT,DELETE,OPTIONS');
+    res.setHeader('Access-Control-Max-Age', '86400');
+    res.sendStatus(204);
+    return;
+  }
+  next();
+});
 app.use(express.json({ limit: '8mb' }));
 
 // GET /health — boring liveness check the web app polls (StatusPanel).
-backendRouter.get('/health', (_req, res) => {
-  res.json(buildHealth());
+backendRouter.get('/health', (req, res) => {
+  res.json({
+    ...buildHealth(),
+    desktopBackend: getDesktopBackendIdentity(req.headers),
+  });
+});
+
+backendRouter.post('/desktop/shutdown', (req, res) => {
+  if (!isDesktopShutdownAuthorized(req.headers)) {
+    res.status(403).json({ ok: false, error: 'Forbidden' });
+    return;
+  }
+  res.status(202).json({ ok: true, shuttingDown: true });
+  setImmediate(() => void shutdownBackend());
 });
 
 // GET /local/backup-settings — local convenience import for the user's backup JSON.
@@ -116,6 +160,24 @@ server.listen(PORT, HOST, () => {
   console.log(`[INFO] (${SERVICE_NAME}) overlay socket listening on ws://${HOST}:${PORT}/ws`);
 });
 
+let shutdownStarted = false;
+async function shutdownBackend() {
+  if (shutdownStarted) {
+    return;
+  }
+  shutdownStarted = true;
+  const forceExit = setTimeout(() => process.exit(0), 2500);
+  forceExit.unref();
+  twitchRuntime.stop();
+  overlaySocket.close();
+  await getLadybugMemoryService().close().catch(() => undefined);
+  await new Promise<void>((resolve) => server.close(() => resolve()));
+  process.exit(0);
+}
+
+process.once('SIGINT', () => void shutdownBackend());
+process.once('SIGTERM', () => void shutdownBackend());
+
 function isBackendRoute(pathname: string) {
-  return /^\/(?:api|health|local|ai|tts|memory|twitch|ws)(?:\/|$)/.test(pathname);
+  return /^\/(?:api|health|desktop|local|ai|tts|memory|twitch|ws)(?:\/|$)/.test(pathname);
 }

@@ -1,8 +1,13 @@
 {
   "$schema": "./node_modules/fallow/schema.json",
+  "entry": [
+    "electron/preload.mjs",
+    "scripts/after-pack.mjs"
+  ],
   "ignoreDependencies": [
     "better-sqlite3",
-    "lil-gui"
+    "lil-gui",
+    "wait-on"
   ],
   "ignoreExports": [
     {

@@ -27,6 +27,8 @@ backup restore, while keeping the original frontend look and tab workflow.
 -
 <a href="#quick-start">Quick Start</a>
 -
+<a href="#desktop-release">Desktop</a>
+-
 <a href="#vps-deploy">VPS Deploy</a>
 -
 <a href="#status">Status</a>
@@ -271,6 +273,30 @@ production build, built-dist artifact scanning, and the runtime smoke.
 
 ---
 
+<h2 align="center" id="desktop-release">Desktop Release</h2>
+
+The Windows Electron release packages the same web frontend with an owned local
+backend and bundled Node runtime. It supports the full editor window, a
+transparent desktop avatar window, and an OBS-friendly overlay window without
+changing the browser Account-tab key flow.
+
+Build and verify locally:
+
+```powershell
+npm run desktop:dist
+npm run smoke:packaged-ui
+npm run smoke:packaged-ui:desktop
+npm run smoke:desktop-port-fallback
+npm run smoke:desktop-owned-backend-reuse
+npm run smoke:desktop-relaunch
+```
+
+The GitHub release contains both an NSIS installer and a portable executable.
+The desktop backend reuses a matching WebWaifu-owned process when available and
+selects another local port when the default port is occupied.
+
+---
+
 <h2 align="center" id="vps-deploy">VPS Deploy</h2>
 
 The intended hosted shape is a normal long-running VPS process, not serverless:
@@ -352,7 +378,7 @@ memory, Twitch, and VRM seams.
 - Add silence/gap detection to the browser TTS benchmark.
 - Continue real-key verification for Voice Lab, Tavily tools, Inworld, and OpenRouter edge cases.
 - Keep Piper browser TTS parked unless it becomes a priority again.
-- Do not move to Electron packaging until the web app feature surface is verified.
+- Continue desktop release testing across Windows GPU and transparent-window configurations.
 
 ## Ground Rules
 
