@@ -49,6 +49,7 @@ export type GrilloLedgerProjection = {
     correctionIds: string[];
     decisionIds: string[];
     evidenceIds: string[];
+    integrityIssues: string[];
     invalidRecordIds: string[];
   };
 };
@@ -72,6 +73,7 @@ export function buildGrilloLedgerProjection(replay: GrilloLedgerReplay): GrilloL
     correctionIds: replay.corrections.map((record) => record.id).sort(),
     decisionIds: replay.decisions.map((record) => record.id).sort(),
     evidenceIds: replay.evidence.map((record) => record.id).sort(),
+    integrityIssues: [...replay.integrityIssues].sort(),
     invalidRecordIds: [...replay.invalidRecordIds].sort(),
   };
   const base = {

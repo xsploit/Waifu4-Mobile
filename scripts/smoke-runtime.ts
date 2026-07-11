@@ -34,6 +34,11 @@ const checks: Check[] = [
     expectedStatus: 200,
   },
   {
+    name: 'GRILLO prompt shadow comparison',
+    path: '/memory/grillo/projection/shadow?scopeKey=local%3Apersona%3Asmoke',
+    expectedStatus: 200,
+  },
+  {
     name: 'poml render',
     method: 'POST',
     path: '/ai/poml/render',

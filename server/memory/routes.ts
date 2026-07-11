@@ -223,6 +223,20 @@ export function createMemoryRouter() {
     }
   });
 
+  // Read-only migration diagnostics: compares the legacy relationship prompt
+  // lane with the ledger projection. Does not feed live prompt injection.
+  router.get('/grillo/projection/shadow', async (req, res) => {
+    try {
+      res.json({
+        ok: true,
+        backend: getLadybugMemoryService().getBackendLabel(),
+        shadow: await getGrilloWorkerService().getPromptShadowComparison(req.query.scopeKey),
+      });
+    } catch (error) {
+      sendError(res, error, 'GRILLO prompt shadow comparison failed.');
+    }
+  });
+
   router.get('/grillo/runtime', (_req, res) => {
     res.json({
       ok: true,

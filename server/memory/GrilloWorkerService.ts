@@ -13,6 +13,7 @@ import {
 } from './GrilloEvidenceLedger.js';
 import { buildGrilloLedgerProjection } from './GrilloLedgerProjector.js';
 import { auditGrilloProjectionCoverage } from './GrilloProjectionAudit.js';
+import { buildGrilloShadowComparison } from './GrilloShadowComparison.js';
 import type {
   GrilloContextPacket,
   GrilloEmbeddingIdentity,
@@ -288,6 +289,33 @@ export class GrilloWorkerService {
       memorySlots,
       relationshipProfile: asRecord(asRecord(relationshipProfiles)[normalizedScopeKey]),
       scopeKey: normalizedScopeKey,
+    });
+  }
+
+  /**
+   * Read-only shadow report comparing the legacy relationship-memory prompt
+   * lane against the ledger projection. Never mutates memory and is not part
+   * of live prompt injection.
+   */
+  // fallow-ignore-next-line unused-class-member
+  async getPromptShadowComparison(scopeKey: unknown) {
+    const normalizedScopeKey = normalizeKey(scopeKey, 'local:persona:default');
+    const [replay, turnEvents, memoryBlocks, memorySlots, relationshipProfiles] =
+      await Promise.all([
+        this.evidenceLedger.replay(normalizedScopeKey),
+        this.memory.readGrilloRecords<Record<string, unknown>>('turn_events'),
+        this.memory.readGrilloRecords<Record<string, unknown>>('memory_blocks'),
+        this.memory.readGrilloRecords<Record<string, unknown>>('memory_slots'),
+        this.memory.loadRelationshipProfiles(),
+      ]);
+    return buildGrilloShadowComparison({
+      generatedAt: this.nowMs(),
+      memoryBlocks,
+      memorySlots,
+      relationshipProfile: asRecord(asRecord(relationshipProfiles)[normalizedScopeKey]),
+      replay,
+      scopeKey: normalizedScopeKey,
+      turnEvents,
     });
   }
 

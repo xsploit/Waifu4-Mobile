@@ -41,6 +41,7 @@ describe('buildGrilloLedgerProjection', () => {
       correctionIds: ['correction-blue'],
       decisionIds: ['decision-blue', 'decision-green', 'decision-trust'],
       evidenceIds: ['evidence-blue', 'evidence-green', 'evidence-trust'],
+      integrityIssues: [],
       invalidRecordIds: [],
     });
     expect(projection.timeline).toEqual(
@@ -73,6 +74,25 @@ describe('buildGrilloLedgerProjection', () => {
 
     expect(changed.generation).not.toBe(original.generation);
     expect(changed.beliefs[0]?.effectiveValue).toBe('royal blue');
+  });
+
+  it('carries replay integrity issues into provenance and the generation hash', () => {
+    const replay = createReplay();
+    const clean = buildGrilloLedgerProjection(replay);
+    const flagged = buildGrilloLedgerProjection({
+      ...replay,
+      integrityIssues: [
+        'correction:correction-x:missing_target:claim-nope',
+        'claim:claim-blue:missing_superseded:claim-lost',
+      ],
+    });
+
+    expect(flagged.provenance.integrityIssues).toEqual([
+      'claim:claim-blue:missing_superseded:claim-lost',
+      'correction:correction-x:missing_target:claim-nope',
+    ]);
+    expect(clean.provenance.integrityIssues).toEqual([]);
+    expect(flagged.generation).not.toBe(clean.generation);
   });
 });
 
@@ -141,6 +161,7 @@ function createReplay(): GrilloLedgerReplay {
       { claim: blue, effectiveValue: 'navy blue', status: 'corrected', validTo: null },
       { claim: trust, effectiveValue: 4, status: 'active', validTo: null },
     ],
+    integrityIssues: [],
     invalidRecordIds: [],
   };
 

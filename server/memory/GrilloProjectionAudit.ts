@@ -15,6 +15,7 @@ export type GrilloLegacyProjectionItem = {
   predicate: string;
   source: 'block' | 'relationship_profile' | 'slot';
   value: string | number | boolean | null;
+  valueKey: string;
   valueOnlyClaimIds: string[];
 };
 
@@ -30,12 +31,14 @@ export type GrilloProjectionCoverageReport = {
   };
   legacyItems: GrilloLegacyProjectionItem[];
   uncoveredItemIds: string[];
+  ledgerOnlyClaimIds: string[];
   legacyDrift: Array<{
     container: string;
     participantKey: string | null;
     blockValues: Array<string | number | boolean | null>;
     slotValues: Array<string | number | boolean | null>;
   }>;
+  ledgerIntegrityIssues: string[];
   invalidLedgerRecordIds: string[];
 };
 
@@ -43,12 +46,13 @@ export function auditGrilloProjectionCoverage(
   projection: GrilloLedgerProjection,
   source: GrilloLegacyProjectionSource,
 ): GrilloProjectionCoverageReport {
+  const currentClaims = projection.slots.map((slot) => slot.current);
   const legacyItems = [
     ...readCurrentBlockItems(source.memoryBlocks, source.scopeKey),
     ...readSlotItems(source.memorySlots, source.scopeKey),
     ...readRelationshipItems(source.relationshipProfile),
   ]
-    .map((item) => matchLegacyItem(item, projection.slots.map((slot) => slot.current)))
+    .map((item) => matchLegacyItem(item, currentClaims))
     .sort(compareLegacyItems);
   const exact = legacyItems.filter((item) => item.exactClaimIds.length > 0).length;
   const valueOnly = legacyItems.filter(
@@ -58,12 +62,23 @@ export function auditGrilloProjectionCoverage(
   const uncoveredItemIds = legacyItems
     .filter((item) => item.exactClaimIds.length === 0)
     .map((item) => item.id);
+  const exactMatchedClaimIds = new Set(legacyItems.flatMap((item) => item.exactClaimIds));
+  const ledgerOnlyClaimIds = [
+    ...new Set(
+      currentClaims
+        .filter((claim) => !exactMatchedClaimIds.has(claim.claimId))
+        .map((claim) => claim.claimId),
+    ),
+  ].sort();
+  const ledgerIntegrityIssues = [...projection.provenance.integrityIssues].sort();
   return {
     scopeKey: source.scopeKey,
     projectionGeneration: projection.generation,
     ready:
       uncoveredItemIds.length === 0 &&
+      ledgerOnlyClaimIds.length === 0 &&
       legacyDrift.length === 0 &&
+      ledgerIntegrityIssues.length === 0 &&
       projection.provenance.invalidRecordIds.length === 0,
     coverage: {
       exact,
@@ -73,7 +88,9 @@ export function auditGrilloProjectionCoverage(
     },
     legacyItems,
     uncoveredItemIds,
+    ledgerOnlyClaimIds,
     legacyDrift,
+    ledgerIntegrityIssues,
     invalidLedgerRecordIds: [...projection.provenance.invalidRecordIds],
   };
 }
@@ -83,10 +100,15 @@ type UnmatchedLegacyItem = Omit<
   'exactClaimIds' | 'valueOnlyClaimIds'
 >;
 
+type LegacyValue = {
+  key: string;
+  value: string | number | boolean | null;
+};
+
 function readCurrentBlockItems(records: Array<Record<string, unknown>>, scopeKey: string) {
   const current = new Map<
     string,
-    { container: string; participantKey: string | null; values: Array<string | number | boolean | null> }
+    { container: string; participantKey: string | null; values: LegacyValue[] }
   >();
   for (const record of [...records]
     .filter((entry) => recordScopeKey(entry) === scopeKey)
@@ -94,15 +116,15 @@ function readCurrentBlockItems(records: Array<Record<string, unknown>>, scopeKey
     const container = text(record['block_name'] ?? record['blockName']) || 'memory';
     const participantKey = participant(record);
     const key = `${participantKey ?? 'scope'}\u0000${container}`;
-    const values = readScalarArray(record['items'] ?? record['items_json'] ?? record['itemsJson']);
+    const values = readLegacyValues(record['items'] ?? record['items_json'] ?? record['itemsJson']);
     const previous = current.get(key)?.values ?? [];
     current.set(key, {
       container,
       participantKey,
       values:
         text(record['operation']).toLowerCase() === 'replace'
-          ? uniqueScalars(values)
-          : uniqueScalars([...previous, ...values]),
+          ? uniqueLegacyValues(values)
+          : uniqueLegacyValues([...previous, ...values]),
     });
   }
   return [...current.values()].flatMap((entry) =>
@@ -118,63 +140,107 @@ function readSlotItems(records: Array<Record<string, unknown>>, scopeKey: string
     .flatMap((record) => {
       const container = text(record['slot_name'] ?? record['slotName']) || 'slot';
       const participantKey = participant(record);
-      return readScalarArray(record['content_json'] ?? record['contentJson']).map((value, index) =>
+      return readLegacyValues(record['content_json'] ?? record['contentJson']).map((value, index) =>
         legacyItem('slot', container, participantKey, value, index),
       );
     });
 }
 
+// Every top-level RelationshipMemory field the legacy prompt path can carry.
+// Each entry lists the audit container name and the profile keys it reads.
+const RELATIONSHIP_SCALAR_FIELDS: Array<[string, string[]]> = [
+  ['turn_count', ['turnCount', 'turn_count']],
+  ['last_seen_at', ['lastSeenAt', 'last_seen_at']],
+  ['last_diary_turn_count', ['lastDiaryTurnCount', 'last_diary_turn_count']],
+  ['relationship_stage', ['relationshipStage', 'relationship_stage']],
+  ['mood', ['mood']],
+  ['trust', ['trust']],
+  ['attraction', ['attraction']],
+  ['respect', ['respect']],
+  ['irritation', ['irritation']],
+  ['jealousy', ['jealousy']],
+  ['guard', ['guard']],
+  ['last_action_tag', ['lastActionTag', 'last_action_tag']],
+  ['summary', ['summary']],
+  ['diary_entry', ['diaryEntry', 'diary_entry']],
+];
+
+const RELATIONSHIP_ARRAY_FIELDS: Array<[string, string[]]> = [
+  ['facts', ['facts', 'storedFacts', 'stored_facts']],
+  ['diary_history', ['diaryHistory', 'diary_history']],
+  ['tone_preferences', ['tone_preferences', 'tonePreferences']],
+  ['interaction_style', ['interaction_style', 'interactionStyle']],
+  ['boundaries', ['boundaries']],
+  ['active_threads', ['active_threads', 'activeThreads']],
+];
+
+// AffectState subfields are enumerated explicitly instead of flattening the
+// object, so unknown nested shapes can never manufacture exact matches.
+const AFFECT_STATE_FIELDS: Array<[string, string[]]> = [
+  ['affect_state_arousal', ['arousal']],
+  ['affect_state_dominance', ['dominance']],
+  ['affect_state_label', ['label']],
+  ['affect_state_last_emotion', ['lastEmotion', 'last_emotion']],
+  ['affect_state_updated_at', ['updatedAt', 'updated_at']],
+  ['affect_state_valence', ['valence']],
+];
+
 function readRelationshipItems(profile: Record<string, unknown>) {
   const participantKey = participant(profile);
   const items: UnmatchedLegacyItem[] = [];
-  const scalarFields = [
-    ['relationship_stage', profile['relationshipStage'] ?? profile['relationship_stage']],
-    ['mood', profile['mood']],
-    ['summary', profile['summary']],
-  ] as const;
-  for (const [field, rawValue] of scalarFields) {
-    const value = scalar(rawValue);
-    if (value !== undefined && value !== '') {
-      items.push(legacyItem('relationship_profile', field, participantKey, value, 0));
+  for (const [field, keys] of RELATIONSHIP_SCALAR_FIELDS) {
+    const value = scalar(firstDefined(profile, keys));
+    if (value !== undefined && value !== null && value !== '') {
+      items.push(legacyItem('relationship_profile', field, participantKey, legacyValue(value), 0));
     }
   }
-  const arrayFields = [
-    ['facts', profile['facts'] ?? profile['storedFacts']],
-    ['tone_preferences', profile['tone_preferences'] ?? profile['tonePreferences']],
-    ['interaction_style', profile['interaction_style'] ?? profile['interactionStyle']],
-    ['boundaries', profile['boundaries']],
-    ['active_threads', profile['active_threads'] ?? profile['activeThreads']],
-  ] as const;
-  for (const [field, rawValue] of arrayFields) {
-    readScalarArray(rawValue).forEach((value, index) => {
+  for (const [field, keys] of RELATIONSHIP_ARRAY_FIELDS) {
+    readLegacyValues(firstDefined(profile, keys)).forEach((value, index) => {
       items.push(legacyItem('relationship_profile', field, participantKey, value, index));
     });
+  }
+  const affectState = record(firstDefined(profile, ['affectState', 'affect_state']));
+  for (const [field, keys] of AFFECT_STATE_FIELDS) {
+    const value = scalar(firstDefined(affectState, keys));
+    if (value !== undefined && value !== null && value !== '') {
+      items.push(legacyItem('relationship_profile', field, participantKey, legacyValue(value), 0));
+    }
   }
   const stats = record(profile['stats']);
   for (const key of Object.keys(stats).sort()) {
     const value = scalar(stats[key]);
-    if (value !== undefined && value !== '') {
-      items.push(legacyItem('relationship_profile', `stats_${key}`, participantKey, value, 0));
+    if (value !== undefined && value !== null && value !== '') {
+      items.push(
+        legacyItem('relationship_profile', `stats_${key}`, participantKey, legacyValue(value), 0),
+      );
     }
   }
   return items;
+}
+
+function firstDefined(source: Record<string, unknown>, keys: string[]) {
+  for (const key of keys) {
+    if (source[key] !== undefined) return source[key];
+  }
+  return undefined;
 }
 
 function legacyItem(
   source: GrilloLegacyProjectionItem['source'],
   container: string,
   participantKey: string | null,
-  value: string | number | boolean | null,
+  value: LegacyValue,
   index: number,
 ): UnmatchedLegacyItem {
   const predicate = normalizePredicate(container);
   return {
     container,
-    id: `${source}:${participantKey ?? 'scope'}:${predicate}:${index}:${normalizeScalar(value)}`,
+    id: `${source}:${participantKey ?? 'scope'}:${predicate}:${index}:${value.key}`,
     participantKey,
     predicate,
     source,
-    value,
+    value: value.value,
+    valueKey: value.key,
   };
 }
 
@@ -183,12 +249,10 @@ function matchLegacyItem(
   claims: GrilloProjectedClaim[],
 ): GrilloLegacyProjectionItem {
   const compatibleClaims = claims.filter(
-    (claim) => !item.participantKey || !claim.participantKey || claim.participantKey === item.participantKey,
+    (claim) => (claim.participantKey ?? null) === item.participantKey,
   );
   const valueMatches = compatibleClaims.filter((claim) =>
-    flattenScalars(claim.effectiveValue).some(
-      (value) => normalizeScalar(value) === normalizeScalar(item.value),
-    ),
+    claimValueKeys(claim.effectiveValue).includes(item.valueKey),
   );
   return {
     ...item,
@@ -211,19 +275,27 @@ function findLegacyDrift(source: GrilloLegacyProjectionSource) {
     .map((key) => {
       const [rawParticipantKey, container] = key.split('\u0000');
       const participantKey = rawParticipantKey === 'scope' ? null : rawParticipantKey;
-      const blockValues = uniqueScalars(
+      const blockValues = uniqueLegacyValues(
         blocks
           .filter((item) => item.container === container && item.participantKey === participantKey)
-          .map((item) => item.value),
+          .map((item) => ({ key: item.valueKey, value: item.value })),
       );
-      const slotValues = uniqueScalars(
+      const slotValues = uniqueLegacyValues(
         slots
           .filter((item) => item.container === container && item.participantKey === participantKey)
-          .map((item) => item.value),
+          .map((item) => ({ key: item.valueKey, value: item.value })),
       );
-      return { container, participantKey, blockValues, slotValues };
+      return {
+        container: container ?? '',
+        participantKey,
+        blockValueKeys: blockValues.map((entry) => entry.key),
+        slotValueKeys: slotValues.map((entry) => entry.key),
+        blockValues: blockValues.map((entry) => entry.value),
+        slotValues: slotValues.map((entry) => entry.value),
+      };
     })
-    .filter((item) => !sameScalarSet(item.blockValues, item.slotValues))
+    .filter((item) => !sameKeySet(item.blockValueKeys, item.slotValueKeys))
+    .map(({ blockValueKeys: _b, slotValueKeys: _s, ...item }) => item)
     .sort((left, right) =>
       (left.participantKey ?? '').localeCompare(right.participantKey ?? '') ||
       left.container.localeCompare(right.container),
@@ -239,39 +311,43 @@ function compareLegacyItems(left: GrilloLegacyProjectionItem, right: GrilloLegac
   );
 }
 
-function flattenScalars(value: unknown): Array<string | number | boolean | null> {
+// A claim value can match a legacy item only as a whole scalar, a top-level
+// array element, or a deep-equal JSON structure. Nested objects are compared
+// canonically instead of flattening their scalars.
+function claimValueKeys(value: unknown): string[] {
   const direct = scalar(value);
-  if (direct !== undefined) return [direct];
-  if (Array.isArray(value)) return value.flatMap(flattenScalars);
-  if (value && typeof value === 'object') {
-    return Object.keys(value as Record<string, unknown>)
-      .sort()
-      .flatMap((key) => flattenScalars((value as Record<string, unknown>)[key]));
+  if (direct !== undefined) return [canonicalScalarKey(direct)];
+  if (Array.isArray(value)) return value.map((element) => legacyValue(element).key);
+  return [jsonValueKey(value)];
+}
+
+function readLegacyValues(raw: unknown): LegacyValue[] {
+  const parsed = typeof raw === 'string' ? parseJson(raw) ?? raw : raw;
+  if (parsed === undefined || parsed === null || parsed === '') return [];
+  if (Array.isArray(parsed)) return parsed.map((element) => legacyValue(element));
+  return [legacyValue(parsed)];
+}
+
+function legacyValue(raw: unknown): LegacyValue {
+  const direct = scalar(raw);
+  if (direct !== undefined) {
+    return { key: canonicalScalarKey(direct), value: direct };
   }
-  return [];
+  return { key: jsonValueKey(raw), value: stableJson(raw) };
 }
 
-function readScalarArray(value: unknown) {
-  const parsed = typeof value === 'string' ? parseJson(value) ?? value : value;
-  return Array.isArray(parsed) ? parsed.flatMap(flattenScalars) : flattenScalars(parsed);
-}
-
-function uniqueScalars(values: Array<string | number | boolean | null>) {
+function uniqueLegacyValues(values: LegacyValue[]) {
   const seen = new Set<string>();
-  return values.filter((value) => {
-    const key = normalizeScalar(value);
-    if (seen.has(key)) return false;
-    seen.add(key);
+  return values.filter((entry) => {
+    if (seen.has(entry.key)) return false;
+    seen.add(entry.key);
     return true;
   });
 }
 
-function sameScalarSet(
-  left: Array<string | number | boolean | null>,
-  right: Array<string | number | boolean | null>,
-) {
-  const leftKeys = left.map(normalizeScalar).sort();
-  const rightKeys = right.map(normalizeScalar).sort();
+function sameKeySet(left: string[], right: string[]) {
+  const leftKeys = [...left].sort();
+  const rightKeys = [...right].sort();
   return leftKeys.length === rightKeys.length && leftKeys.every((value, index) => value === rightKeys[index]);
 }
 
@@ -283,8 +359,26 @@ function scalar(value: unknown): string | number | boolean | null | undefined {
   return undefined;
 }
 
-function normalizeScalar(value: string | number | boolean | null) {
-  return typeof value === 'string' ? value.replace(/\s+/g, ' ').trim().toLowerCase() : JSON.stringify(value);
+// Type-prefixed so "5" (string) can never equal 5 (number).
+function canonicalScalarKey(value: string | number | boolean | null) {
+  if (value === null) return 'null';
+  if (typeof value === 'string') return `str:${value.replace(/\s+/g, ' ').trim().toLowerCase()}`;
+  if (typeof value === 'number') return `num:${JSON.stringify(value)}`;
+  return `bool:${JSON.stringify(value)}`;
+}
+
+function jsonValueKey(value: unknown) {
+  return `json:${stableJson(value)}`;
+}
+
+function stableJson(value: unknown): string {
+  if (value === null || typeof value !== 'object') return JSON.stringify(value) ?? 'null';
+  if (Array.isArray(value)) return `[${value.map(stableJson).join(',')}]`;
+  const entries = value as Record<string, unknown>;
+  return `{${Object.keys(entries)
+    .sort()
+    .map((key) => `${JSON.stringify(key)}:${stableJson(entries[key])}`)
+    .join(',')}}`;
 }
 
 function normalizePredicate(value: string) {

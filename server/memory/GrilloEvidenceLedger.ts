@@ -98,12 +98,12 @@ export type GrilloWorkerDecision = z.infer<typeof workerDecisionSchema>;
 export type GrilloClaimInput = z.input<typeof claimInputSchema>;
 export type GrilloCorrectionInput = z.input<typeof correctionInputSchema>;
 
-export type GrilloClaimDecision = {
+type GrilloClaimDecision = {
   claim: GrilloMemoryClaim | null;
   decision: GrilloWorkerDecision;
 };
 
-export type GrilloCorrectionDecision = {
+type GrilloCorrectionDecision = {
   correction: GrilloMemoryCorrection | null;
   decision: GrilloWorkerDecision;
 };
@@ -123,6 +123,7 @@ export type GrilloLedgerReplay = {
   decisions: GrilloWorkerDecision[];
   claimStates: GrilloClaimState[];
   activeClaims: GrilloClaimState[];
+  integrityIssues: string[];
   invalidRecordIds: string[];
 };
 
@@ -139,6 +140,7 @@ type LedgerEntity = Extract<
 export class GrilloEvidenceLedger {
   private readonly nowMs: () => number;
   private readonly idFactory: (prefix: string) => string;
+  private readonly scopeMutationQueues = new Map<string, Promise<void>>();
   private lastCreatedAt = 0;
 
   constructor(
@@ -165,7 +167,15 @@ export class GrilloEvidenceLedger {
     return this.appendUnique('evidence_records', record, evidenceRecordSchema);
   }
 
-  async evaluateClaim(input: GrilloClaimInput, runId = this.idFactory('run')): Promise<GrilloClaimDecision> {
+  evaluateClaim(input: GrilloClaimInput, runId = this.idFactory('run')) {
+    const scopeKey = scopeKeySchema.parse(input.scopeKey);
+    return this.withScopeMutation(scopeKey, () => this.evaluateClaimNow(input, runId));
+  }
+
+  private async evaluateClaimNow(
+    input: GrilloClaimInput,
+    runId: string,
+  ): Promise<GrilloClaimDecision> {
     const parsed = claimInputSchema.parse(input);
     const now = this.nextTimestamp();
     const claimId = parsed.id ?? this.idFactory('claim');
@@ -201,6 +211,10 @@ export class GrilloEvidenceLedger {
         scopeKey: parsed.scopeKey,
       });
     }
+    const evidenceValidFrom = Math.max(
+      ...evidenceIds.map((id) => evidenceById.get(id)?.createdAt ?? 0),
+    );
+    const validFrom = parsed.validFrom ?? evidenceValidFrom;
 
     const [allClaims, allCorrections] = await Promise.all([
       this.readValid('memory_claims', memoryClaimSchema),
@@ -215,8 +229,7 @@ export class GrilloEvidenceLedger {
     const currentClaims = claims.filter((record) => !supersededClaimIds.has(record.id));
     const duplicate = currentClaims.find(
       (record) =>
-        record.subject === parsed.subject &&
-        record.predicate === parsed.predicate &&
+        sameClaimIdentity(record, parsed) &&
         isDeepStrictEqual(correctedValues.get(record.id) ?? record.value, parsed.value),
     );
     if (duplicate) {
@@ -271,9 +284,7 @@ export class GrilloEvidenceLedger {
 
     const supersededClaims = claims.filter((record) => supersedesRecordIds.includes(record.id));
     const incompatibleClaimIds = supersededClaims
-      .filter(
-        (record) => record.subject !== parsed.subject || record.predicate !== parsed.predicate,
-      )
+      .filter((record) => !sameClaimIdentity(record, parsed))
       .map((record) => record.id);
     if (incompatibleClaimIds.length) {
       return this.claimDecision({
@@ -287,8 +298,23 @@ export class GrilloEvidenceLedger {
       });
     }
 
+    const temporallyInvalidClaimIds = supersededClaims
+      .filter((record) => validFrom < record.validFrom)
+      .map((record) => record.id);
+    if (temporallyInvalidClaimIds.length) {
+      return this.claimDecision({
+        claimId,
+        evidenceIds,
+        operation: 'REJECT',
+        outcome: 'rejected',
+        publicReason: `A superseding claim cannot begin before its target: ${temporallyInvalidClaimIds.join(', ')}`,
+        runId,
+        scopeKey: parsed.scopeKey,
+      });
+    }
+
     const conflictingCurrentClaims = currentClaims.filter(
-      (record) => record.subject === parsed.subject && record.predicate === parsed.predicate,
+      (record) => sameClaimIdentity(record, parsed),
     );
     if (!supersedesRecordIds.length && conflictingCurrentClaims.length) {
       return this.claimDecision({
@@ -308,9 +334,9 @@ export class GrilloEvidenceLedger {
       operation: requestedOperation,
       evidenceIds,
       supersedesRecordIds,
-      validFrom: parsed.validFrom ?? now,
+      validFrom,
       validTo: null,
-      createdAt: now,
+      createdAt: Math.max(now, validFrom),
     });
     const storedClaim = await this.appendUnique('memory_claims', claim, memoryClaimSchema);
     const result = await this.claimDecision({
@@ -325,9 +351,17 @@ export class GrilloEvidenceLedger {
     return { claim: storedClaim, decision: result.decision };
   }
 
-  async recordCorrection(
+  recordCorrection(
     input: GrilloCorrectionInput,
     runId = this.idFactory('run'),
+  ) {
+    const scopeKey = scopeKeySchema.parse(input.scopeKey);
+    return this.withScopeMutation(scopeKey, () => this.recordCorrectionNow(input, runId));
+  }
+
+  private async recordCorrectionNow(
+    input: GrilloCorrectionInput,
+    runId: string,
   ): Promise<GrilloCorrectionDecision> {
     const parsed = correctionInputSchema.parse(input);
     const correctionId = parsed.id ?? this.idFactory('correction');
@@ -405,6 +439,7 @@ export class GrilloEvidenceLedger {
     const corrections = sortedForScope(correctionsResult.valid, normalizedScopeKey);
     const decisions = sortedForScope(decisionsResult.valid, normalizedScopeKey);
     const states = new Map<string, GrilloClaimState>();
+    const integrityIssues: string[] = [];
 
     for (const claim of claims) {
       states.set(claim.id, {
@@ -413,19 +448,43 @@ export class GrilloEvidenceLedger {
         status: 'active',
         validTo: claim.validTo,
       });
+    }
+    for (const claim of claims) {
       for (const supersededId of claim.supersedesRecordIds) {
         const previous = states.get(supersededId);
-        if (previous) {
-          states.set(supersededId, {
-            ...previous,
-            status: 'superseded',
-            validTo: claim.validFrom,
-          });
+        if (!previous) {
+          integrityIssues.push(`claim:${claim.id}:missing_superseded:${supersededId}`);
+          continue;
         }
+        if (claim.id === supersededId) {
+          integrityIssues.push(`claim:${claim.id}:self_supersession`);
+          continue;
+        }
+        if (claim.validFrom < previous.claim.validFrom) {
+          integrityIssues.push(`claim:${claim.id}:invalid_interval:${supersededId}`);
+          continue;
+        }
+        states.set(supersededId, {
+          ...previous,
+          status: 'superseded',
+          validTo: claim.validFrom,
+        });
       }
     }
     for (const correction of corrections) {
       const previous = states.get(correction.targetClaimId);
+      if (!previous) {
+        integrityIssues.push(
+          `correction:${correction.id}:missing_target:${correction.targetClaimId}`,
+        );
+        continue;
+      }
+      if (correction.createdAt < previous.claim.createdAt) {
+        integrityIssues.push(
+          `correction:${correction.id}:predates_target:${correction.targetClaimId}`,
+        );
+        continue;
+      }
       if (previous && previous.status !== 'superseded') {
         states.set(correction.targetClaimId, {
           ...previous,
@@ -445,6 +504,7 @@ export class GrilloEvidenceLedger {
       decisions,
       claimStates,
       activeClaims: claimStates.filter((state) => state.status !== 'superseded'),
+      integrityIssues: uniqueIds(integrityIssues),
       invalidRecordIds: uniqueIds([
         ...evidenceResult.invalidIds,
         ...claimsResult.invalidIds,
@@ -524,6 +584,21 @@ export class GrilloEvidenceLedger {
     return { valid, invalidIds };
   }
 
+  private withScopeMutation<T>(scopeKey: string, task: () => Promise<T>) {
+    const previous = this.scopeMutationQueues.get(scopeKey) ?? Promise.resolve();
+    const run = previous.catch(() => undefined).then(task);
+    const settled = run.then(
+      () => undefined,
+      () => undefined,
+    );
+    this.scopeMutationQueues.set(scopeKey, settled);
+    return run.finally(() => {
+      if (this.scopeMutationQueues.get(scopeKey) === settled) {
+        this.scopeMutationQueues.delete(scopeKey);
+      }
+    });
+  }
+
   private nextTimestamp() {
     const timestamp = Math.max(this.nowMs(), this.lastCreatedAt + 1);
     this.lastCreatedAt = timestamp;
@@ -533,6 +608,17 @@ export class GrilloEvidenceLedger {
 
 function uniqueIds(ids: string[]) {
   return [...new Set(ids.map((id) => id.trim()).filter(Boolean))];
+}
+
+function sameClaimIdentity(
+  left: Pick<GrilloMemoryClaim, 'participantKey' | 'predicate' | 'subject'>,
+  right: Pick<GrilloClaimInput, 'participantKey' | 'predicate' | 'subject'>,
+) {
+  return (
+    (left.participantKey ?? '') === (right.participantKey ?? '') &&
+    left.subject === right.subject &&
+    left.predicate === right.predicate
+  );
 }
 
 function sortedForScope<T extends { id: string; scopeKey: string; createdAt: number }>(

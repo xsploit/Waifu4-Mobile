@@ -291,4 +291,339 @@ describe('GrilloEvidenceLedger', () => {
       await memory.close();
     }
   });
+
+  it('replays supersession chains identically regardless of storage order', async () => {
+    const scopeKey = 'local:persona:hikari-chan';
+    const evidence = rawEvidence(scopeKey, 'evidence-1', 5);
+    const chain = [
+      rawClaim(scopeKey, { id: 'claim-a', createdAt: 10, validFrom: 10, value: 'green' }),
+      rawClaim(scopeKey, {
+        id: 'claim-b',
+        createdAt: 20,
+        validFrom: 20,
+        value: 'blue',
+        operation: 'SUPERSEDE',
+        supersedesRecordIds: ['claim-a'],
+      }),
+      rawClaim(scopeKey, {
+        id: 'claim-c',
+        createdAt: 30,
+        validFrom: 30,
+        value: 'red',
+        operation: 'SUPERSEDE',
+        supersedesRecordIds: ['claim-b'],
+      }),
+    ];
+    const forward = createLedger();
+    const reversed = createLedger();
+    try {
+      await forward.memory.appendGrilloRecord('evidence_records', evidence);
+      await reversed.memory.appendGrilloRecord('evidence_records', evidence);
+      for (const claim of chain) {
+        await forward.memory.appendGrilloRecord('memory_claims', { ...claim });
+      }
+      for (const claim of [...chain].reverse()) {
+        await reversed.memory.appendGrilloRecord('memory_claims', { ...claim });
+      }
+      const forwardReplay = await forward.ledger.replay(scopeKey);
+      const reversedReplay = await reversed.ledger.replay(scopeKey);
+
+      expect(reversedReplay).toEqual(forwardReplay);
+      expect(forwardReplay.integrityIssues).toEqual([]);
+      expect(
+        forwardReplay.claimStates.map((state) => `${state.claim.id}:${state.status}`).sort(),
+      ).toEqual(['claim-a:superseded', 'claim-b:superseded', 'claim-c:active']);
+      expect(forwardReplay.activeClaims.map((state) => state.claim.id)).toEqual(['claim-c']);
+    } finally {
+      await forward.memory.close();
+      await reversed.memory.close();
+    }
+  });
+
+  it('applies supersession recorded out of createdAt order without losing it', async () => {
+    const { ledger, memory } = createLedger();
+    const scopeKey = 'local:persona:hikari-chan';
+    try {
+      await memory.appendGrilloRecord('evidence_records', rawEvidence(scopeKey, 'evidence-1', 5));
+      // The superseding claim sorts before its target by createdAt.
+      await memory.appendGrilloRecord('memory_claims', rawClaim(scopeKey, {
+        id: 'claim-late-target',
+        createdAt: 40,
+        validFrom: 10,
+        value: 'green',
+      }));
+      await memory.appendGrilloRecord('memory_claims', rawClaim(scopeKey, {
+        id: 'claim-early-superseder',
+        createdAt: 20,
+        validFrom: 30,
+        value: 'blue',
+        operation: 'SUPERSEDE',
+        supersedesRecordIds: ['claim-late-target'],
+      }));
+      const replay = await ledger.replay(scopeKey);
+
+      expect(replay.integrityIssues).toEqual([]);
+      expect(replay.activeClaims.map((state) => state.claim.id)).toEqual([
+        'claim-early-superseder',
+      ]);
+    } finally {
+      await memory.close();
+    }
+  });
+
+  it('rejects a superseding claim whose validity starts before its target', async () => {
+    const { ledger, memory } = createLedger();
+    const scopeKey = 'local:persona:hikari-chan';
+    try {
+      const evidence = await ledger.appendEvidence({
+        content: 'Green is my favorite color.',
+        kind: 'turn',
+        role: 'user',
+        scopeKey,
+        source: 'local',
+      });
+      const green = await ledger.evaluateClaim({
+        confidence: 0.9,
+        evidenceIds: [evidence.id],
+        kind: 'preference',
+        predicate: 'favorite_color',
+        scopeKey,
+        subject: 'local:local:subsect',
+        value: 'green',
+      });
+      const backdated = await ledger.evaluateClaim({
+        confidence: 0.9,
+        evidenceIds: [evidence.id],
+        kind: 'preference',
+        operation: 'SUPERSEDE',
+        predicate: 'favorite_color',
+        scopeKey,
+        subject: 'local:local:subsect',
+        supersedesRecordIds: [green.claim!.id],
+        validFrom: green.claim!.validFrom - 100,
+        value: 'blue',
+      });
+      const replay = await ledger.replay(scopeKey);
+
+      expect(backdated).toMatchObject({
+        claim: null,
+        decision: { operation: 'REJECT', outcome: 'rejected' },
+      });
+      expect(backdated.decision.publicReason).toContain('cannot begin before its target');
+      expect(replay.claims.map((claim) => claim.id)).toEqual([green.claim!.id]);
+      expect(replay.integrityIssues).toEqual([]);
+    } finally {
+      await memory.close();
+    }
+  });
+
+  it('reports stored temporally-invalid supersession as a replay integrity issue', async () => {
+    const { ledger, memory } = createLedger();
+    const scopeKey = 'local:persona:hikari-chan';
+    try {
+      await memory.appendGrilloRecord('evidence_records', rawEvidence(scopeKey, 'evidence-1', 5));
+      await memory.appendGrilloRecord('memory_claims', rawClaim(scopeKey, {
+        id: 'claim-target',
+        createdAt: 10,
+        validFrom: 10,
+        value: 'green',
+      }));
+      await memory.appendGrilloRecord('memory_claims', rawClaim(scopeKey, {
+        id: 'claim-backdated',
+        createdAt: 20,
+        validFrom: 5,
+        value: 'blue',
+        operation: 'SUPERSEDE',
+        supersedesRecordIds: ['claim-target'],
+      }));
+      const replay = await ledger.replay(scopeKey);
+
+      expect(replay.integrityIssues).toContain(
+        'claim:claim-backdated:invalid_interval:claim-target',
+      );
+      const target = replay.claimStates.find((state) => state.claim.id === 'claim-target');
+      expect(target?.status).toBe('active');
+    } finally {
+      await memory.close();
+    }
+  });
+
+  it('serializes concurrent identical claims into one stored claim plus one NOOP', async () => {
+    const { ledger, memory } = createLedger();
+    const scopeKey = 'local:persona:hikari-chan';
+    try {
+      const evidence = await ledger.appendEvidence({
+        content: 'The user likes green.',
+        kind: 'turn',
+        role: 'user',
+        scopeKey,
+        source: 'local',
+      });
+      const input = {
+        confidence: 0.8,
+        evidenceIds: [evidence.id],
+        kind: 'preference' as const,
+        predicate: 'favorite_color',
+        scopeKey,
+        subject: 'local:local:subsect',
+        value: 'green',
+      };
+      const results = await Promise.all([ledger.evaluateClaim(input), ledger.evaluateClaim(input)]);
+      const replay = await ledger.replay(scopeKey);
+      const applied = results.filter((result) => result.decision.outcome === 'applied');
+      const noops = results.filter((result) => result.decision.outcome === 'noop');
+
+      expect(applied).toHaveLength(1);
+      expect(noops).toHaveLength(1);
+      expect(noops[0]?.decision.targetId).toBe(applied[0]?.claim?.id);
+      expect(replay.claims).toHaveLength(1);
+      expect(replay.decisions.map((decision) => decision.outcome).sort()).toEqual([
+        'applied',
+        'noop',
+      ]);
+    } finally {
+      await memory.close();
+    }
+  });
+
+  it('keeps identical claims about different participants separate instead of deduplicating', async () => {
+    const { ledger, memory } = createLedger();
+    const scopeKey = 'local:persona:hikari-chan';
+    try {
+      const evidence = await ledger.appendEvidence({
+        content: 'Both chat participants like green.',
+        kind: 'turn',
+        role: 'user',
+        scopeKey,
+        source: 'local',
+      });
+      const base = {
+        confidence: 0.8,
+        evidenceIds: [evidence.id],
+        kind: 'preference' as const,
+        predicate: 'favorite_color',
+        scopeKey,
+        subject: 'favorite_color_owner',
+        value: 'green',
+      };
+      const first = await ledger.evaluateClaim({ ...base, participantKey: 'local:local:subsect' });
+      const second = await ledger.evaluateClaim({ ...base, participantKey: 'local:local:guest' });
+      const repeat = await ledger.evaluateClaim({ ...base, participantKey: 'local:local:subsect' });
+      const replay = await ledger.replay(scopeKey);
+
+      expect(first.decision.outcome).toBe('applied');
+      expect(second.decision.outcome).toBe('applied');
+      expect(repeat).toMatchObject({
+        claim: null,
+        decision: { operation: 'NOOP', outcome: 'noop', targetId: first.claim?.id },
+      });
+      expect(replay.claims).toHaveLength(2);
+      expect(new Set(replay.claims.map((claim) => claim.participantKey))).toEqual(
+        new Set(['local:local:subsect', 'local:local:guest']),
+      );
+    } finally {
+      await memory.close();
+    }
+  });
+
+  it('reports malformed correction and supersession references as replay integrity issues', async () => {
+    const { ledger, memory } = createLedger();
+    const scopeKey = 'local:persona:hikari-chan';
+    try {
+      await memory.appendGrilloRecord('evidence_records', rawEvidence(scopeKey, 'evidence-1', 5));
+      await memory.appendGrilloRecord('memory_claims', rawClaim(scopeKey, {
+        id: 'claim-dangling',
+        createdAt: 10,
+        validFrom: 10,
+        value: 'green',
+        operation: 'SUPERSEDE',
+        supersedesRecordIds: ['claim-that-never-existed'],
+      }));
+      await memory.appendGrilloRecord('memory_claims', rawClaim(scopeKey, {
+        id: 'claim-self',
+        createdAt: 20,
+        validFrom: 20,
+        value: 'blue',
+        operation: 'SUPERSEDE',
+        predicate: 'favorite_food',
+        supersedesRecordIds: ['claim-self'],
+      }));
+      await memory.appendGrilloRecord('memory_corrections', {
+        id: 'correction-dangling',
+        correctedValue: 'navy blue',
+        createdAt: 30,
+        evidenceIds: ['evidence-1'],
+        reason: 'Target claim never existed.',
+        scopeKey,
+        targetClaimId: 'claim-that-never-existed',
+      });
+      await memory.appendGrilloRecord('memory_corrections', {
+        id: 'correction-time-travel',
+        correctedValue: 'teal',
+        createdAt: 1,
+        evidenceIds: ['evidence-1'],
+        reason: 'Recorded before its target claim.',
+        scopeKey,
+        targetClaimId: 'claim-dangling',
+      });
+      const replay = await ledger.replay(scopeKey);
+
+      expect(replay.integrityIssues).toEqual(
+        expect.arrayContaining([
+          'claim:claim-dangling:missing_superseded:claim-that-never-existed',
+          'claim:claim-self:self_supersession',
+          'correction:correction-dangling:missing_target:claim-that-never-existed',
+          'correction:correction-time-travel:predates_target:claim-dangling',
+        ]),
+      );
+      const dangling = replay.claimStates.find((state) => state.claim.id === 'claim-dangling');
+      expect(dangling?.status).toBe('active');
+      expect(dangling?.effectiveValue).toBe('green');
+    } finally {
+      await memory.close();
+    }
+  });
 });
+
+function rawEvidence(scopeKey: string, id: string, createdAt: number) {
+  return {
+    id,
+    content: 'Raw ledger fixture evidence.',
+    createdAt,
+    kind: 'turn',
+    metadata: {},
+    role: 'user',
+    scopeKey,
+    source: 'local',
+    sourceRecordIds: [],
+  };
+}
+
+function rawClaim(
+  scopeKey: string,
+  input: {
+    id: string;
+    createdAt: number;
+    validFrom: number;
+    value: string;
+    operation?: 'ADD' | 'SUPERSEDE';
+    predicate?: string;
+    supersedesRecordIds?: string[];
+  },
+) {
+  return {
+    confidence: 0.9,
+    createdAt: input.createdAt,
+    evidenceIds: ['evidence-1'],
+    id: input.id,
+    kind: 'preference',
+    operation: input.operation ?? 'ADD',
+    predicate: input.predicate ?? 'favorite_color',
+    scopeKey,
+    subject: 'local:local:subsect',
+    supersedesRecordIds: input.supersedesRecordIds ?? [],
+    validFrom: input.validFrom,
+    validTo: null,
+    value: input.value,
+  };
+}

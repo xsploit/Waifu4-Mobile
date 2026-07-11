@@ -356,7 +356,7 @@ export class LadybugMemoryService {
         true,
       );
     } catch (error) {
-      await this.deleteFallbackSnapshotValue('grillo', normalizedScopeKey, error);
+      await this.deleteFallbackGrilloState(normalizedScopeKey, error);
     }
   }
 
@@ -1417,9 +1417,7 @@ export class LadybugMemoryService {
   }
 
   private async deleteGrilloRecordsForScope(scopeKey: string) {
-    await this.exec(`MATCH (m:GrilloRecord) WHERE m.scopeKey = ${q(scopeKey)} DELETE m`).catch(
-      () => undefined,
-    );
+    await this.exec(`MATCH (m:GrilloRecord) WHERE m.scopeKey = ${q(scopeKey)} DELETE m`);
   }
 
   private async deleteNativeGrilloGraphRows(
@@ -1552,6 +1550,24 @@ export class LadybugMemoryService {
     const normalizedScopeKey = normalizeScopeKey(scopeKey);
     await this.updateFallbackStore((store) => {
       delete store.snapshots[snapshotId(kind, normalizedScopeKey)];
+    });
+  }
+
+  private async deleteFallbackGrilloState(scopeKey: string, error: unknown) {
+    await this.enableFallback(error);
+    const normalizedScopeKey = normalizeScopeKey(scopeKey);
+    await this.updateFallbackStore((store) => {
+      delete store.snapshots[snapshotId('grillo', normalizedScopeKey)];
+      for (const entity of GRILLO_RECORD_ENTITIES) {
+        const remaining = readFallbackGrilloBucket(store, entity).filter(
+          (record) => grilloRecordScopeKey(record) !== normalizedScopeKey,
+        );
+        if (remaining.length > 0) {
+          writeFallbackGrilloBucket(store, entity, remaining);
+        } else {
+          delete store.snapshots[fallbackGrilloRecordsId(entity)];
+        }
+      }
     });
   }
 

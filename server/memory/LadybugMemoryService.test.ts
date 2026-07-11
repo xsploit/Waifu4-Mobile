@@ -536,6 +536,61 @@ describe('LadybugMemoryService', () => {
     }
   });
 
+  it('deletes fallback GRILLO ledger records for only the requested scope', async () => {
+    const service = createService();
+    const failingService = service as unknown as { init: () => Promise<never> };
+    let initCalls = 0;
+    failingService.init = async () => {
+      initCalls += 1;
+      throw new Error('native wal unavailable');
+    };
+    const targetScope = 'local:persona:fallback-target';
+    const siblingScope = 'local:persona:fallback-sibling';
+
+    try {
+      await service.appendGrilloRecord('evidence_records', {
+        id: 'evidence-target',
+        content: 'Target evidence.',
+        createdAt: 10,
+        kind: 'turn',
+        metadata: {},
+        role: 'user',
+        scopeKey: targetScope,
+        source: 'local',
+        sourceRecordIds: ['turn-target'],
+      });
+      await service.appendGrilloRecord('memory_claims', {
+        id: 'claim-target',
+        scopeKey: targetScope,
+        createdAt: 11,
+      });
+      await service.appendGrilloRecord('evidence_records', {
+        id: 'evidence-sibling',
+        content: 'Sibling evidence.',
+        createdAt: 12,
+        kind: 'turn',
+        metadata: {},
+        role: 'user',
+        scopeKey: siblingScope,
+        source: 'local',
+        sourceRecordIds: ['turn-sibling'],
+      });
+
+      await service.deleteGrilloState(targetScope);
+
+      const evidence = await service.readGrilloRecords<Record<string, unknown>>(
+        'evidence_records',
+      );
+      const claims = await service.readGrilloRecords<Record<string, unknown>>('memory_claims');
+      expect(evidence.map((record) => record['id'])).toEqual(['evidence-sibling']);
+      expect(claims).toEqual([]);
+      expect(service.getBackendLabel()).toBe('json-fallback');
+      expect(initCalls).toBe(1);
+    } finally {
+      await service.close();
+    }
+  });
+
   it('serializes concurrent JSON fallback writes without losing snapshots', async () => {
     const service = createService();
     const failingService = service as unknown as { init: () => Promise<never> };
