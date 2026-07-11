@@ -48,6 +48,7 @@ describe('GrilloWorkerService', () => {
 
       const graph = await memory.getGraphSummary();
       const ledger = await grillo.getEvidenceLedgerReplay('local:persona:hikari-chan');
+      const projection = await grillo.getEvidenceLedgerProjection('local:persona:hikari-chan');
 
       expect(result.turnIds).toEqual(['id-1', 'id-2']);
       expect(ledger.evidence).toEqual([
@@ -64,6 +65,8 @@ describe('GrilloWorkerService', () => {
           scopeKey: 'local:persona:hikari-chan',
         }),
       ]);
+      expect(projection.beliefs).toEqual([]);
+      expect(projection.provenance.evidenceIds).toEqual(['id-1', 'id-2']);
       expect(graph.recent.turns).toEqual(
         expect.arrayContaining([
           expect.objectContaining({
@@ -199,6 +202,27 @@ describe('GrilloWorkerService', () => {
       const scopeKey = 'local:persona:hikari-chan';
       const participantKey = 'local:local:subsect';
 
+      const ingested = await grillo.ingestTurnPair({
+        assistantText: 'I will keep the worker tools inspectable.',
+        participantKey,
+        scopeKey,
+        source: 'local',
+        userText: 'I prefer direct technical memory checks.',
+      });
+      const claimWrite = await grillo.runWorkerTool({
+        args: {
+          confidence: 0.95,
+          evidence_turn_ids: [ingested.turnIds[0]],
+          kind: 'preference',
+          predicate: 'memory_check_style',
+          subject: participantKey,
+          value: 'direct technical checks',
+        },
+        name: 'core.worker_claim_propose',
+        participantKey,
+        scopeKey,
+      });
+
       const memoryWrite = await grillo.runWorkerTool({
         args: {
           block_name: 'preferences',
@@ -257,7 +281,7 @@ describe('GrilloWorkerService', () => {
         scopeKey,
       });
       const search = await grillo.runWorkerTool({
-        args: { limit: 10, query: 'Ladybug worker tools' },
+        args: { limit: 10, query: 'technical memory checks Ladybug worker tools' },
         name: 'core.worker_memory_search',
         participantKey,
         scopeKey,
@@ -270,11 +294,21 @@ describe('GrilloWorkerService', () => {
       });
 
       expect(memoryWrite.ok).toBe(true);
+      expect(claimWrite).toMatchObject({
+        ok: true,
+        result: { operation: 'ADD', outcome: 'applied' },
+      });
       expect(candidateWrite.ok).toBe(true);
       expect(diaryWrite.ok).toBe(true);
       expect(profilePatch.ok).toBe(true);
       expect(archivalWrite.ok).toBe(true);
       expect(memoryRead.result).toMatchObject({
+        claims: [
+          expect.objectContaining({
+            effectiveValue: 'direct technical checks',
+            predicate: 'memory_check_style',
+          }),
+        ],
         slots: [
           expect.objectContaining({
             items: ['Subsect likes direct technical memory checks.'],
@@ -284,11 +318,18 @@ describe('GrilloWorkerService', () => {
       });
       expect(String(JSON.stringify(search.result))).toContain('native Ladybug worker tools');
       expect(String(JSON.stringify(search.result))).toContain('Native GRILLO worker tools use Ladybug records');
+      expect(String(JSON.stringify(search.result))).toContain('direct technical checks');
       expect(candidateList.result).toMatchObject({
         candidates: [expect.objectContaining({ summary: 'Subsect wants native Ladybug worker tools.' })],
       });
 
       const graph = await memory.getGraphSummary();
+      const activities = await memory.readGrilloRecords<Record<string, unknown>>(
+        'grillo_activity_log',
+      );
+      expect(
+        activities.filter((row) => row['beat_type'] === 'worker_tool'),
+      ).toHaveLength(9);
       expect(graph.recent.activities.filter((row) => row.beatType === 'worker_tool')).toHaveLength(8);
       expect(graph.edges.map((edge) => edge.relation)).toEqual(
         expect.arrayContaining(['HAS_BLOCK', 'HAS_SLOT', 'HAS_SLOT_PATCH', 'HAS_ACTIVITY']),
@@ -540,6 +581,27 @@ describe('GrilloWorkerService', () => {
                       },
                       name: 'core.worker_diary_write',
                     },
+                    {
+                      args: {
+                        confidence: 0.9,
+                        kind: 'goal',
+                        predicate: 'memory_architecture',
+                        subject: participantKey,
+                        value: 'Use backend GRILLO memory-lane worker tools.',
+                      },
+                      name: 'core.worker_claim_propose',
+                    },
+                    {
+                      args: {
+                        confidence: 0.5,
+                        evidence_turn_ids: ['missing-turn'],
+                        kind: 'fact',
+                        predicate: 'unsupported_memory',
+                        subject: participantKey,
+                        value: true,
+                      },
+                      name: 'core.worker_claim_propose',
+                    },
                   ],
                 }),
               };
@@ -563,7 +625,7 @@ describe('GrilloWorkerService', () => {
       expect(tick).toMatchObject({
         noOpReason: '',
         ok: true,
-        writes: 2,
+        writes: 3,
       });
       expect(requests[0]).toMatchObject({
         maxToolRounds: 15,
@@ -573,6 +635,7 @@ describe('GrilloWorkerService', () => {
         toolChoiceMode: 'auto',
       });
       expect(requests[0]?.messages[0]?.content).toContain('Available tools:');
+      expect(requests[0]?.messages[0]?.content).toContain('core.worker_claim_propose');
       expect(requests[0]?.messages[1]?.content).toContain('source_turn_ids');
 
       const graph = await memory.getGraphSummary();
@@ -588,8 +651,23 @@ describe('GrilloWorkerService', () => {
         'Backend memory-lane extraction was requested.',
       );
       expect(graph.recent.activities.filter((row) => row.beatType === 'worker_tool')).toHaveLength(
-        2,
+        4,
       );
+      const ledger = await grillo.getEvidenceLedgerReplay(scopeKey);
+      expect(ledger.decisions.map((decision) => decision.outcome)).toEqual([
+        'applied',
+        'deferred',
+      ]);
+      const projection = await grillo.getEvidenceLedgerProjection(scopeKey);
+      expect(projection.beliefs).toEqual([
+        expect.objectContaining({
+          effectiveValue: 'Use backend GRILLO memory-lane worker tools.',
+          evidenceIds: ['id-1', 'id-2'],
+          kind: 'goal',
+          predicate: 'memory_architecture',
+          subject: participantKey,
+        }),
+      ]);
 
       await expect(grillo.runTickWithOptions({ reason: 'manual_test', scopeKey })).resolves.toMatchObject({
         noOpReason: 'no_new_turn_pairs',

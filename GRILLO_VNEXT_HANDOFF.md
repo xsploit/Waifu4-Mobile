@@ -46,9 +46,18 @@ retrieval controller --> budgeted context packet --> main reply model
   into current claim states and reports malformed record IDs. This is an
   inspection surface; existing blocks, slots, relationships, and prompt
   injection still use their established projections.
-- Next Phase 2 work is deterministic projection rebuilding from the ledger.
-  Do not switch live prompt injection to the new projections until replay
-  equivalence tests cover blocks, slots, relationships, and timelines.
+- `server/memory/GrilloLedgerProjector.ts` deterministically rebuilds current
+  beliefs, relationship claims, slots, and a provenance-only timeline. Its
+  stable SHA-256 generation changes only when canonical state changes and is
+  inspectable at `GET /api/memory/grillo/projection?scopeKey=...`.
+- The live background worker can call `core.worker_claim_propose`. The tool
+  accepts grounded subject/predicate/JSON-value claims, automatically carries
+  extraction turn IDs, records applied/deferred/rejected decisions, and exposes
+  current claims through the existing memory read/search tools. Deferred and
+  no-op proposals do not inflate worker write counts.
+- Next Phase 2 work is projection equivalence and migration coverage. Do not
+  switch live prompt injection to ledger projections until tests cover the
+  established blocks, slots, relationship profiles, and temporal timelines.
 
 ## Project Map
 

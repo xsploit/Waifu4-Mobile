@@ -199,6 +199,18 @@ export function createMemoryRouter() {
     }
   });
 
+  router.get('/grillo/projection', async (req, res) => {
+    try {
+      res.json({
+        ok: true,
+        backend: getLadybugMemoryService().getBackendLabel(),
+        projection: await getGrilloWorkerService().getEvidenceLedgerProjection(req.query.scopeKey),
+      });
+    } catch (error) {
+      sendError(res, error, 'GRILLO ledger projection failed.');
+    }
+  });
+
   router.get('/grillo/runtime', (_req, res) => {
     res.json({
       ok: true,

@@ -7,7 +7,11 @@ import type {
   LadybugMemorySlotPatchRecord,
   LadybugMemorySlotRecord,
 } from './LadybugMemoryService.js';
-import { GrilloEvidenceLedger } from './GrilloEvidenceLedger.js';
+import {
+  GrilloEvidenceLedger,
+  type GrilloClaimInput,
+} from './GrilloEvidenceLedger.js';
+import { buildGrilloLedgerProjection } from './GrilloLedgerProjector.js';
 import type {
   GrilloContextPacket,
   GrilloEmbeddingIdentity,
@@ -69,6 +73,7 @@ type GrilloWorkerToolName =
   | 'core.worker_memory_search'
   | 'core.worker_candidate_list'
   | 'core.worker_candidate_write'
+  | 'core.worker_claim_propose'
   | 'core.worker_diary_write'
   | 'core.worker_memory_write'
   | 'core.worker_profile_patch'
@@ -263,6 +268,10 @@ export class GrilloWorkerService {
 
   getEvidenceLedgerReplay(scopeKey: unknown) {
     return this.evidenceLedger.replay(normalizeKey(scopeKey, 'local:persona:default'));
+  }
+
+  async getEvidenceLedgerProjection(scopeKey: unknown) {
+    return buildGrilloLedgerProjection(await this.getEvidenceLedgerReplay(scopeKey));
   }
 
   runTick(input: GrilloWorkerTickInput = {}) {
@@ -882,7 +891,7 @@ export class GrilloWorkerService {
           scopeKey: input.scopeKey,
         });
         if (execution.ok) {
-          writes += isWorkerWriteTool(call.name) ? 1 : 0;
+          writes += workerToolWriteCount(call.name, execution.result);
           candidateWrites += call.name === 'core.worker_candidate_write' ? 1 : 0;
           diaryWrites += call.name === 'core.worker_diary_write' ? 1 : 0;
         }
@@ -1035,7 +1044,7 @@ export class GrilloWorkerService {
           scopeKey: input.scopeKey,
         });
         if (execution.ok) {
-          writes += isWorkerWriteTool(call.name) ? 1 : 0;
+          writes += workerToolWriteCount(call.name, execution.result);
         }
         messages.push({
           role: 'user',
@@ -1363,6 +1372,9 @@ export class GrilloWorkerService {
     if (name === 'core.worker_candidate_write') {
       return this.writeWorkerCandidate(scopeKey, participantKey, args);
     }
+    if (name === 'core.worker_claim_propose') {
+      return this.proposeWorkerClaim(scopeKey, participantKey, args);
+    }
     if (name === 'core.worker_diary_write') {
       return this.writeWorkerDiary(scopeKey, participantKey, args);
     }
@@ -1387,9 +1399,10 @@ export class GrilloWorkerService {
     args: Record<string, unknown>,
   ) {
     const blockName = normalizeText(args['block_name']);
-    const [blocks, slots] = await Promise.all([
+    const [blocks, slots, projection] = await Promise.all([
       this.memory.readGrilloRecords<Record<string, unknown>>('memory_blocks'),
       this.memory.readGrilloRecords<Record<string, unknown>>('memory_slots'),
+      this.getEvidenceLedgerProjection(scopeKey),
     ]);
     const inWorkerScope = (record: Record<string, unknown>) =>
       recordScopeKey(record) === scopeKey && workerParticipantMatches(record, participantKey);
@@ -1406,6 +1419,14 @@ export class GrilloWorkerService {
           slot_name: normalizeText(slot['slotName'] ?? slot['slot_name']),
           updated_at: normalizeText(slot['updatedAt'] ?? slot['updated_at']),
         })),
+      claims: projection.slots
+        .filter(
+          (slot) =>
+            !participantKey ||
+            !slot.current.participantKey ||
+            slot.current.participantKey === participantKey,
+        )
+        .map((slot) => slot.current),
     };
   }
 
@@ -1419,12 +1440,13 @@ export class GrilloWorkerService {
     if (!query) {
       return { results: [] };
     }
-    const [candidates, diary, blocks, slots, semanticRecords] = await Promise.all([
+    const [candidates, diary, blocks, slots, semanticRecords, projection] = await Promise.all([
       this.memory.readGrilloRecords<Record<string, unknown>>('memory_candidates'),
       this.memory.readGrilloRecords<Record<string, unknown>>('diary_entries'),
       this.memory.readGrilloRecords<Record<string, unknown>>('memory_blocks'),
       this.memory.readGrilloRecords<Record<string, unknown>>('memory_slots'),
       this.memory.loadSemanticRecords(scopeKey),
+      this.getEvidenceLedgerProjection(scopeKey),
     ]);
     const scoped = (record: Record<string, unknown>) =>
       recordScopeKey(record) === scopeKey && workerParticipantMatches(record, participantKey);
@@ -1454,6 +1476,23 @@ export class GrilloWorkerService {
         metadata: { source: 'semantic', persona_id: record.personaId },
         text: normalizeText(record.text),
       })),
+      ...projection.slots
+        .filter(
+          (slot) =>
+            !participantKey ||
+            !slot.current.participantKey ||
+            slot.current.participantKey === participantKey,
+        )
+        .map((slot) => ({
+          id: slot.current.claimId,
+          metadata: {
+            source: 'ledger_claim',
+            kind: slot.current.kind,
+            predicate: slot.current.predicate,
+            status: slot.current.status,
+          },
+          text: `${slot.current.subject} ${slot.current.predicate} ${JSON.stringify(slot.current.effectiveValue)}`,
+        })),
     ]
       .filter((record) => record.id && record.text)
       .map((record) => ({ ...record, score: lexicalScore(record.text, query) }))
@@ -1507,6 +1546,36 @@ export class GrilloWorkerService {
       user_id: scopeKey,
     });
     return { candidate_id: candidateId };
+  }
+
+  private async proposeWorkerClaim(
+    scopeKey: string,
+    participantKey: string,
+    args: Record<string, unknown>,
+  ) {
+    const result = await this.evidenceLedger.evaluateClaim({
+      confidence: clampNumber(args['confidence'], 0, 1, 0.7),
+      evidenceIds: readStringArray(args['evidence_turn_ids'] ?? args['source_turn_ids']),
+      kind: normalizeClaimKind(args['kind']),
+      operation: normalizeClaimOperation(args['operation']),
+      participantKey,
+      predicate: normalizeText(args['predicate']),
+      scopeKey,
+      subject: normalizeText(args['subject']) || participantKey,
+      supersedesRecordIds: readStringArray(
+        args['supersedes_claim_ids'] ?? args['supersedes_record_ids'],
+      ),
+      value: args['value'] as GrilloClaimInput['value'],
+    });
+    return {
+      claim_id: result.claim?.id ?? null,
+      decision_id: result.decision.id,
+      evidence_ids: result.decision.evidenceIds,
+      operation: result.decision.operation,
+      outcome: result.decision.outcome,
+      public_reason: result.decision.publicReason,
+      target_id: result.decision.targetId,
+    };
   }
 
   private async writeWorkerDiary(scopeKey: string, participantKey: string, args: Record<string, unknown>) {
@@ -1838,6 +1907,7 @@ const WORKER_TOOL_NAME_VALUES = [
   'core.worker_memory_search',
   'core.worker_candidate_list',
   'core.worker_candidate_write',
+  'core.worker_claim_propose',
   'core.worker_diary_write',
   'core.worker_memory_write',
   'core.worker_profile_patch',
@@ -1888,6 +1958,28 @@ const CandidateWriteArgsSchema = z
     type: z.enum(['preference', 'fact', 'goal', 'boundary', 'bond_signal', 'thread']).optional(),
   })
   .passthrough();
+const ClaimProposeArgsSchema = z
+  .object({
+    confidence: z.number().min(0).max(1).optional(),
+    evidence_turn_ids: z.array(z.string().min(1)).max(100).optional(),
+    kind: z.enum([
+      'fact',
+      'preference',
+      'opinion',
+      'relationship',
+      'decision',
+      'goal',
+      'boundary',
+      'thread',
+      'bond_signal',
+    ]),
+    operation: z.enum(['ADD', 'UPDATE', 'SUPERSEDE']).optional(),
+    predicate: z.string().trim().min(1).max(240),
+    subject: z.string().trim().min(1).max(500).optional(),
+    supersedes_claim_ids: z.array(z.string().min(1)).max(100).optional(),
+    value: z.json(),
+  })
+  .passthrough();
 const DiaryWriteArgsSchema = z
   .object({
     personalThought: TextishSchema.optional(),
@@ -1911,6 +2003,7 @@ const WorkerToolArgSchemas = {
     })
     .passthrough(),
   'core.worker_candidate_write': CandidateWriteArgsSchema,
+  'core.worker_claim_propose': ClaimProposeArgsSchema,
   'core.worker_diary_write': DiaryWriteArgsSchema,
   'core.worker_emotion_read': z.object({}).passthrough(),
   'core.worker_emotion_update': z
@@ -1967,12 +2060,15 @@ function buildBackendWorkerSystemPrompt() {
     'Reflection beats synthesize higher-order insight from clusters of turns and memories; they do not restate isolated facts.',
     'A useful reflection explains what pattern is emerging, what changed emotionally or relationally, and how future replies should adapt.',
     'Use memory_write only for grounded consolidated slots such as open_threads, ongoing_threads, preferences, boundaries, verified_facts, or relationship_state.',
+    'Candidate, block, slot, and profile writes remain compatibility projections. Use worker_claim_propose for the canonical claim when a stable subject, predicate, and JSON value are grounded.',
+    'For claim evidence, use only canonical turn IDs supplied as source_turn_ids or returned with existing claims. Never invent evidence or claim IDs.',
     '',
     'Available tools:',
     '- core.worker_memory_read args: {"block_name"?: string}',
     '- core.worker_memory_search args: {"query": string, "limit"?: number}',
     '- core.worker_candidate_list args: {"limit"?: number, "type_filter"?: string}',
     '- core.worker_candidate_write args: {"type": "preference|fact|goal|boundary|bond_signal|thread", "content": string, "summary": string, "confidence": number, "tags"?: string[], "source_turn_ids"?: string[]}',
+    '- core.worker_claim_propose args: {"kind": "fact|preference|opinion|relationship|decision|goal|boundary|thread|bond_signal", "subject"?: string, "predicate": string, "value": JSON, "confidence"?: number, "evidence_turn_ids"?: string[], "operation"?: "ADD|UPDATE|SUPERSEDE", "supersedes_claim_ids"?: string[]}',
     '- core.worker_diary_write args: {"summary": string, "personal_thought": string, "tags"?: string[], "beat_type"?: string, "source_turn_ids"?: string[]}',
     '- core.worker_memory_write args: {"block_name": string, "items": string[], "operation": "merge|replace", "reason"?: string, "source_candidate_ids"?: string[]}',
     '- core.worker_profile_patch args: {"field": "tone_preferences|interaction_style|boundaries|active_threads", "operation": "add|remove", "value": string}',
@@ -2006,7 +2102,7 @@ function buildBackendExtractionPrompt(
     'Completed turn pairs to process:',
     transcript,
     '',
-    'Write only memories grounded in these turns. If nothing durable is present, return done=true with no tool calls.',
+    'Write only memories grounded in these turns. For each durable candidate, also call core.worker_claim_propose when you can state a stable subject, predicate, and JSON value. Use the supplied source_turn_ids as evidence_turn_ids. If nothing durable is present, return done=true with no tool calls.',
   ].join('\n');
 }
 
@@ -2271,12 +2367,23 @@ function withSourceTurnIds(
       source_turn_ids: sourceTurnIds,
     };
   }
+  if (
+    name === 'core.worker_claim_propose' &&
+    readStringArray(args['evidence_turn_ids']).length === 0 &&
+    sourceTurnIds.length > 0
+  ) {
+    return {
+      ...args,
+      evidence_turn_ids: sourceTurnIds,
+    };
+  }
   return args;
 }
 
 function isWorkerWriteTool(name: GrilloWorkerToolName) {
   return (
     name === 'core.worker_candidate_write' ||
+    name === 'core.worker_claim_propose' ||
     name === 'core.worker_diary_write' ||
     name === 'core.worker_memory_write' ||
     name === 'core.worker_profile_patch' ||
@@ -2491,6 +2598,36 @@ function normalizeCandidateType(value: unknown) {
   return ['preference', 'fact', 'goal', 'boundary', 'bond_signal', 'thread'].includes(normalized)
     ? normalized
     : 'thread';
+}
+
+function workerToolWriteCount(name: GrilloWorkerToolName, result: unknown) {
+  if (!isWorkerWriteTool(name)) return 0;
+  if (name !== 'core.worker_claim_propose') return 1;
+  return normalizeText(asRecord(result)['outcome']) === 'applied' ? 1 : 0;
+}
+
+function normalizeClaimKind(value: unknown): GrilloClaimInput['kind'] {
+  const normalized = normalizeText(value);
+  if (
+    normalized === 'fact' ||
+    normalized === 'preference' ||
+    normalized === 'opinion' ||
+    normalized === 'relationship' ||
+    normalized === 'decision' ||
+    normalized === 'goal' ||
+    normalized === 'boundary' ||
+    normalized === 'thread' ||
+    normalized === 'bond_signal'
+  ) {
+    return normalized;
+  }
+  return 'fact';
+}
+
+function normalizeClaimOperation(value: unknown): GrilloClaimInput['operation'] {
+  const normalized = normalizeText(value).toUpperCase();
+  if (normalized === 'UPDATE' || normalized === 'SUPERSEDE') return normalized;
+  return normalized === 'ADD' ? 'ADD' : undefined;
 }
 
 function normalizeSlotOperation(value: unknown): LadybugMemorySlotPatchRecord['operation'] {

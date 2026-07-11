@@ -19,6 +19,16 @@ const checks: Check[] = [
   { name: 'twitch runtime', path: '/twitch/runtime/status', expectedStatus: 200 },
   { name: 'memory status', path: '/memory/status', expectedStatus: 200 },
   {
+    name: 'GRILLO evidence ledger',
+    path: '/memory/grillo/ledger?scopeKey=local%3Apersona%3Asmoke',
+    expectedStatus: 200,
+  },
+  {
+    name: 'GRILLO ledger projection',
+    path: '/memory/grillo/projection?scopeKey=local%3Apersona%3Asmoke',
+    expectedStatus: 200,
+  },
+  {
     name: 'poml render',
     method: 'POST',
     path: '/ai/poml/render',

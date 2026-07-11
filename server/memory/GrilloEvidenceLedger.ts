@@ -27,7 +27,17 @@ const memoryClaimSchema = z.object({
   id: idSchema,
   scopeKey: scopeKeySchema,
   participantKey: z.string().trim().max(180).optional(),
-  kind: z.enum(['fact', 'preference', 'opinion', 'relationship', 'decision']),
+  kind: z.enum([
+    'fact',
+    'preference',
+    'opinion',
+    'relationship',
+    'decision',
+    'goal',
+    'boundary',
+    'thread',
+    'bond_signal',
+  ]),
   subject: z.string().trim().min(1).max(500),
   predicate: z.string().trim().min(1).max(240),
   value: jsonValueSchema,
@@ -421,7 +431,7 @@ export class GrilloEvidenceLedger {
           ...previous,
           effectiveValue: correction.correctedValue,
           status: 'corrected',
-          validTo: correction.createdAt,
+          validTo: null,
         });
       }
     }
