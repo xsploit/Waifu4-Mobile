@@ -1,5 +1,6 @@
 import { formatChatTurnMetadata, type ChatTurn } from './chat-turn';
 import type { PersonaProfile, RelationshipMemory } from './types';
+import type { GrilloContextPacket, GrilloRecallItem } from '../../shared/grilloContext';
 
 const GRILLO_DEFAULT_SECTION_BUDGETS = {
   background_information: 300,
@@ -15,7 +16,7 @@ const GRILLO_DEFAULT_GLOBAL_BUDGET = 2030;
 
 type GrilloSectionName = keyof typeof GRILLO_DEFAULT_SECTION_BUDGETS;
 
-export type GrilloScoredItem = {
+export type GrilloScoredItem = Partial<Omit<GrilloRecallItem, 'score' | 'text'>> & {
   text: string;
   score?: number;
 };
@@ -51,14 +52,7 @@ type BuildGrilloContextSectionsOptions = {
   currentTurnText?: string;
   diaryContext?: string;
   memoryAdditions?: {
-    contextPacket?: {
-      background_information?: string[];
-      channel_history?: string[];
-      output_description?: string[];
-      recalled_memories?: GrilloScoredItem[];
-      relationship_memory?: string[];
-      thoughts?: string[];
-    } | null;
+    contextPacket?: GrilloContextPacket | null;
     diaryThoughts?: string[];
     recalledMemories?: GrilloScoredItem[];
     relationshipMemory?: string[];

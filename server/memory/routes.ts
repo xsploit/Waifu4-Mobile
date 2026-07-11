@@ -10,6 +10,17 @@ import {
 } from './LadybugMemoryService';
 
 const gatewaySchema = z.enum(['vercel-gateway', 'openrouter-responses']);
+const contextBodySchema = z
+  .object({
+    embeddingModel: z.string().max(240).optional(),
+    embeddingProvider: z.string().max(120).optional(),
+    embeddingVersion: z.string().max(120).optional(),
+    participantKeys: z.array(z.string().max(240)).max(64).optional(),
+    query: z.string().max(4000).optional(),
+    queryEmbedding: z.array(z.number().finite()).max(10000).optional(),
+    scopeKey: z.string().max(240).optional(),
+  })
+  .strict();
 const runtimeBodySchema = z
   .object({
     beatType: z.unknown().optional(),
@@ -157,6 +168,19 @@ export function createMemoryRouter() {
           query: req.query.query,
           scopeKey: req.query.scopeKey,
         }),
+      });
+    } catch (error) {
+      sendError(res, error, 'GRILLO context packet failed.');
+    }
+  });
+
+  router.post('/grillo/context', async (req, res) => {
+    try {
+      const input = contextBodySchema.parse(req.body ?? {});
+      res.json({
+        ok: true,
+        backend: getLadybugMemoryService().getBackendLabel(),
+        packet: await getGrilloWorkerService().buildContextPacket(input),
       });
     } catch (error) {
       sendError(res, error, 'GRILLO context packet failed.');

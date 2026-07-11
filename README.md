@@ -373,6 +373,7 @@ memory, Twitch, and VRM seams.
 
 ## Backlog
 
+- Add local microphone voice chat: audio VAD, selectable Fish ASR or browser-local Whisper Web, editable transcript, then the normal local-chat pipeline. Current Fish/Whisper transcription is limited to Twitch stream audio sampling.
 - Capture provider-safe reasoning summaries as memory signals when models expose them; do not store hidden chain-of-thought.
 - Persist and expose richer GRILLO reasoning/debrief data where useful, beyond compact activity logs and worker traces.
 - Add silence/gap detection to the browser TTS benchmark.

@@ -231,6 +231,19 @@ describe('ContextTab', () => {
             output_description: ['Use native GRILLO packet context.'],
             recalled_memories: ['[candidate:fact] Subby asked me to remember Ladybug.'],
             relationship_memory: ['[slot:preferences] Subby prefers Ladybug memory first.'],
+            retrieval_receipt: {
+              embedding: null,
+              lanes: {
+                recalled_memories: {
+                  droppedIds: [],
+                  duplicateIds: [],
+                  includedIds: ['candidate-1'],
+                  requestedIds: ['candidate-1'],
+                },
+              },
+              query: 'Do you remember Ladybug?',
+              strategy: 'lexical_fallback',
+            },
             thoughts: ['[diary:relationship] I should keep this memory visible.'],
           },
           grilloDiaryThoughts: ['I should keep this memory visible.'],

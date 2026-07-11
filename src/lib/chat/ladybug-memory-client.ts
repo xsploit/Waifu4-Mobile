@@ -3,6 +3,7 @@ import type { GrilloMemoryState } from './grillo-memory';
 import type { SemanticMemoryRecord } from './semantic-memory';
 import type { RelationshipMemory } from './types';
 import type { LadybugMemoryGraphSummary } from '../../shared/ladybugMemoryTypes';
+import type { GrilloContextPacket } from '../../shared/grilloContext';
 export type { LadybugMemoryGraphSummary } from '../../shared/ladybugMemoryTypes';
 
 export type LadybugMemoryStatus = {
@@ -45,16 +46,7 @@ export type LadybugGrilloTurnPairInput = {
   userText?: string;
 };
 
-export type LadybugGrilloContextPacket = {
-  background_information: string[];
-  channel_history: string[];
-  generatedAt: number;
-  output_description: string[];
-  recalled_memories: Array<{ score?: number; text: string }>;
-  relationship_memory: string[];
-  scopeKey: string;
-  thoughts: string[];
-};
+export type LadybugGrilloContextPacket = GrilloContextPacket;
 
 export type LadybugGrilloRuntimeStatus = {
   enabled: boolean;
@@ -132,19 +124,30 @@ export async function saveLadybugGrilloTurnPair(input: LadybugGrilloTurnPairInpu
 
 export async function loadLadybugGrilloContextPacket(
   scopeKey: string,
-  options: { participantKeys?: string[]; query?: string } = {},
+  options: {
+    embeddingModel?: string;
+    embeddingProvider?: string;
+    embeddingVersion?: string;
+    participantKeys?: string[];
+    query?: string;
+    queryEmbedding?: number[] | null;
+  } = {},
 ) {
-  const params = new URLSearchParams({ scopeKey });
-  if (options.query?.trim()) {
-    params.set('query', options.query.trim());
-  }
-  for (const participantKey of options.participantKeys ?? []) {
-    if (participantKey.trim()) {
-      params.append('participantKey', participantKey.trim());
-    }
-  }
   const response = await requestLadybugMemory<{ packet: LadybugGrilloContextPacket }>(
-    `/memory/grillo/context?${params.toString()}`,
+    '/memory/grillo/context',
+    {
+      body: JSON.stringify({
+        embeddingModel: options.embeddingModel?.trim() || undefined,
+        embeddingProvider: options.embeddingProvider?.trim() || undefined,
+        embeddingVersion: options.embeddingVersion?.trim() || undefined,
+        participantKeys: (options.participantKeys ?? []).map((key) => key.trim()).filter(Boolean),
+        query: options.query?.trim() || undefined,
+        queryEmbedding: options.queryEmbedding?.filter(Number.isFinite) ?? undefined,
+        scopeKey,
+      }),
+      headers: { 'Content-Type': 'application/json' },
+      method: 'POST',
+    },
   );
   return response?.ok === true ? response.packet : null;
 }

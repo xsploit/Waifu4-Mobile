@@ -1,4 +1,5 @@
 import type { PersonaProfile } from './types';
+import type { GrilloRecallItem } from '../../shared/grilloContext';
 import {
   deleteLadybugSemanticMemory,
   loadLadybugSemanticMemory,
@@ -9,8 +10,12 @@ import {
 export type SemanticMemoryRecord = {
   id: string;
   createdAt: number;
+  embeddingModel?: string;
+  embeddingProvider?: string;
+  embeddingVersion?: string;
   personaId: string;
   scopeKey: string;
+  sourceTurnIds?: string[];
   text: string;
   userText: string;
   assistantText: string;
@@ -216,12 +221,18 @@ export async function clearSemanticMemory(scopeKey: string) {
 export async function addSemanticMemoryTurn({
   assistantText,
   embedding,
+  embeddingModel,
+  embeddingProvider,
+  embeddingVersion,
   persona,
   scopeKey,
   userText,
 }: {
   assistantText: string;
   embedding: number[] | null;
+  embeddingModel?: string;
+  embeddingProvider?: string;
+  embeddingVersion?: string;
   persona: PersonaProfile | null;
   scopeKey: string;
   userText: string;
@@ -244,6 +255,10 @@ export async function addSemanticMemoryTurn({
       userText: normalizedUserText,
       assistantText: normalizedAssistantText,
       embedding: normalizeEmbedding(embedding),
+      embeddingModel: normalizeSemanticMemoryText(embeddingModel, 240),
+      embeddingProvider: normalizeSemanticMemoryText(embeddingProvider, 120),
+      embeddingVersion: normalizeSemanticMemoryText(embeddingVersion, 120),
+      sourceTurnIds: [],
     };
 
     const nextRecords = [record, ...records];
@@ -528,7 +543,20 @@ function normalizeSemanticMemoryRecord(value: unknown): SemanticMemoryRecord | n
     userText,
     assistantText,
     embedding: normalizeEmbedding(source.embedding),
+    embeddingModel: normalizeSemanticMemoryText(source.embeddingModel, 240),
+    embeddingProvider: normalizeSemanticMemoryText(source.embeddingProvider, 120),
+    embeddingVersion: normalizeSemanticMemoryText(source.embeddingVersion, 120),
+    sourceTurnIds: Array.isArray(source.sourceTurnIds)
+      ? source.sourceTurnIds.map((value) => String(value).trim()).filter(Boolean)
+      : [],
   };
+}
+
+export function buildSemanticMemoryContextFromRecallItems(items: GrilloRecallItem[]) {
+  const usable = items.filter((item) => item.source === 'semantic' && item.text.trim()).slice(0, 4);
+  return usable
+    .map((item, index) => `${index + 1}. ${item.text.replace(/\s+/g, ' ').trim()}`)
+    .join('\n');
 }
 
 function normalizeSemanticMemoryText(value: unknown, maxLength: number) {

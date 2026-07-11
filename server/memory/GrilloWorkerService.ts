@@ -3,9 +3,15 @@ import { z } from 'zod';
 import type {
   LadybugEmotionStateRecord,
   LadybugMemoryService,
+  LadybugSemanticMemoryRecord,
   LadybugMemorySlotPatchRecord,
   LadybugMemorySlotRecord,
 } from './LadybugMemoryService.js';
+import type {
+  GrilloContextPacket,
+  GrilloEmbeddingIdentity,
+  GrilloRecallItem,
+} from '../../src/shared/grilloContext.js';
 import type {
   ChatProviderMessage,
   ChatProviderResponseFormat,
@@ -46,21 +52,16 @@ export type GrilloManualRunResult = {
 };
 
 export type GrilloContextPacketInput = {
+  embeddingModel?: unknown;
+  embeddingProvider?: unknown;
+  embeddingVersion?: unknown;
   participantKeys?: unknown;
   query?: unknown;
+  queryEmbedding?: unknown;
   scopeKey?: unknown;
 };
 
-export type GrilloContextPacket = {
-  background_information: string[];
-  channel_history: string[];
-  generatedAt: number;
-  output_description: string[];
-  recalled_memories: Array<{ score?: number; text: string }>;
-  relationship_memory: string[];
-  scopeKey: string;
-  thoughts: string[];
-};
+export type { GrilloContextPacket } from '../../src/shared/grilloContext.js';
 
 type GrilloWorkerToolName =
   | 'core.worker_memory_read'
@@ -1104,9 +1105,13 @@ export class GrilloWorkerService {
         assistantText: normalizeSemanticIndexText(pair.assistant, 1200),
         createdAt: Math.max(recordTimestamp(pair.assistant), recordTimestamp(pair.user), this.nowMs()),
         embedding: result.embedding,
+        embeddingModel: result.model || lastModel,
+        embeddingProvider: result.provider || lastProvider,
+        embeddingVersion: 'provider-managed',
         id: this.idFactory(),
         personaId: inferPersona(input.scopeKey),
         scopeKey: input.scopeKey,
+        sourceTurnIds,
         text: semanticText,
         userText: normalizeSemanticIndexText(pair.user, 1200),
       });
@@ -1171,6 +1176,13 @@ export class GrilloWorkerService {
     };
     const inScope = (record: Record<string, unknown>) => recordScopeKey(record) === scopeKey;
     const query = normalizeText(input.query);
+    const queryEmbedding = normalizeEmbeddingArray(input.queryEmbedding);
+    const queryEmbeddingIdentity = createEmbeddingIdentity({
+      dimensions: queryEmbedding.length,
+      model: normalizeText(input.embeddingModel),
+      provider: normalizeText(input.embeddingProvider),
+      version: normalizeText(input.embeddingVersion),
+    });
     const [
       turns,
       candidates,
@@ -1178,6 +1190,7 @@ export class GrilloWorkerService {
       slots,
       diary,
       semanticRecords,
+      semanticVectorMatches,
       relationshipProfiles,
     ] = await Promise.all([
       this.memory.readGrilloRecords<Record<string, unknown>>('turn_events'),
@@ -1186,6 +1199,9 @@ export class GrilloWorkerService {
       this.memory.readGrilloRecords<Record<string, unknown>>('memory_slots'),
       this.memory.readGrilloRecords<Record<string, unknown>>('diary_entries'),
       this.memory.loadSemanticRecords(scopeKey),
+      queryEmbedding.length > 0
+        ? this.memory.querySemanticVectors(scopeKey, queryEmbedding, 8)
+        : Promise.resolve([]),
       this.memory.loadRelationshipProfiles(),
     ]);
     const scopedTurns = turns
@@ -1209,25 +1225,47 @@ export class GrilloWorkerService {
       .sort((left, right) => recordTimestamp(right) - recordTimestamp(left))
       .slice(0, 5);
     const relationshipProfile = asRecord(asRecord(relationshipProfiles)[scopeKey]);
-    const semantic = (semanticRecords ?? []).slice(0, 6);
+    const normalizedSemanticRecords = semanticRecords ?? [];
+    const semanticRecordById = new Map(normalizedSemanticRecords.map((record) => [record.id, record]));
+    const vectorSemantic = semanticVectorMatches.map((match) => ({
+      ...match,
+      ...(semanticRecordById.get(match.id) ?? {}),
+      score: match.score,
+    }));
+    const lexicalSemantic = query
+      ? normalizedSemanticRecords
+          .map((record) => ({ ...record, score: Math.min(1, lexicalScore(record.text, query)) }))
+          .filter((record) => record.score > 0)
+          .sort((left, right) => right.score - left.score || right.createdAt - left.createdAt)
+          .slice(0, 8)
+      : [];
+    const semanticStrategy =
+      vectorSemantic.length > 0
+        ? 'semantic_vector'
+        : lexicalSemantic.length > 0
+          ? 'lexical_fallback'
+          : normalizedSemanticRecords.length > 0
+            ? 'recent_fallback'
+            : 'none';
+    const semantic =
+      vectorSemantic.length > 0
+        ? vectorSemantic
+        : lexicalSemantic.length > 0
+          ? lexicalSemantic
+          : normalizedSemanticRecords.slice(0, 6).map((record) => ({ ...record, score: undefined }));
 
     const relationshipMemory = [
       ...formatRelationshipProfile(relationshipProfile),
       ...scopedBlocks.flatMap(formatMemoryBlock),
       ...scopedSlots.flatMap(formatMemorySlot),
     ].slice(0, 16);
-    const recalledMemories = [
-      ...scopedCandidates.map((record) => ({
-        score: clampNumber(record['confidence'], 0, 1, 0.72),
-        text: `[candidate:${normalizeText(record['type']) || 'thread'} ${recordParticipantKey(record) || 'unknown'}] ${normalizeText(record['summary'] ?? record['content'])}`,
-      })),
-      ...semantic.map((record, index) => ({
-        score: Math.max(0.25, 0.82 - index * 0.08),
-        text: `[semantic:${record.personaId || 'unknown'}] ${normalizeText(record.text)}`,
-      })),
-    ]
-      .filter((item) => item.text.trim())
-      .slice(0, 12);
+    const recallSelection = selectRecallItems(
+      [
+        ...scopedCandidates.map((record) => formatCandidateRecallItem(record, scopeKey)),
+        ...semantic.map((record) => formatSemanticRecallItem(record, scopeKey)),
+      ].filter((item) => item.text.trim()),
+      12,
+    );
 
     return {
       background_information: [
@@ -1239,6 +1277,7 @@ export class GrilloWorkerService {
         `memory_candidates: ${candidates.filter(inScope).length}`,
         `memory_slots: ${slots.filter(inScope).length}`,
         `semantic_records: ${semanticRecords?.length ?? 0}`,
+        `semantic_retrieval: ${semanticStrategy}`,
         query ? `query: ${query}` : '',
       ].filter(Boolean),
       channel_history: scopedTurns.map(formatTurnEvent),
@@ -1248,8 +1287,16 @@ export class GrilloWorkerService {
         'Treat channel_history as transcript, relationship_memory as durable participant context, recalled_memories as recall, and thoughts as private reflection.',
         'If memory conflicts with the current user turn, trust the current user turn first.',
       ],
-      recalled_memories: recalledMemories,
+      recalled_memories: recallSelection.items,
       relationship_memory: relationshipMemory,
+      retrieval_receipt: {
+        embedding: queryEmbeddingIdentity,
+        lanes: {
+          recalled_memories: recallSelection.receipt,
+        },
+        query,
+        strategy: semanticStrategy,
+      },
       scopeKey,
       thoughts: scopedDiary.map(formatDiaryEntry),
     };
@@ -1632,6 +1679,110 @@ export class GrilloWorkerService {
       user_id: input.scopeKey,
     });
   }
+}
+
+function createEmbeddingIdentity(input: {
+  dimensions: number;
+  model?: string;
+  provider?: string;
+  version?: string;
+}): GrilloEmbeddingIdentity | null {
+  if (input.dimensions <= 0) {
+    return null;
+  }
+  const model = input.model?.trim() || 'unknown-model';
+  const provider = input.provider?.trim() || 'unknown-provider';
+  const version = input.version?.trim() || 'unversioned';
+  return {
+    dimensions: input.dimensions,
+    generation: `${provider}:${model}:${version}:${input.dimensions}`,
+    model,
+    provider,
+    version,
+  };
+}
+
+function formatCandidateRecallItem(
+  record: Record<string, unknown>,
+  scopeKey: string,
+): GrilloRecallItem {
+  const participantKey = recordParticipantKey(record);
+  const createdAt = recordTimestamp(record);
+  const content = normalizeText(record['summary'] ?? record['content']);
+  const id =
+    normalizeText(record['candidate_id'] ?? record['candidateId'] ?? record['id']) ||
+    `candidate:${scopeKey}:${createdAt}:${content.slice(0, 80)}`;
+  return {
+    createdAt,
+    evidenceIds: dedupeStrings([
+      ...readStringArray(record['evidence_turn_ids']),
+      ...readStringArray(record['sourceTurnIds']),
+      ...readStringArray(record['source_turn_ids']),
+    ]),
+    id,
+    participantKey: participantKey || undefined,
+    score: clampNumber(record['confidence'], 0, 1, 0.72),
+    scopeKey,
+    source: 'candidate',
+    text: `[candidate:${normalizeText(record['type']) || 'thread'} ${participantKey || 'unknown'}] ${content}`,
+  };
+}
+
+function formatSemanticRecallItem(
+  record: LadybugSemanticMemoryRecord & { score?: number },
+  scopeKey: string,
+): GrilloRecallItem {
+  const dimensions = normalizeEmbeddingArray(record.embedding).length;
+  const embedding = createEmbeddingIdentity({
+    dimensions,
+    model: record.embeddingModel,
+    provider: record.embeddingProvider,
+    version: record.embeddingVersion,
+  });
+  return {
+    createdAt: record.createdAt,
+    ...(embedding ? { embedding } : {}),
+    evidenceIds: dedupeStrings(record.sourceTurnIds ?? []),
+    id: record.id,
+    score:
+      typeof record.score === 'number' && Number.isFinite(record.score)
+        ? clampNumber(record.score, 0, 1, 0)
+        : undefined,
+    scopeKey: record.scopeKey || scopeKey,
+    source: 'semantic',
+    text: `[semantic:${record.personaId || 'unknown'}] ${normalizeText(record.text)}`,
+  };
+}
+
+function selectRecallItems(items: GrilloRecallItem[], limit: number) {
+  const requestedIds = items.map((item) => item.id);
+  const duplicateIds: string[] = [];
+  const seen = new Set<string>();
+  const unique = items
+    .sort(
+      (left, right) =>
+        (right.score ?? 0) - (left.score ?? 0) || right.createdAt - left.createdAt,
+    )
+    .filter((item) => {
+      if (seen.has(item.id)) {
+        duplicateIds.push(item.id);
+        return false;
+      }
+      seen.add(item.id);
+      return true;
+    });
+  const included = unique.slice(0, Math.max(0, limit));
+  const includedIds = included.map((item) => item.id);
+  const includedSet = new Set(includedIds);
+  return {
+    items: included,
+    receipt: {
+      droppedIds: unique.map((item) => item.id).filter((id) => !includedSet.has(id)),
+      duplicateIds: dedupeStrings(duplicateIds),
+      includedIds,
+      requestedIds,
+    },
+  };
 }
 
 type NormalizedWorkerToolCall = {

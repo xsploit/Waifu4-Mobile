@@ -8,8 +8,12 @@ export type { LadybugMemoryGraphSummary } from '../../src/shared/ladybugMemoryTy
 export type LadybugSemanticMemoryRecord = {
   id: string;
   createdAt: number;
+  embeddingModel?: string;
+  embeddingProvider?: string;
+  embeddingVersion?: string;
   personaId: string;
   scopeKey: string;
+  sourceTurnIds?: string[];
   text: string;
   userText: string;
   assistantText: string;
@@ -2724,8 +2728,12 @@ function normalizeSemanticRecords(values: unknown[]) {
         assistantText: stringValue(source.assistantText).slice(0, 1200),
         createdAt: intValue(source.createdAt),
         embedding: embedding?.length ? embedding : null,
+        embeddingModel: stringValue(source.embeddingModel),
+        embeddingProvider: stringValue(source.embeddingProvider),
+        embeddingVersion: stringValue(source.embeddingVersion),
         personaId: stringValue(source.personaId) || 'unknown',
         scopeKey,
+        sourceTurnIds: dedupeStringValues(arrayValue(source.sourceTurnIds)),
         text,
         userText: stringValue(source.userText).slice(0, 1200),
       };

@@ -1,3 +1,5 @@
+import type { GrilloRetrievalReceipt } from '../../shared/grilloContext';
+
 export type MemoryPromptDebugSnapshot = {
   grilloContextPacket?: {
     background_information: string[];
@@ -5,6 +7,7 @@ export type MemoryPromptDebugSnapshot = {
     output_description: string[];
     recalled_memories: string[];
     relationship_memory: string[];
+    retrieval_receipt: GrilloRetrievalReceipt;
     thoughts: string[];
   } | null;
   grilloDiaryThoughts: string[];

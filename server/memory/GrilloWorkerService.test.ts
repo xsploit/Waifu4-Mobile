@@ -585,6 +585,127 @@ describe('GrilloWorkerService', () => {
     }
   });
 
+  it('ranks current-query semantic vectors with stable provenance and scope isolation', async () => {
+    const { grillo, memory } = createServices();
+    const scopeKey = 'local:persona:hikari-vector-recall';
+    try {
+      await memory.saveSemanticRecords(scopeKey, [
+        {
+          assistantText: 'You said synthwave helps you focus.',
+          createdAt: 1770000001000,
+          embedding: [1, 0, 0],
+          embeddingModel: 'test-embedding',
+          embeddingProvider: 'test-provider',
+          embeddingVersion: 'v1',
+          id: 'semantic-relevant-older',
+          personaId: 'hikari-vector-recall',
+          scopeKey,
+          sourceTurnIds: ['turn-user-relevant', 'turn-assistant-relevant'],
+          text: 'User prefers synthwave while concentrating on code.',
+          userText: 'Synthwave helps me focus while coding.',
+        },
+        {
+          assistantText: 'We discussed an unrelated breakfast.',
+          createdAt: 1770000009000,
+          embedding: [0, 1, 0],
+          id: 'semantic-unrelated-newer',
+          personaId: 'hikari-vector-recall',
+          scopeKey,
+          text: 'User ate toast for breakfast.',
+          userText: 'I ate toast.',
+        },
+      ]);
+      await memory.saveSemanticRecords('local:persona:other', [
+        {
+          assistantText: 'This belongs to another persona.',
+          createdAt: 1770000010000,
+          embedding: [1, 0, 0],
+          id: 'semantic-other-scope',
+          personaId: 'other',
+          scopeKey: 'local:persona:other',
+          text: 'Other persona synthwave memory.',
+          userText: 'Other scope.',
+        },
+      ]);
+
+      const packet = await grillo.buildContextPacket({
+        embeddingModel: 'test-query-model',
+        embeddingProvider: 'test-query-provider',
+        embeddingVersion: 'query-v1',
+        query: 'What music helps me focus while coding?',
+        queryEmbedding: [1, 0, 0],
+        scopeKey,
+      });
+      const semanticItems = packet.recalled_memories.filter((item) => item.source === 'semantic');
+
+      expect(semanticItems[0]).toMatchObject({
+        embedding: {
+          dimensions: 3,
+          generation: 'test-provider:test-embedding:v1:3',
+        },
+        evidenceIds: ['turn-user-relevant', 'turn-assistant-relevant'],
+        id: 'semantic-relevant-older',
+        scopeKey,
+        source: 'semantic',
+      });
+      expect(semanticItems.map((item) => item.id)).not.toContain('semantic-other-scope');
+      expect(packet.retrieval_receipt).toMatchObject({
+        embedding: {
+          dimensions: 3,
+          generation: 'test-query-provider:test-query-model:query-v1:3',
+        },
+        query: 'What music helps me focus while coding?',
+        strategy: 'semantic_vector',
+      });
+      expect(packet.retrieval_receipt.lanes.recalled_memories.includedIds).toEqual(
+        packet.recalled_memories.map((item) => item.id),
+      );
+    } finally {
+      await memory.close();
+    }
+  });
+
+  it('uses lexical recall without an embedding instead of arbitrary recent semantic records', async () => {
+    const { grillo, memory } = createServices();
+    const scopeKey = 'local:persona:hikari-lexical-recall';
+    try {
+      await memory.saveSemanticRecords(scopeKey, [
+        {
+          assistantText: 'Older but relevant.',
+          createdAt: 1770000001000,
+          embedding: null,
+          id: 'semantic-older-relevant',
+          personaId: 'hikari-lexical-recall',
+          scopeKey,
+          text: 'The preferred deployment target is Oracle Cloud ARM.',
+          userText: 'Use Oracle Cloud ARM for deployment.',
+        },
+        {
+          assistantText: 'Newer and unrelated.',
+          createdAt: 1770000009000,
+          embedding: null,
+          id: 'semantic-newer-unrelated',
+          personaId: 'hikari-lexical-recall',
+          scopeKey,
+          text: 'The avatar background is red.',
+          userText: 'The background is red.',
+        },
+      ]);
+
+      const packet = await grillo.buildContextPacket({
+        query: 'Oracle Cloud ARM deployment',
+        scopeKey,
+      });
+      const semanticItems = packet.recalled_memories.filter((item) => item.source === 'semantic');
+
+      expect(packet.retrieval_receipt.strategy).toBe('lexical_fallback');
+      expect(semanticItems[0]?.id).toBe('semantic-older-relevant');
+      expect(semanticItems.map((item) => item.id)).not.toContain('semantic-newer-unrelated');
+    } finally {
+      await memory.close();
+    }
+  });
+
   it('validates GRILLO worker JSON locally before executing tool calls', async () => {
     const { grillo, memory } = createServices();
     try {

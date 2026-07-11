@@ -114,6 +114,7 @@ import {
 import {
   addSemanticMemoryTurn,
   buildSemanticMemoryContext,
+  buildSemanticMemoryContextFromRecallItems,
   clearSemanticMemory,
   findSemanticMemoryMatches,
 } from './lib/chat/semantic-memory';
@@ -493,6 +494,13 @@ type AppModelsResponse = {
   models?: Array<string | AppModelMetadata>;
   ok?: boolean;
   provider?: string;
+};
+
+type AppTextEmbeddingResult = {
+  embedding: number[];
+  model: string;
+  provider: string;
+  version: string;
 };
 
 type AppModelMetadata = ProviderModelInfo;
@@ -1222,7 +1230,7 @@ async function requestTextEmbedding(
   embeddingMode: AiSettings['embeddingMode'] = 'browser',
   embeddingModel = DEFAULT_OPENROUTER_EMBEDDING_MODEL,
   embeddingLocalModel = DEFAULT_LOCAL_EMBEDDING_MODEL,
-): Promise<number[] | null> {
+): Promise<AppTextEmbeddingResult | null> {
   const text = input.trim();
   if (!text) {
     onDebug?.({
@@ -1253,7 +1261,12 @@ async function requestTextEmbedding(
           updatedAt: Date.now(),
           vectorDims: localEmbedding.length,
         });
-        return localEmbedding;
+        return {
+          embedding: localEmbedding,
+          model: localModel,
+          provider: 'transformers-local',
+          version: 'model-revision-unspecified',
+        };
       }
     } catch (error) {
       onDebug?.({
@@ -1312,7 +1325,14 @@ async function requestTextEmbedding(
       updatedAt: Date.now(),
       vectorDims: embedding?.length,
     });
-    return embedding;
+    return embedding
+      ? {
+          embedding,
+          model: embeddingModel.trim() || DEFAULT_OPENROUTER_EMBEDDING_MODEL,
+          provider: llmProvider,
+          version: 'provider-managed',
+        }
+      : null;
   } catch (error) {
     onDebug?.({
       error: error instanceof Error ? error.message : String(error),
@@ -1464,8 +1484,7 @@ function attachStreamVisionFrame(
   );
 }
 
-async function getSemanticMemoryContext(
-  scopeKey: string,
+async function getSemanticMemoryQueryEmbedding(
   query: string,
   providerKeyVaultWorkspaceId?: string,
   llmProvider: AiSettings['llmProvider'] = 'vercel-gateway',
@@ -1474,7 +1493,7 @@ async function getSemanticMemoryContext(
   embeddingModel = DEFAULT_OPENROUTER_EMBEDDING_MODEL,
   embeddingLocalModel = DEFAULT_LOCAL_EMBEDDING_MODEL,
 ) {
-  const embedding = await requestTextEmbedding(
+  return requestTextEmbedding(
     query,
     providerKeyVaultWorkspaceId,
     llmProvider,
@@ -1484,7 +1503,6 @@ async function getSemanticMemoryContext(
     embeddingModel,
     embeddingLocalModel,
   );
-  return buildSemanticMemoryContext(await findSemanticMemoryMatches(scopeKey, query, embedding));
 }
 
 async function rememberSemanticTurn(
@@ -1500,7 +1518,7 @@ async function rememberSemanticTurn(
   embeddingModel = DEFAULT_OPENROUTER_EMBEDDING_MODEL,
   embeddingLocalModel = DEFAULT_LOCAL_EMBEDDING_MODEL,
 ) {
-  const embedding = await requestTextEmbedding(
+  const embeddingResult = await requestTextEmbedding(
     `${userText}\n${assistantText}`,
     providerKeyVaultWorkspaceId,
     llmProvider,
@@ -1512,7 +1530,10 @@ async function rememberSemanticTurn(
   );
   return addSemanticMemoryTurn({
     assistantText,
-    embedding,
+    embedding: embeddingResult?.embedding ?? null,
+    embeddingModel: embeddingResult?.model,
+    embeddingProvider: embeddingResult?.provider,
+    embeddingVersion: embeddingResult?.version,
     persona,
     scopeKey,
     userText,
@@ -4932,7 +4953,7 @@ function App() {
                   };
                 },
                 search: async (query, limit) => {
-                  const embedding = await requestTextEmbedding(
+                  const embeddingResult = await requestTextEmbedding(
                     query,
                     providerKeyVaultWorkspaceId,
                     aiSettings.llmProvider,
@@ -4942,7 +4963,14 @@ function App() {
                     aiSettings.embeddingModel,
                     aiSettings.embeddingLocalModel,
                   );
-                  return (await findSemanticMemoryMatches(stateKey, query, embedding, limit)).map(
+                  return (
+                    await findSemanticMemoryMatches(
+                      stateKey,
+                      query,
+                      embeddingResult?.embedding ?? null,
+                      limit,
+                    )
+                  ).map(
                     (match) => ({
                       score: match.score,
                       text: `[semantic:${match.scopeKey}] ${match.text.replace(/\s+/g, ' ').trim()}`,
@@ -6066,8 +6094,7 @@ function App() {
         setChatGenerating(true);
         const participantKeys = job.messages.map(getGrilloParticipantKey);
         const preflightStartedAt = performance.now();
-        const semanticMemoryPromise = getSemanticMemoryContext(
-          stateKey,
+        const semanticEmbeddingPromise = getSemanticMemoryQueryEmbedding(
           userContent,
           providerKeyVaultWorkspaceId,
           settings.llmProvider,
@@ -6076,17 +6103,34 @@ function App() {
           settings.embeddingModel,
           settings.embeddingLocalModel,
         );
-        const grilloContextPacketPromise = loadLadybugGrilloContextPacket(stateKey, {
-          participantKeys,
-          query: userContent,
-        }).catch((error) => {
-          console.warn('[App] Failed to load native GRILLO context packet', error);
-          return null;
-        });
-        const [semanticMemoryContext, grilloContextPacket] = await Promise.all([
-          semanticMemoryPromise,
+        const grilloContextPacketPromise = semanticEmbeddingPromise
+          .then((embeddingResult) =>
+            loadLadybugGrilloContextPacket(stateKey, {
+              embeddingModel: embeddingResult?.model,
+              embeddingProvider: embeddingResult?.provider,
+              embeddingVersion: embeddingResult?.version,
+              participantKeys,
+              query: userContent,
+              queryEmbedding: embeddingResult?.embedding ?? null,
+            }),
+          )
+          .catch((error) => {
+            console.warn('[App] Failed to load native GRILLO context packet', error);
+            return null;
+          });
+        const [semanticEmbeddingResult, grilloContextPacket] = await Promise.all([
+          semanticEmbeddingPromise,
           grilloContextPacketPromise,
         ]);
+        const semanticMemoryContext = grilloContextPacket
+          ? buildSemanticMemoryContextFromRecallItems(grilloContextPacket.recalled_memories)
+          : buildSemanticMemoryContext(
+              await findSemanticMemoryMatches(
+                stateKey,
+                userContent,
+                semanticEmbeddingResult?.embedding ?? null,
+              ),
+            );
         if (isAppDiagnosticsEnabled()) {
           console.info('[Chat Preflight] memory context ready', {
             hasLadybugPacket: Boolean(grilloContextPacket),
@@ -6119,6 +6163,7 @@ function App() {
                 output_description: grilloContextPacket.output_description,
                 recalled_memories: grilloContextPacket.recalled_memories.map((item) => item.text),
                 relationship_memory: grilloContextPacket.relationship_memory,
+                retrieval_receipt: grilloContextPacket.retrieval_receipt,
                 thoughts: grilloContextPacket.thoughts,
               }
             : null,
