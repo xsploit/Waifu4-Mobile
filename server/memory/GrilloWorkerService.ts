@@ -22,7 +22,9 @@ import { auditGrilloProjectionCoverage } from './GrilloProjectionAudit.js';
 import { buildGrilloShadowComparison } from './GrilloShadowComparison.js';
 import type {
   GrilloContextPacket,
+  GrilloContextProvenanceReceipt,
   GrilloEmbeddingIdentity,
+  GrilloProvenanceDrop,
   GrilloRecallItem,
 } from '../../src/shared/grilloContext.js';
 import type {
@@ -81,6 +83,7 @@ export type GrilloContextPacketInput = {
   embeddingModel?: unknown;
   embeddingProvider?: unknown;
   embeddingVersion?: unknown;
+  includeProvenanceReceipt?: unknown;
   participantKeys?: unknown;
   query?: unknown;
   queryEmbedding?: unknown;
@@ -1358,26 +1361,35 @@ export class GrilloWorkerService {
         : Promise.resolve([]),
       this.memory.loadRelationshipProfiles(),
     ]);
-    const scopedTurns = turns
+    const sortedScopeTurns = turns
       .filter(inScope)
-      .sort((left, right) => recordTimestamp(left) - recordTimestamp(right))
-      .slice(-14);
+      .sort((left, right) => recordTimestamp(left) - recordTimestamp(right));
+    const scopedTurns = sortedScopeTurns.slice(-14);
     const scopedCandidates = candidates
       .filter((record) => inScope(record) && includeParticipant(recordParticipantKey(record)))
       .sort((left, right) => recordTimestamp(right) - recordTimestamp(left))
       .slice(0, 8);
-    const scopedBlocks = blocks
-      .filter((record) => inScope(record) && includeParticipant(recordParticipantKey(record)))
-      .sort((left, right) => recordUpdatedAt(right) - recordUpdatedAt(left))
-      .slice(0, 8);
-    const scopedSlots = slots
-      .filter((record) => inScope(record) && includeParticipant(recordParticipantKey(record)))
-      .sort((left, right) => recordUpdatedAt(right) - recordUpdatedAt(left))
-      .slice(0, 8);
-    const scopedDiary = diary
-      .filter((record) => inScope(record) && includeParticipant(recordParticipantKey(record)))
-      .sort((left, right) => recordTimestamp(right) - recordTimestamp(left))
-      .slice(0, 5);
+    const sortedScopeBlocks = blocks
+      .filter(inScope)
+      .sort((left, right) => recordUpdatedAt(right) - recordUpdatedAt(left));
+    const participantBlocks = sortedScopeBlocks.filter((record) =>
+      includeParticipant(recordParticipantKey(record)),
+    );
+    const scopedBlocks = participantBlocks.slice(0, 8);
+    const sortedScopeSlots = slots
+      .filter(inScope)
+      .sort((left, right) => recordUpdatedAt(right) - recordUpdatedAt(left));
+    const participantSlots = sortedScopeSlots.filter((record) =>
+      includeParticipant(recordParticipantKey(record)),
+    );
+    const scopedSlots = participantSlots.slice(0, 8);
+    const sortedScopeDiary = diary
+      .filter(inScope)
+      .sort((left, right) => recordTimestamp(right) - recordTimestamp(left));
+    const participantDiary = sortedScopeDiary.filter((record) =>
+      includeParticipant(recordParticipantKey(record)),
+    );
+    const scopedDiary = participantDiary.slice(0, 5);
     const relationshipProfile = asRecord(asRecord(relationshipProfiles)[scopeKey]);
     const normalizedSemanticRecords = semanticRecords ?? [];
     const semanticRecordById = new Map(normalizedSemanticRecords.map((record) => [record.id, record]));
@@ -1406,11 +1418,24 @@ export class GrilloWorkerService {
           ? lexicalSemantic
           : [];
 
-    const relationshipMemory = [
-      ...formatRelationshipProfile(relationshipProfile),
-      ...scopedBlocks.flatMap(formatMemoryBlock),
-      ...scopedSlots.flatMap(formatMemorySlot),
-    ].slice(0, 16);
+    const relationshipProfileItems = formatRelationshipProfileItems(relationshipProfile, scopeKey);
+    const includeProvenanceReceipt = input.includeProvenanceReceipt === true;
+    const requestedRelationshipItems = includeProvenanceReceipt
+      ? [
+          ...relationshipProfileItems,
+          ...sortedScopeBlocks.flatMap(formatMemoryBlockItems),
+          ...sortedScopeSlots.flatMap(formatMemorySlotItems),
+        ]
+      : [];
+    const eligibleRelationshipItems = [
+      ...relationshipProfileItems,
+      ...scopedBlocks.flatMap(formatMemoryBlockItems),
+      ...scopedSlots.flatMap(formatMemorySlotItems),
+    ];
+    const relationshipItems = eligibleRelationshipItems.slice(0, 16);
+    const relationshipMemory = relationshipItems.map((item) => item.text);
+    const channelItems = scopedTurns.map(formatTurnEventItem);
+    const thoughtItems = scopedDiary.map(formatDiaryEntryItem);
     const recallSelection = selectRecallItems(
       [
         ...scopedCandidates.map((record) => formatCandidateRecallItem(record, scopeKey)),
@@ -1418,6 +1443,61 @@ export class GrilloWorkerService {
       ].filter((item) => item.text.trim()),
       12,
     );
+    const provenanceReceipt = includeProvenanceReceipt
+      ? buildServerContextProvenance({
+          channel: {
+            dropped: droppedItems(
+              sortedScopeTurns.slice(0, Math.max(0, sortedScopeTurns.length - 14)).map(formatTurnEventItem),
+              'lane_limit',
+            ),
+            included: channelItems,
+            requested: sortedScopeTurns.map(formatTurnEventItem),
+          },
+          recalled: {
+            dropped: [
+              ...recallSelection.receipt.droppedIds.map((id) => provenanceDrop(id, 'lane_limit')),
+              ...recallSelection.receipt.duplicateIds.map((id) => provenanceDrop(id, 'duplicate')),
+            ],
+            duplicateIds: recallSelection.receipt.duplicateIds,
+            included: recallSelection.items.map((item) => ({ id: item.id, text: item.text })),
+            requested: recallSelection.receipt.requestedIds.map((id) => ({ id, text: '' })),
+          },
+          relationship: {
+            dropped: [
+              ...droppedItems(
+                sortedScopeBlocks
+                  .filter((record) => !includeParticipant(recordParticipantKey(record)))
+                  .flatMap(formatMemoryBlockItems),
+                'participant_filter',
+              ),
+              ...droppedItems(
+                sortedScopeSlots
+                  .filter((record) => !includeParticipant(recordParticipantKey(record)))
+                  .flatMap(formatMemorySlotItems),
+                'participant_filter',
+              ),
+              ...droppedItems(participantBlocks.slice(8).flatMap(formatMemoryBlockItems), 'record_limit'),
+              ...droppedItems(participantSlots.slice(8).flatMap(formatMemorySlotItems), 'record_limit'),
+              ...droppedItems(eligibleRelationshipItems.slice(16), 'lane_limit'),
+            ],
+            included: relationshipItems,
+            requested: requestedRelationshipItems,
+          },
+          thoughts: {
+            dropped: [
+              ...droppedItems(
+                sortedScopeDiary
+                  .filter((record) => !includeParticipant(recordParticipantKey(record)))
+                  .map(formatDiaryEntryItem),
+                'participant_filter',
+              ),
+              ...droppedItems(participantDiary.slice(5).map(formatDiaryEntryItem), 'record_limit'),
+            ],
+            included: thoughtItems,
+            requested: sortedScopeDiary.map(formatDiaryEntryItem),
+          },
+        })
+      : undefined;
 
     return {
       background_information: [
@@ -1432,13 +1512,14 @@ export class GrilloWorkerService {
         `semantic_retrieval: ${semanticStrategy}`,
         query ? `query: ${query}` : '',
       ].filter(Boolean),
-      channel_history: scopedTurns.map(formatTurnEvent),
+      channel_history: channelItems.map((item) => item.text),
       generatedAt: this.nowMs(),
       output_description: [
         'Use this GRILLO packet as scoped memory/context for the current reply.',
         'Treat channel_history as transcript, relationship_memory as durable participant context, recalled_memories as recall, and thoughts as private reflection.',
         'If memory conflicts with the current user turn, trust the current user turn first.',
       ],
+      ...(provenanceReceipt ? { provenance_receipt: provenanceReceipt } : {}),
       recalled_memories: recallSelection.items,
       relationship_memory: relationshipMemory,
       retrieval_receipt: {
@@ -1450,7 +1531,7 @@ export class GrilloWorkerService {
         strategy: semanticStrategy,
       },
       scopeKey,
-      thoughts: scopedDiary.map(formatDiaryEntry),
+      thoughts: thoughtItems.map((item) => item.text),
     };
   }
 
@@ -2061,6 +2142,83 @@ function selectRecallItems(items: GrilloRecallItem[], limit: number) {
       requestedIds,
     },
   };
+}
+
+type ServerProvenanceItem = {
+  id: string;
+  text: string;
+};
+
+type ServerProvenanceLaneInput = {
+  dropped: GrilloProvenanceDrop[];
+  duplicateIds?: string[];
+  included: ServerProvenanceItem[];
+  requested: ServerProvenanceItem[];
+};
+
+function buildServerContextProvenance(input: {
+  channel: ServerProvenanceLaneInput;
+  recalled: ServerProvenanceLaneInput;
+  relationship: ServerProvenanceLaneInput;
+  thoughts: ServerProvenanceLaneInput;
+}): GrilloContextProvenanceReceipt {
+  return {
+    lanes: {
+      channel_history: provenanceLaneReceipt(input.channel),
+      recalled_memories: provenanceLaneReceipt(input.recalled),
+      relationship_memory: provenanceLaneReceipt(input.relationship),
+      thoughts: provenanceLaneReceipt(input.thoughts),
+    },
+    stage: 'server_context_packet',
+    version: '1.0.0',
+  };
+}
+
+function provenanceLaneReceipt(input: ServerProvenanceLaneInput) {
+  const requestedOccurrences = input.requested.map((item) => item.id);
+  const includedOccurrences = input.included.map((item) => item.id);
+  return {
+    dropped: dedupeProvenanceDrops(input.dropped),
+    droppedIds: dedupeStrings(input.dropped.map((item) => item.id)),
+    duplicateIds: dedupeStrings(input.duplicateIds ?? findDuplicateIds(requestedOccurrences)),
+    includedIds: dedupeStrings(includedOccurrences),
+    includedOccurrences,
+    requestedIds: dedupeStrings(requestedOccurrences),
+    requestedOccurrences,
+  };
+}
+
+function findDuplicateIds(ids: string[]) {
+  const seen = new Set<string>();
+  return ids.filter((id) => {
+    if (seen.has(id)) return true;
+    seen.add(id);
+    return false;
+  });
+}
+
+function droppedItems(
+  items: ServerProvenanceItem[],
+  reason: GrilloProvenanceDrop['reason'],
+) {
+  return items.map((item) => provenanceDrop(item.id, reason));
+}
+
+function provenanceDrop(
+  id: string,
+  reason: GrilloProvenanceDrop['reason'],
+): GrilloProvenanceDrop {
+  return { id, reason, stage: 'server_context_packet' };
+}
+
+function dedupeProvenanceDrops(items: GrilloProvenanceDrop[]) {
+  const seen = new Set<string>();
+  return items.filter((item) => {
+    const key = `${item.id}\u0000${item.reason}\u0000${item.stage}`;
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
 }
 
 type NormalizedWorkerToolCall = {
@@ -2698,7 +2856,7 @@ function recordUpdatedAt(record: Record<string, unknown>) {
   return numberOrNow(record['updatedAt'] ?? record['updated_at'] ?? recordTimestamp(record), () => 0);
 }
 
-function formatTurnEvent(record: Record<string, unknown>) {
+function formatTurnEventItem(record: Record<string, unknown>): ServerProvenanceItem {
   const role = normalizeText(record['role']) || 'user';
   const author = normalizeText(record['authorName'] ?? record['author_name']) || role;
   const source = normalizeText(record['source']);
@@ -2712,43 +2870,76 @@ function formatTurnEvent(record: Record<string, unknown>) {
   ]
     .filter(Boolean)
     .join(' ');
-  return `${author}: ${text}${metadata ? `\nmetadata: ${metadata}` : ''}`;
+  return {
+    id: `turn:${recordTurnId(record) || `at:${recordTimestamp(record)}`}`,
+    text: `${author}: ${text}${metadata ? `\nmetadata: ${metadata}` : ''}`,
+  };
 }
 
-function formatMemoryBlock(record: Record<string, unknown>) {
+function formatMemoryBlockItems(record: Record<string, unknown>): ServerProvenanceItem[] {
   const blockName = normalizeText(record['blockName'] ?? record['block_name']) || 'memory';
   const participantKey = recordParticipantKey(record) || 'unknown';
+  const recordId = provenanceRecordId(record, 'block', ['blockId', 'block_id', 'id']);
   return readJsonArray(record['itemsJson'] ?? record['items_json'] ?? record['items'])
     .slice(0, 5)
-    .map((item) => `[block:${blockName} ${participantKey}] ${item}`);
+    .map((item, index) => ({
+      id: `${recordId}:item:${index}`,
+      text: `[block:${blockName} ${participantKey}] ${item}`,
+    }));
 }
 
-function formatMemorySlot(record: Record<string, unknown>) {
+function formatMemorySlotItems(record: Record<string, unknown>): ServerProvenanceItem[] {
   const slotName = normalizeText(record['slotName'] ?? record['slot_name']) || 'slot';
   const participantKey = recordParticipantKey(record) || 'scope';
+  const recordId = provenanceRecordId(record, 'slot', ['slotId', 'slot_id', 'id']);
   return readJsonArray(record['contentJson'] ?? record['content_json'])
     .slice(0, 5)
-    .map((item) => `[slot:${slotName} ${participantKey}] ${item}`);
+    .map((item, index) => ({
+      id: `${recordId}:item:${index}`,
+      text: `[slot:${slotName} ${participantKey}] ${item}`,
+    }));
 }
 
-function formatDiaryEntry(record: Record<string, unknown>) {
+function formatDiaryEntryItem(record: Record<string, unknown>): ServerProvenanceItem {
   const beatType = normalizeText(record['beatType'] ?? record['beat_type']) || 'reflection';
   const participantKey = recordParticipantKey(record) || 'unknown';
   const thought = normalizeText(record['personalThought'] ?? record['personal_thought']);
   const summary = normalizeText(record['summary']);
-  return `[diary:${beatType} ${participantKey}] ${thought || summary}`;
+  return {
+    id: provenanceRecordId(record, 'diary', ['diaryId', 'diary_id', 'id']),
+    text: `[diary:${beatType} ${participantKey}] ${thought || summary}`,
+  };
 }
 
-function formatRelationshipProfile(profile: Record<string, unknown>) {
+function formatRelationshipProfileItems(
+  profile: Record<string, unknown>,
+  scopeKey: string,
+): ServerProvenanceItem[] {
   if (Object.keys(profile).length === 0) {
     return [];
   }
   const facts = readStringArray(profile['facts'] ?? profile['storedFacts']);
   return [
-    `stage=${normalizeText(profile['relationshipStage']) || 'new'} mood=${normalizeText(profile['mood']) || 'neutral'}`,
-    normalizeText(profile['summary']) ? `summary=${normalizeText(profile['summary'])}` : '',
-    facts.length > 0 ? `known_facts=${JSON.stringify(facts.slice(0, 12))}` : '',
-  ].filter(Boolean);
+    {
+      id: `profile:${scopeKey}:state`,
+      text: `stage=${normalizeText(profile['relationshipStage']) || 'new'} mood=${normalizeText(profile['mood']) || 'neutral'}`,
+    },
+    normalizeText(profile['summary'])
+      ? { id: `profile:${scopeKey}:summary`, text: `summary=${normalizeText(profile['summary'])}` }
+      : null,
+    facts.length > 0
+      ? { id: `profile:${scopeKey}:facts`, text: `known_facts=${JSON.stringify(facts.slice(0, 12))}` }
+      : null,
+  ].filter((item): item is ServerProvenanceItem => item !== null);
+}
+
+function provenanceRecordId(
+  record: Record<string, unknown>,
+  prefix: string,
+  keys: string[],
+) {
+  const sourceId = keys.map((key) => normalizeText(record[key])).find(Boolean);
+  return `${prefix}:${sourceId || `at:${recordTimestamp(record)}`}`;
 }
 
 function safeJsonParse(value: string) {

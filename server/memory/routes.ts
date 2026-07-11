@@ -16,6 +16,7 @@ const contextBodySchema = z
     embeddingModel: z.string().max(240).optional(),
     embeddingProvider: z.string().max(120).optional(),
     embeddingVersion: z.string().max(120).optional(),
+    includeProvenanceReceipt: z.boolean().optional(),
     participantKeys: z.array(z.string().max(240)).max(64).optional(),
     query: z.string().max(4000).optional(),
     queryEmbedding: z.array(z.number().finite()).max(10000).optional(),

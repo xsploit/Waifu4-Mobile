@@ -171,6 +171,7 @@ describe('GrilloWorkerService', () => {
       ]);
 
       const packet = await grillo.buildContextPacket({
+        includeProvenanceReceipt: true,
         participantKeys: ['local:local:subsect'],
         query: 'native GRILLO packet',
         scopeKey: 'local:persona:hikari-chan',
@@ -191,6 +192,112 @@ describe('GrilloWorkerService', () => {
       );
       expect(packet.thoughts.join('\n')).toContain(
         'I should treat backend GRILLO as the source of durable memory.',
+      );
+      expect(packet.provenance_receipt).toMatchObject({
+        stage: 'server_context_packet',
+        version: '1.0.0',
+      });
+      expect(packet.provenance_receipt?.lanes.channel_history.includedOccurrences).toHaveLength(
+        packet.channel_history.length,
+      );
+      expect(packet.provenance_receipt?.lanes.relationship_memory.includedIds).toEqual(
+        expect.arrayContaining([
+          'profile:local:persona:hikari-chan:state',
+          'profile:local:persona:hikari-chan:summary',
+          'profile:local:persona:hikari-chan:facts',
+        ]),
+      );
+      expect(packet.provenance_receipt?.lanes.recalled_memories.includedIds).toEqual(
+        packet.recalled_memories.map((item) => item.id),
+      );
+      expect(packet.provenance_receipt?.lanes.thoughts.includedOccurrences).toHaveLength(
+        packet.thoughts.length,
+      );
+    } finally {
+      await memory.close();
+    }
+  });
+
+  it('reports server lane filtering and caps without changing rendered packet text', async () => {
+    const { grillo, memory } = createServices();
+    const scopeKey = 'local:persona:provenance-caps';
+    const participantKey = 'local:local:subsect';
+    try {
+      for (let index = 0; index < 16; index += 1) {
+        await memory.appendGrilloRecord('turn_events', {
+          content: `turn ${index}`,
+          created_at: index + 1,
+          role: 'user',
+          scope_key: scopeKey,
+          turn_id: `turn-${index}`,
+        });
+      }
+      for (let index = 0; index < 10; index += 1) {
+        await memory.appendGrilloRecord('memory_blocks', {
+          block_id: `block-${index}`,
+          block_name: 'preferences',
+          items: [`item ${index}-a`, `item ${index}-b`, `item ${index}-c`],
+          participant_key: participantKey,
+          scope_key: scopeKey,
+          updated_at: 100 - index,
+        });
+      }
+      await memory.appendGrilloRecord('memory_blocks', {
+        block_id: 'block-other',
+        block_name: 'preferences',
+        items: ['other participant'],
+        participant_key: 'local:local:other',
+        scope_key: scopeKey,
+        updated_at: 200,
+      });
+      for (let index = 0; index < 7; index += 1) {
+        await memory.appendGrilloRecord('diary_entries', {
+          created_at: 100 - index,
+          diary_id: `diary-${index}`,
+          participant_key: participantKey,
+          personal_thought: `thought ${index}`,
+          scope_key: scopeKey,
+        });
+      }
+      await memory.appendGrilloRecord('diary_entries', {
+        created_at: 200,
+        diary_id: 'diary-other',
+        participant_key: 'local:local:other',
+        personal_thought: 'other participant thought',
+        scope_key: scopeKey,
+      });
+
+      const packet = await grillo.buildContextPacket({
+        includeProvenanceReceipt: true,
+        participantKeys: [participantKey],
+        scopeKey,
+      });
+      const receipt = packet.provenance_receipt!;
+
+      expect(packet.channel_history).toHaveLength(14);
+      expect(receipt.lanes.channel_history.dropped).toEqual([
+        expect.objectContaining({ id: 'turn:turn-0', reason: 'lane_limit' }),
+        expect.objectContaining({ id: 'turn:turn-1', reason: 'lane_limit' }),
+      ]);
+      expect(packet.relationship_memory).toHaveLength(16);
+      expect(receipt.lanes.relationship_memory.dropped).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({ id: 'block:block-other:item:0', reason: 'participant_filter' }),
+          expect.objectContaining({ id: 'block:block-8:item:0', reason: 'record_limit' }),
+          expect.objectContaining({ id: 'block:block-9:item:0', reason: 'record_limit' }),
+          expect.objectContaining({ id: 'block:block-5:item:1', reason: 'lane_limit' }),
+        ]),
+      );
+      expect(packet.thoughts).toHaveLength(5);
+      expect(receipt.lanes.thoughts.dropped).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({ id: 'diary:diary-other', reason: 'participant_filter' }),
+          expect.objectContaining({ id: 'diary:diary-5', reason: 'record_limit' }),
+          expect.objectContaining({ id: 'diary:diary-6', reason: 'record_limit' }),
+        ]),
+      );
+      expect(receipt.lanes.relationship_memory.includedOccurrences).toHaveLength(
+        packet.relationship_memory.length,
       );
     } finally {
       await memory.close();
@@ -923,6 +1030,7 @@ describe('GrilloWorkerService', () => {
       expect(
         unrelatedPacket.recalled_memories.filter((item) => item.source === 'semantic'),
       ).toEqual([]);
+      expect(unrelatedPacket.provenance_receipt).toBeUndefined();
     } finally {
       await memory.close();
     }

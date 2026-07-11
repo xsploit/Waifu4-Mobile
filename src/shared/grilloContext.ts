@@ -34,11 +34,36 @@ export type GrilloRetrievalReceipt = {
   strategy: 'lexical_fallback' | 'none' | 'recent_fallback' | 'semantic_vector';
 };
 
+export type GrilloProvenanceLaneName =
+  | 'channel_history'
+  | 'relationship_memory'
+  | 'recalled_memories'
+  | 'thoughts';
+
+export type GrilloProvenanceDrop = {
+  id: string;
+  reason: 'duplicate' | 'lane_limit' | 'participant_filter' | 'record_limit';
+  stage: 'server_context_packet';
+};
+
+export type GrilloProvenanceLaneReceipt = GrilloLaneReceipt & {
+  dropped: GrilloProvenanceDrop[];
+  includedOccurrences: string[];
+  requestedOccurrences: string[];
+};
+
+export type GrilloContextProvenanceReceipt = {
+  lanes: Record<GrilloProvenanceLaneName, GrilloProvenanceLaneReceipt>;
+  stage: 'server_context_packet';
+  version: '1.0.0';
+};
+
 export type GrilloContextPacket = {
   background_information: string[];
   channel_history: string[];
   generatedAt: number;
   output_description: string[];
+  provenance_receipt?: GrilloContextProvenanceReceipt;
   recalled_memories: GrilloRecallItem[];
   relationship_memory: string[];
   retrieval_receipt: GrilloRetrievalReceipt;
