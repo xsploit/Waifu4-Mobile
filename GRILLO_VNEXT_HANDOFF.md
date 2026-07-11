@@ -113,8 +113,22 @@ retrieval controller --> budgeted context packet --> main reply model
   shadow output mirrors the live lane, and empty migration scopes are distinct
   from completed no-op migrations. The full release audit passed with 72 test
   files and 355 tests.
-- Before any live switch, finish end-to-end prompt receipts and produce repeated
-  participant-aware whole-prompt shadow reports. Also add the repair queue,
+- End-to-end prompt provenance is now live without controlling prompt selection.
+  Optional server receipts name ordered requested/included occurrences and exact
+  participant, record, item, semantic, lane, and duplicate drops. The client
+  carries those IDs through every budget reducer, and browser fallback items get
+  deterministic IDs instead of time/random identities.
+- The final prompt receipt proves normalized-equivalent GRILLO block inclusion
+  after POML's whitespace transform, hashes the actual rendered and outbound
+  message arrays, and verifies that stream-vision attachment leaves the system
+  message unchanged. Hashing starts only after `requestChatCompletion` has
+  started, remains in React debug memory, and is neither persisted nor sent to
+  the model. The Context tab exposes the receipt for inspection.
+- The provenance release gate passed with 74 test files and 367 tests. Two
+  bounded Fable reviews of the newest range exhausted their cost caps before
+  returning a verdict; do not mislabel that range as Fable-verified.
+- Before any live switch, produce repeated participant-aware whole-prompt shadow
+  reports. Also add the repair queue,
   persistent worker lease/watermark contract, and an explicit per-scope switch
   with rollback. A live switch still requires separate user approval.
 
@@ -213,19 +227,13 @@ stable record and evidence IDs, scores, timestamps, scope metadata, and exact
 embedding model/provider/version filtering. Known incompatible generations do
 not mix, and unrelated queries no longer receive arbitrary recent records.
 
-The remaining observability gap is later in the same pipeline. Server receipts
-are complete only for `recalled_memories`; channel history, relationship lines,
-and diary lines become bare strings. The client then performs another budget
-reduction that reports counts but not IDs, and the final POML render returns
-plain messages without proving which GRILLO records reached the outbound system
-message.
-
-The next slice must remain diagnostic-only and preserve byte-identical prompt
-text. Give every lane item a stable source ID, record ordered included, dropped,
-and duplicate IDs at server and client reducer stages, and produce an in-memory
-receipt proving the finalized GRILLO block occurs exactly once in the rendered
-POML system message. Do not persist raw prompts, switch projections, gate
-injection, or add network telemetry without separate approval.
+The later observability gap is now closed diagnostically. Server receipts cover
+all memory lanes, client receipts survive every budget reduction, and the final
+receipt proves normalized-equivalent inclusion in the actual POML output plus
+system-message preservation at the outbound request boundary. POML normalizes
+the block's whitespace, so verification intentionally compares canonical
+whitespace rather than claiming raw byte inclusion. Prompt selection and live
+projection ownership remain unchanged.
 
 ## Structural Weaknesses To Address
 
