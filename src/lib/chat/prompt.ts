@@ -1,4 +1,7 @@
-import { buildGrilloContextPromptBlock } from './grillo-context';
+import {
+  buildGrilloContextPromptMaterial,
+  type GrilloClientContextReceipt,
+} from './grillo-context';
 import type { ChatTurn } from './chat-turn';
 import type { GrilloMemoryPromptAdditions } from './grillo-memory';
 import type { ChatMessage, PersonaProfile, RelationshipMemory } from './types';
@@ -384,7 +387,13 @@ export function trimChatHistory(history: ChatMessage[], limit = 36) {
   return history.slice(-limit);
 }
 
-export async function buildChatCompletionMessages({
+export async function buildChatCompletionMessages(
+  options: BuildChatCompletionMessagesOptions,
+): Promise<CompletionMessage[]> {
+  return (await buildChatCompletionMessagesWithReceipt(options)).messages;
+}
+
+export async function buildChatCompletionMessagesWithReceipt({
   animationCatalogContext = '',
   channelHistory = [],
   currentTurnContext = '',
@@ -399,7 +408,11 @@ export async function buildChatCompletionMessages({
   ttsExpressionTagsEnabled = false,
   ttsModel = '',
   ttsProvider = 'piper',
-}: BuildChatCompletionMessagesOptions): Promise<CompletionMessage[]> {
+}: BuildChatCompletionMessagesOptions): Promise<{
+  grilloContext: string;
+  grilloReceipt: GrilloClientContextReceipt;
+  messages: CompletionMessage[];
+}> {
   const normalizedReplyLength = normalizeReplyLengthMode(replyLength);
   const personaBlocks: string[] = [];
 
@@ -437,7 +450,7 @@ export async function buildChatCompletionMessages({
   const hasNativeGrilloPacket = Boolean(grilloMemory?.contextPacket);
   const legacyDiaryContext = hasNativeGrilloPacket ? '' : diaryContext;
   const legacySemanticMemoryContext = hasNativeGrilloPacket ? '' : semanticMemoryContext;
-  const grilloContext = buildGrilloContextPromptBlock({
+  const grilloMaterial = buildGrilloContextPromptMaterial({
     channelHistory,
     currentTurnText: currentTurnContext || readTurnContextValue(turnContext, 'currentTurnText'),
     diaryContext: legacyDiaryContext,
@@ -448,7 +461,7 @@ export async function buildChatCompletionMessages({
     turnContext,
   });
 
-  return await buildYourWifeyPomlMessages({
+  const messages = await buildYourWifeyPomlMessages({
     animationCatalogContext,
     currentTurnContext,
     diaryContext: '',
@@ -464,7 +477,7 @@ export async function buildChatCompletionMessages({
       ttsProvider,
       replyLength: normalizedReplyLength,
     }),
-    grilloContext,
+    grilloContext: grilloMaterial.text,
     history: contextualHistory,
     personaContext: personaBlocks.join('\n\n'),
     relationshipMemoryContext: buildAffectBridgePromptBlock(relationshipMemory.affectState),
@@ -482,4 +495,9 @@ export async function buildChatCompletionMessages({
     }),
     ttsContext,
   });
+  return {
+    grilloContext: grilloMaterial.text,
+    grilloReceipt: grilloMaterial.receipt,
+    messages,
+  };
 }

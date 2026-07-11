@@ -14,7 +14,12 @@ const GRILLO_DEFAULT_SECTION_BUDGETS = {
 
 const GRILLO_DEFAULT_GLOBAL_BUDGET = 2030;
 
-type GrilloSectionName = keyof typeof GRILLO_DEFAULT_SECTION_BUDGETS;
+export type GrilloSectionName = keyof typeof GRILLO_DEFAULT_SECTION_BUDGETS;
+
+export type GrilloContextBudgetOverrides = {
+  globalBudget?: number;
+  sectionBudgets?: Partial<Record<GrilloSectionName, number>>;
+};
 
 export type GrilloScoredItem = Partial<Omit<GrilloRecallItem, 'score' | 'text'>> & {
   text: string;
@@ -31,11 +36,48 @@ type GrilloContextSections = {
   output_description: string[];
 };
 
-type GrilloReductionLog = {
+export type GrilloReductionLog = {
   step: string;
   section: GrilloSectionName;
   removedItems: number;
   tokensSaved: number;
+};
+
+export type GrilloClientProvenanceDrop = {
+  id: string;
+  section: GrilloSectionName;
+  stage: 'client_context_reducer';
+  step: string;
+};
+
+export type GrilloClientLaneReceipt = {
+  dropped: GrilloClientProvenanceDrop[];
+  droppedIds: string[];
+  duplicateIds: string[];
+  includedIds: string[];
+  includedOccurrences: string[];
+  requestedIds: string[];
+  requestedOccurrences: string[];
+};
+
+export type GrilloClientContextReceipt = {
+  lanes: Record<
+    'channel_history' | 'recalled_memories' | 'relationship_memory' | 'thoughts',
+    GrilloClientLaneReceipt
+  >;
+  reductions: GrilloReductionLog[];
+  stage: 'client_context_reducer';
+  totalTokens: number;
+  usedFallback: boolean;
+  version: '1.0.0';
+};
+
+type GrilloSectionIds = Record<GrilloSectionName, string[]>;
+
+type GrilloReductionTracker = {
+  drops: GrilloClientProvenanceDrop[];
+  ids: GrilloSectionIds;
+  requested: GrilloSectionIds;
 };
 
 type GrilloBudgetResult = {
@@ -147,6 +189,7 @@ function reduceGrilloContextBudget(
   sections: GrilloContextSections,
   budgets: Record<GrilloSectionName, number> = { ...GRILLO_DEFAULT_SECTION_BUDGETS },
   globalBudget = GRILLO_DEFAULT_GLOBAL_BUDGET,
+  tracker?: GrilloReductionTracker,
 ): GrilloBudgetResult {
   const result: GrilloContextSections = {
     background_information: [...sections.background_information],
@@ -159,13 +202,15 @@ function reduceGrilloContextBudget(
   };
   const reductions: GrilloReductionLog[] = [];
 
-  enforceSectionBudgets(result, budgets, reductions);
+  enforceSectionBudgets(result, budgets, reductions, tracker);
 
   if (totalSectionTokens(result) > globalBudget && result.recalled_memories.length > 1) {
     const before = result.recalled_memories.length;
     let tokensSaved = 0;
     while (totalSectionTokens(result) > globalBudget && result.recalled_memories.length > 1) {
-      const removed = removeLowestScoredItem(result.recalled_memories);
+      const removed = removeLowestScoredItem(result.recalled_memories, (index) => {
+        dropTrackedId(tracker, 'recalled_memories', index, 'drop_low_score_memories');
+      });
       tokensSaved += estimateGrilloTokens(removed?.text ?? '');
     }
     pushReduction(
@@ -183,6 +228,7 @@ function reduceGrilloContextBudget(
     let tokensSaved = 0;
     while (totalSectionTokens(result) > globalBudget && result.channel_history.length > 2) {
       tokensSaved += estimateGrilloTokens(result.channel_history.shift() ?? '');
+      dropTrackedId(tracker, 'channel_history', 0, 'trim_oldest_history');
     }
     pushReduction(
       reductions,
@@ -198,6 +244,13 @@ function reduceGrilloContextBudget(
     const before = result.thoughts.length;
     const removed = result.thoughts.slice(0, -1);
     result.thoughts = result.thoughts.slice(-1);
+    dropTrackedIds(
+      tracker,
+      'thoughts',
+      tracker?.ids.thoughts.slice(0, -1) ?? [],
+      'trim_thoughts',
+    );
+    if (tracker) tracker.ids.thoughts = tracker.ids.thoughts.slice(-1);
     pushReduction(
       reductions,
       'trim_thoughts',
@@ -213,6 +266,13 @@ function reduceGrilloContextBudget(
     const kept = result.relationship_memory[result.relationship_memory.length - 1] ?? '';
     const removed = result.relationship_memory.slice(0, -1);
     result.relationship_memory = [kept.length > 200 ? `${kept.slice(0, 200)}...` : kept];
+    dropTrackedIds(
+      tracker,
+      'relationship_memory',
+      tracker?.ids.relationship_memory.slice(0, -1) ?? [],
+      'compact_relationship',
+    );
+    if (tracker) tracker.ids.relationship_memory = tracker.ids.relationship_memory.slice(-1);
     pushReduction(
       reductions,
       'compact_relationship',
@@ -224,6 +284,7 @@ function reduceGrilloContextBudget(
   }
 
   if (totalSectionTokens(result) > globalBudget) {
+    trackFallbackDrops(tracker, result);
     result.channel_history = result.channel_history.slice(-2);
     result.relationship_memory = result.relationship_memory.slice(-1);
     result.recalled_memories = [];
@@ -250,8 +311,35 @@ function reduceGrilloContextBudget(
   };
 }
 
+export function buildGrilloContextPromptMaterial(
+  options: BuildGrilloContextSectionsOptions,
+  budgetOverrides: GrilloContextBudgetOverrides = {},
+) {
+  const sections = buildGrilloContextSections(options);
+  const ids = buildGrilloSectionIds(options, sections);
+  const tracker: GrilloReductionTracker = {
+    drops: [],
+    ids: cloneSectionIds(ids),
+    requested: cloneSectionIds(ids),
+  };
+  const budget = reduceGrilloContextBudget(
+    sections,
+    { ...GRILLO_DEFAULT_SECTION_BUDGETS, ...budgetOverrides.sectionBudgets },
+    budgetOverrides.globalBudget ?? GRILLO_DEFAULT_GLOBAL_BUDGET,
+    tracker,
+  );
+  const text = renderGrilloContextPromptBlock(budget);
+  return {
+    receipt: buildClientContextReceipt(budget, tracker),
+    text,
+  };
+}
+
 export function buildGrilloContextPromptBlock(options: BuildGrilloContextSectionsOptions): string {
-  const budget = reduceGrilloContextBudget(buildGrilloContextSections(options));
+  return buildGrilloContextPromptMaterial(options).text;
+}
+
+function renderGrilloContextPromptBlock(budget: GrilloBudgetResult) {
   const lines = [
     `estimated_tokens: ${budget.totalTokens}`,
     `used_fallback: ${budget.usedFallback}`,
@@ -335,6 +423,209 @@ function normalizePathPart(value: string) {
   );
 }
 
+function buildGrilloSectionIds(
+  options: BuildGrilloContextSectionsOptions,
+  sections: GrilloContextSections,
+): GrilloSectionIds {
+  const packet = options.memoryAdditions?.contextPacket ?? null;
+  const scopeKey =
+    packet?.scopeKey ||
+    readTurnContextValue(options.turnContext, 'stateKey') ||
+    readTurnContextValue(options.turnContext, 'conversationScope') ||
+    'browser';
+  const serverLanes = packet?.provenance_receipt?.lanes;
+  const channelFallback = packet
+    ? []
+    : (options.channelHistory ?? []).slice(-18).map((turn) => `turn:${turn.id}`);
+  const recalledPreferred = sections.recalled_memories.map((item) => item.id ?? '');
+
+  return {
+    background_information: idsForTexts(
+      scopeKey,
+      'background_information',
+      sections.background_information,
+    ),
+    instructions: idsForTexts(scopeKey, 'instructions', sections.instructions),
+    channel_history: idsForTexts(
+      scopeKey,
+      'channel_history',
+      sections.channel_history,
+      serverLanes?.channel_history.includedOccurrences ?? channelFallback,
+    ),
+    relationship_memory: idsForTexts(
+      scopeKey,
+      'relationship_memory',
+      sections.relationship_memory,
+      serverLanes?.relationship_memory.includedOccurrences,
+    ),
+    recalled_memories: idsForTexts(
+      scopeKey,
+      'recalled_memories',
+      sections.recalled_memories.map((item) => item.text),
+      serverLanes?.recalled_memories.includedOccurrences ?? recalledPreferred,
+    ),
+    thoughts: idsForTexts(
+      scopeKey,
+      'thoughts',
+      sections.thoughts,
+      serverLanes?.thoughts.includedOccurrences,
+    ),
+    output_description: idsForTexts(
+      scopeKey,
+      'output_description',
+      sections.output_description,
+    ),
+  };
+}
+
+function idsForTexts(
+  scopeKey: string,
+  section: GrilloSectionName,
+  texts: string[],
+  preferred: string[] = [],
+) {
+  return texts.map((text, index) =>
+    preferred[index]?.trim() || deterministicFallbackId(scopeKey, section, index, text),
+  );
+}
+
+function deterministicFallbackId(
+  scopeKey: string,
+  section: GrilloSectionName,
+  index: number,
+  text: string,
+) {
+  const bytes = new TextEncoder().encode(`${scopeKey}\u0000${section}\u0000${index}\u0000${text}`);
+  let hash = 0x811c9dc5;
+  for (const byte of bytes) {
+    hash ^= byte;
+    hash = Math.imul(hash, 0x01000193);
+  }
+  return `fallback:${section}:${index}:${(hash >>> 0).toString(16).padStart(8, '0')}`;
+}
+
+function cloneSectionIds(ids: GrilloSectionIds): GrilloSectionIds {
+  return Object.fromEntries(
+    Object.entries(ids).map(([section, values]) => [section, [...values]]),
+  ) as GrilloSectionIds;
+}
+
+function dropTrackedId(
+  tracker: GrilloReductionTracker | undefined,
+  section: GrilloSectionName,
+  index: number,
+  step: string,
+) {
+  if (!tracker) return;
+  const [id] = tracker.ids[section].splice(index, 1);
+  if (id) recordClientDrop(tracker, section, id, step);
+}
+
+function dropTrackedIds(
+  tracker: GrilloReductionTracker | undefined,
+  section: GrilloSectionName,
+  ids: string[],
+  step: string,
+) {
+  if (!tracker) return;
+  for (const id of ids) recordClientDrop(tracker, section, id, step);
+}
+
+function recordClientDrop(
+  tracker: GrilloReductionTracker,
+  section: GrilloSectionName,
+  id: string,
+  step: string,
+) {
+  tracker.drops.push({ id, section, stage: 'client_context_reducer', step });
+}
+
+function trackFallbackDrops(
+  tracker: GrilloReductionTracker | undefined,
+  sections: GrilloContextSections,
+) {
+  if (!tracker) return;
+  const channelKeep = Math.min(2, sections.channel_history.length);
+  const droppedChannelIds = channelKeep > 0
+    ? tracker.ids.channel_history.slice(0, -channelKeep)
+    : [...tracker.ids.channel_history];
+  dropTrackedIds(
+    tracker,
+    'channel_history',
+    droppedChannelIds,
+    'fallback_minimal',
+  );
+  tracker.ids.channel_history = tracker.ids.channel_history.slice(-2);
+  dropTrackedIds(
+    tracker,
+    'relationship_memory',
+    tracker.ids.relationship_memory.slice(0, -1),
+    'fallback_minimal',
+  );
+  tracker.ids.relationship_memory = tracker.ids.relationship_memory.slice(-1);
+  dropTrackedIds(
+    tracker,
+    'recalled_memories',
+    tracker.ids.recalled_memories,
+    'fallback_minimal',
+  );
+  tracker.ids.recalled_memories = [];
+  dropTrackedIds(tracker, 'thoughts', tracker.ids.thoughts, 'fallback_minimal');
+  tracker.ids.thoughts = [];
+}
+
+function buildClientContextReceipt(
+  budget: GrilloBudgetResult,
+  tracker: GrilloReductionTracker,
+): GrilloClientContextReceipt {
+  return {
+    lanes: {
+      channel_history: clientLaneReceipt('channel_history', tracker),
+      recalled_memories: clientLaneReceipt('recalled_memories', tracker),
+      relationship_memory: clientLaneReceipt('relationship_memory', tracker),
+      thoughts: clientLaneReceipt('thoughts', tracker),
+    },
+    reductions: budget.reductions.map((item) => ({ ...item })),
+    stage: 'client_context_reducer',
+    totalTokens: budget.totalTokens,
+    usedFallback: budget.usedFallback,
+    version: '1.0.0',
+  };
+}
+
+function clientLaneReceipt(
+  section: 'channel_history' | 'recalled_memories' | 'relationship_memory' | 'thoughts',
+  tracker: GrilloReductionTracker,
+): GrilloClientLaneReceipt {
+  const requestedOccurrences = tracker.requested[section];
+  const includedOccurrences = tracker.ids[section];
+  const dropped = tracker.drops.filter((item) => item.section === section);
+  return {
+    dropped: dropped.map((item) => ({ ...item })),
+    droppedIds: uniqueStrings(dropped.map((item) => item.id)),
+    duplicateIds: findDuplicateIds(requestedOccurrences),
+    includedIds: uniqueStrings(includedOccurrences),
+    includedOccurrences: [...includedOccurrences],
+    requestedIds: uniqueStrings(requestedOccurrences),
+    requestedOccurrences: [...requestedOccurrences],
+  };
+}
+
+function findDuplicateIds(ids: string[]) {
+  const seen = new Set<string>();
+  return uniqueStrings(
+    ids.filter((id) => {
+      if (seen.has(id)) return true;
+      seen.add(id);
+      return false;
+    }),
+  );
+}
+
+function uniqueStrings(values: string[]) {
+  return [...new Set(values.filter(Boolean))];
+}
+
 function sectionTokens(items: Array<string | GrilloScoredItem>) {
   return items.reduce((sum, item) => {
     const text = typeof item === 'string' ? item : item.text;
@@ -358,6 +649,7 @@ function enforceSectionBudgets(
   sections: GrilloContextSections,
   budgets: Record<GrilloSectionName, number>,
   reductions: GrilloReductionLog[],
+  tracker?: GrilloReductionTracker,
 ) {
   trimStringSectionToBudget(
     sections.background_information,
@@ -365,6 +657,7 @@ function enforceSectionBudgets(
     'background_information',
     reductions,
     'end',
+    tracker,
   );
   trimStringSectionToBudget(
     sections.instructions,
@@ -372,6 +665,7 @@ function enforceSectionBudgets(
     'instructions',
     reductions,
     'end',
+    tracker,
   );
   trimStringSectionToBudget(
     sections.channel_history,
@@ -379,6 +673,7 @@ function enforceSectionBudgets(
     'channel_history',
     reductions,
     'start',
+    tracker,
   );
   trimStringSectionToBudget(
     sections.relationship_memory,
@@ -386,20 +681,30 @@ function enforceSectionBudgets(
     'relationship_memory',
     reductions,
     'end',
+    tracker,
   );
   trimScoredSectionToBudget(
     sections.recalled_memories,
     budgets.recalled_memories,
     'recalled_memories',
     reductions,
+    tracker,
   );
-  trimStringSectionToBudget(sections.thoughts, budgets.thoughts, 'thoughts', reductions, 'start');
+  trimStringSectionToBudget(
+    sections.thoughts,
+    budgets.thoughts,
+    'thoughts',
+    reductions,
+    'start',
+    tracker,
+  );
   trimStringSectionToBudget(
     sections.output_description,
     budgets.output_description,
     'output_description',
     reductions,
     'end',
+    tracker,
   );
 }
 
@@ -409,11 +714,14 @@ function trimStringSectionToBudget(
   section: GrilloSectionName,
   reductions: GrilloReductionLog[],
   removeFrom: 'start' | 'end',
+  tracker?: GrilloReductionTracker,
 ) {
   const before = items.length;
   let tokensSaved = 0;
   while (items.length > 0 && sectionTokens(items) > maxTokens) {
+    const removeIndex = removeFrom === 'start' ? 0 : items.length - 1;
     const removed = removeFrom === 'start' ? items.shift() : items.pop();
+    dropTrackedId(tracker, section, removeIndex, 'section_budget');
     tokensSaved += estimateGrilloTokens(removed ?? '');
   }
   pushReduction(reductions, 'section_budget', section, before, items.length, tokensSaved);
@@ -424,17 +732,20 @@ function trimScoredSectionToBudget(
   maxTokens: number,
   section: GrilloSectionName,
   reductions: GrilloReductionLog[],
+  tracker?: GrilloReductionTracker,
 ) {
   const before = items.length;
   let tokensSaved = 0;
   while (items.length > 0 && sectionTokens(items) > maxTokens) {
-    const removed = removeLowestScoredItem(items);
+    const removed = removeLowestScoredItem(items, (index) => {
+      dropTrackedId(tracker, section, index, 'section_budget');
+    });
     tokensSaved += estimateGrilloTokens(removed?.text ?? '');
   }
   pushReduction(reductions, 'section_budget', section, before, items.length, tokensSaved);
 }
 
-function removeLowestScoredItem(items: GrilloScoredItem[]) {
+function removeLowestScoredItem(items: GrilloScoredItem[], onRemove?: (index: number) => void) {
   if (items.length === 0) {
     return undefined;
   }
@@ -449,6 +760,7 @@ function removeLowestScoredItem(items: GrilloScoredItem[]) {
     }
   }
 
+  onRemove?.(lowestIndex);
   return items.splice(lowestIndex, 1)[0];
 }
 
