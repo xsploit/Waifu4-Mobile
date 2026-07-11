@@ -976,6 +976,38 @@ describe('GrilloWorkerService', () => {
           expect.objectContaining({ signalKind: 'feedback', status: 'open' }),
         ]),
       );
+      await grillo.recordMemoryFeedback({
+        content: 'A different participant reported an unrelated memory issue.',
+        participantKey: 'local:local:someone-else',
+        scopeKey,
+      });
+      const repairList = await grillo.runWorkerTool({
+        args: { status: 'open' },
+        name: 'core.worker_repair_list',
+        participantKey,
+        scopeKey,
+      });
+      const correctionTask = repairTasks.find((task) => task.signalKind === 'correction');
+      expect(repairList).toMatchObject({ ok: true, result: { tasks: expect.any(Array) } });
+      expect((repairList.result as { tasks: unknown[] }).tasks).toHaveLength(2);
+      expect(correctionTask).toBeDefined();
+      const repairTransition = await grillo.runWorkerTool({
+        args: {
+          action: 'resolve',
+          summary: 'The evidence-backed correction is reflected in the active claim.',
+          task_id: correctionTask?.taskId,
+        },
+        name: 'core.worker_repair_transition',
+        participantKey,
+        scopeKey,
+      });
+      expect(repairTransition).toMatchObject({
+        ok: true,
+        result: { action: 'resolve', taskId: correctionTask?.taskId },
+      });
+      expect(await grillo.listRepairQueue(scopeKey, 'resolved')).toEqual([
+        expect.objectContaining({ taskId: correctionTask?.taskId, status: 'resolved' }),
+      ]);
       expect(replay.activeClaims).toEqual([
         expect.objectContaining({
           effectiveValue: 'blue',

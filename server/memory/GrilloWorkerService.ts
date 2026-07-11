@@ -104,6 +104,8 @@ type GrilloWorkerToolName =
   | 'core.worker_profile_patch'
   | 'core.worker_emotion_read'
   | 'core.worker_emotion_update'
+  | 'core.worker_repair_list'
+  | 'core.worker_repair_transition'
   | 'core.worker_memory_insert_archival';
 
 export type GrilloWorkerToolInput = {
@@ -1651,7 +1653,49 @@ export class GrilloWorkerService {
     if (name === 'core.worker_emotion_update') {
       return this.updateWorkerEmotion(scopeKey, args);
     }
+    if (name === 'core.worker_repair_list') {
+      const status = normalizeText(args['status']);
+      const tasks = await this.repairQueue.list(
+        scopeKey,
+        status === 'deferred' || status === 'resolved' ? status : 'open',
+      );
+      return {
+        tasks: tasks.filter(
+          (task) => !task.participantKey || !participantKey || task.participantKey === participantKey,
+        ),
+      };
+    }
+    if (name === 'core.worker_repair_transition') {
+      return this.transitionWorkerRepair(scopeKey, participantKey, args);
+    }
     return this.insertWorkerArchivalMemory(scopeKey, args);
+  }
+
+  private async transitionWorkerRepair(
+    scopeKey: string,
+    participantKey: string,
+    args: Record<string, unknown>,
+  ) {
+    const taskId = normalizeText(args['task_id']);
+    const action = normalizeText(args['action']);
+    const summary = normalizeText(args['summary']);
+    const task = (await this.repairQueue.list(scopeKey)).find((item) => item.taskId === taskId);
+    if (!task) throw new Error('repair task was not found in the worker scope');
+    if (task.participantKey && participantKey && task.participantKey !== participantKey) {
+      throw new Error('repair task participant does not match the worker participant');
+    }
+    if (task.status === 'resolved') throw new Error('repair task is already resolved');
+    const event = await this.repairQueue.transition({
+      action: action === 'resolve' ? 'resolve' : 'defer',
+      taskId: task.taskId,
+      scopeKey,
+      ...(task.participantKey ? { participantKey: task.participantKey } : {}),
+      signalKind: task.signalKind,
+      summary,
+      evidenceIds: task.evidenceIds,
+      sourceRecordIds: task.sourceRecordIds,
+    });
+    return { action: event.action, eventId: event.id, taskId: task.taskId };
   }
 
   private async readWorkerMemory(
@@ -2343,6 +2387,8 @@ const WORKER_TOOL_NAME_VALUES = [
   'core.worker_profile_patch',
   'core.worker_emotion_read',
   'core.worker_emotion_update',
+  'core.worker_repair_list',
+  'core.worker_repair_transition',
   'core.worker_memory_insert_archival',
 ] as const satisfies readonly GrilloWorkerToolName[];
 
@@ -2458,6 +2504,16 @@ const WorkerToolArgSchemas = {
   'core.worker_memory_insert_archival': z.object({ text: TextishSchema }).passthrough(),
   'core.worker_memory_read': z.object({ block_name: TextishSchema.optional() }).passthrough(),
   'core.worker_memory_search': z.object({ query: TextishSchema }).passthrough(),
+  'core.worker_repair_list': z
+    .object({ status: z.enum(['open', 'deferred', 'resolved']).optional() })
+    .passthrough(),
+  'core.worker_repair_transition': z
+    .object({
+      action: z.enum(['resolve', 'defer']),
+      summary: z.string().trim().min(1).max(2_000),
+      task_id: z.string().trim().min(1).max(240),
+    })
+    .passthrough(),
   'core.worker_memory_write': z
     .object({
       block_name: TextishSchema,
@@ -2504,6 +2560,8 @@ function buildBackendWorkerSystemPrompt() {
     '- core.worker_profile_patch args: {"field": "tone_preferences|interaction_style|boundaries|active_threads", "operation": "add|remove", "value": string}',
     '- core.worker_emotion_read args: {}',
     '- core.worker_emotion_update args: {"intensities": {"emotion_name": number}, "operation"?: "merge|replace", "last_signal_source"?: string}',
+    '- core.worker_repair_list args: {"status"?: "open|deferred|resolved"}',
+    '- core.worker_repair_transition args: {"task_id": string, "action": "resolve|defer", "summary": string}',
     '- core.worker_memory_insert_archival args: {"text": string}',
     '',
     'First read or search memory if needed. Then call write tools. When finished, return done=true and toolCalls=[].',
@@ -2818,6 +2876,7 @@ function isWorkerWriteTool(name: GrilloWorkerToolName) {
     name === 'core.worker_memory_write' ||
     name === 'core.worker_profile_patch' ||
     name === 'core.worker_emotion_update' ||
+    name === 'core.worker_repair_transition' ||
     name === 'core.worker_memory_insert_archival'
   );
 }
