@@ -215,6 +215,19 @@ export function createMemoryRouter() {
     }
   });
 
+  router.post('/grillo/context/diagnose', async (req, res) => {
+    try {
+      const input = contextBodySchema.parse(req.body ?? {});
+      res.json({
+        ok: true,
+        backend: getLadybugMemoryService().getBackendLabel(),
+        ...(await getGrilloWorkerService().diagnoseContextPacket(input)),
+      });
+    } catch (error) {
+      sendError(res, error, 'GRILLO context diagnosis failed.');
+    }
+  });
+
   router.get('/grillo/ledger', async (req, res) => {
     try {
       res.json({

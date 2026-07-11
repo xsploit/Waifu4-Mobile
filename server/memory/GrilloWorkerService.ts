@@ -1616,12 +1616,19 @@ export class GrilloWorkerService {
       scopeKey,
       thoughts: thoughtItems.map((item) => item.text),
     };
-    return includeProvenanceReceipt
-      ? {
-          ...packet,
-          memory_sufficiency_receipt: assessGrilloMemorySufficiency(query, packet),
-        }
-      : packet;
+    return packet;
+  }
+
+  async diagnoseContextPacket(input: GrilloContextPacketInput) {
+    const query = normalizeText(input.query);
+    const packet = await this.buildContextPacket({
+      ...input,
+      includeProvenanceReceipt: true,
+    });
+    return {
+      packet,
+      receipt: assessGrilloMemorySufficiency(query, packet),
+    };
   }
 
   private async executeWorkerTool(

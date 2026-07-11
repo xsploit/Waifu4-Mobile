@@ -91,7 +91,6 @@ export type GrilloContextPacket = {
   generatedAt: number;
   output_description: string[];
   provenance_receipt?: GrilloContextProvenanceReceipt;
-  memory_sufficiency_receipt?: GrilloMemorySufficiencyReceipt;
   recalled_memories: GrilloRecallItem[];
   relationship_memory: string[];
   retrieval_receipt: GrilloRetrievalReceipt;

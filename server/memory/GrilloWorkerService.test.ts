@@ -202,7 +202,12 @@ describe('GrilloWorkerService', () => {
         stage: 'server_context_packet',
         version: '1.0.0',
       });
-      expect(packet.memory_sufficiency_receipt).toMatchObject({
+      const diagnosis = await grillo.diagnoseContextPacket({
+        participantKeys: ['local:local:subsect'],
+        query: 'native GRILLO packet',
+        scopeKey: 'local:persona:hikari-chan',
+      });
+      expect(diagnosis.receipt).toMatchObject({
         intents: ['general'],
         status: 'sufficient',
         version: '1.0.0',
@@ -224,7 +229,8 @@ describe('GrilloWorkerService', () => {
         packet.thoughts.length,
       );
       expect(defaultPacket.provenance_receipt).toBeUndefined();
-      expect(defaultPacket.memory_sufficiency_receipt).toBeUndefined();
+      expect('memory_sufficiency_receipt' in packet).toBe(false);
+      expect('memory_sufficiency_receipt' in defaultPacket).toBe(false);
       expect({
         channel_history: packet.channel_history,
         recalled_memories: packet.recalled_memories,
