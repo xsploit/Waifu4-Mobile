@@ -715,11 +715,27 @@ export class GrilloWorkerService {
       lastToolCalls: toolCalls,
       running: true,
     };
+    const previousWorkerState = asRecord(
+      await this.memory.getGrilloSingleton('memory_worker_state'),
+    );
+    const previousScopes = asRecord(previousWorkerState['scopes']);
+    const scopeState = {
+      ...asRecord(previousScopes[scopeKey]),
+      ...this.runtime,
+      ...asRecord(taskResult.statePatch),
+      lastTickId: tickId,
+      scopeKey,
+      updatedAt: this.nowMs(),
+    };
     await this.memory.setGrilloSingleton('memory_worker_state', {
       ...this.runtime,
       ...(asRecord(taskResult.statePatch)),
       lastTickId: tickId,
       scopeKey,
+      scopes: {
+        ...previousScopes,
+        [scopeKey]: scopeState,
+      },
       updatedAt: this.nowMs(),
     });
     await this.memory.appendGrilloRecord('grillo_activity_log', {
@@ -756,7 +772,10 @@ export class GrilloWorkerService {
     reason: string;
     scopeKey: string;
   }, options: GrilloWorkerTickOptions = {}): Promise<GrilloWorkerTaskResult> {
-    const previousState = asRecord(await this.memory.getGrilloSingleton('memory_worker_state'));
+    const previousState = workerScopeState(
+      asRecord(await this.memory.getGrilloSingleton('memory_worker_state')),
+      input.scopeKey,
+    );
     const processedTurnIds = new Set(readStringArray(previousState['processedTurnIds']));
     const turns = (await this.memory.readGrilloRecords<Record<string, unknown>>('turn_events'))
       .filter((record) => recordScopeKey(record) === input.scopeKey)
@@ -1195,7 +1214,10 @@ export class GrilloWorkerService {
       };
     }
 
-    const previousState = asRecord(await this.memory.getGrilloSingleton('memory_worker_state'));
+    const previousState = workerScopeState(
+      asRecord(await this.memory.getGrilloSingleton('memory_worker_state')),
+      input.scopeKey,
+    );
     const indexedTurnIds = new Set(readStringArray(previousState['semanticIndexedTurnIds']));
     const turns = (await this.memory.readGrilloRecords<Record<string, unknown>>('turn_events'))
       .filter((record) => recordScopeKey(record) === input.scopeKey)
@@ -2775,6 +2797,15 @@ function asRecord(value: unknown): Record<string, unknown> {
   return value && typeof value === 'object' && !Array.isArray(value)
     ? (value as Record<string, unknown>)
     : {};
+}
+
+function workerScopeState(state: Record<string, unknown>, scopeKey: string) {
+  const scopes = asRecord(state['scopes']);
+  const scoped = asRecord(scopes[scopeKey]);
+  if (Object.keys(scoped).length > 0) return scoped;
+  const legacyScopeKey = normalizeText(state['scopeKey'] ?? state['scope_key']);
+  if (!legacyScopeKey || legacyScopeKey === scopeKey) return state;
+  return {};
 }
 
 function normalizeText(value: unknown) {

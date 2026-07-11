@@ -1936,6 +1936,80 @@ describe('GrilloWorkerService', () => {
     }
   });
 
+  it('keeps worker watermarks isolated by memory scope', async () => {
+    const { grillo, memory } = createServices();
+    const firstScope = 'local:persona:hikari-chan';
+    const secondScope = 'twitch:other-channel:hikari-chan';
+    try {
+      const first = await grillo.ingestTurnPair({
+        assistantText: 'First scope reply.',
+        participantKey: 'local:local:subsect',
+        scopeKey: firstScope,
+        source: 'local',
+        userText: 'First scope message.',
+      });
+      const second = await grillo.ingestTurnPair({
+        assistantText: 'Second scope reply.',
+        participantKey: 'twitch:other-channel:viewer',
+        scopeKey: secondScope,
+        source: 'twitch',
+        userText: 'Second scope message.',
+      });
+
+      await grillo.runTickWithOptions({ beatType: 'extraction', scopeKey: firstScope });
+      await grillo.runTickWithOptions({ beatType: 'extraction', scopeKey: secondScope });
+      const state = await memory.getGrilloSingleton<Record<string, unknown>>('memory_worker_state');
+      const scopes = state?.['scopes'] as Record<string, Record<string, unknown>>;
+
+      expect(scopes[firstScope]?.['processedTurnIds']).toEqual(first.turnIds);
+      expect(scopes[secondScope]?.['processedTurnIds']).toEqual(second.turnIds);
+      await expect(
+        grillo.runTickWithOptions({ beatType: 'extraction', scopeKey: firstScope }),
+      ).resolves.toMatchObject({ noOpReason: 'no_new_turn_pairs', writes: 0 });
+      await expect(
+        grillo.runTickWithOptions({ beatType: 'extraction', scopeKey: secondScope }),
+      ).resolves.toMatchObject({ noOpReason: 'no_new_turn_pairs', writes: 0 });
+
+      const embeddingOptions = {
+        embedding: async () => ({
+          embedding: [1, 0, 0],
+          model: 'openai/text-embedding-3-small',
+          provider: 'vercel-gateway' as const,
+        }),
+        embeddingModel: 'openai/text-embedding-3-small',
+        embeddingProvider: 'vercel-gateway' as const,
+      };
+      await grillo.runTickWithOptions(
+        { beatType: 'semantic_indexing', scopeKey: firstScope },
+        embeddingOptions,
+      );
+      await grillo.runTickWithOptions(
+        { beatType: 'semantic_indexing', scopeKey: secondScope },
+        embeddingOptions,
+      );
+      const indexedState = await memory.getGrilloSingleton<Record<string, unknown>>(
+        'memory_worker_state',
+      );
+      const indexedScopes = indexedState?.['scopes'] as Record<string, Record<string, unknown>>;
+      expect(indexedScopes[firstScope]?.['semanticIndexedTurnIds']).toEqual(first.turnIds);
+      expect(indexedScopes[secondScope]?.['semanticIndexedTurnIds']).toEqual(second.turnIds);
+      await expect(
+        grillo.runTickWithOptions(
+          { beatType: 'semantic_indexing', scopeKey: firstScope },
+          embeddingOptions,
+        ),
+      ).resolves.toMatchObject({ noOpReason: 'no_new_turn_pairs', writes: 0 });
+      await expect(
+        grillo.runTickWithOptions(
+          { beatType: 'semantic_indexing', scopeKey: secondScope },
+          embeddingOptions,
+        ),
+      ).resolves.toMatchObject({ noOpReason: 'no_new_turn_pairs', writes: 0 });
+    } finally {
+      await memory.close();
+    }
+  });
+
   it('starts, stops, and guards backend worker ticks', async () => {
     const dbPath = join(tmpdir(), `webwaifu4-grillo-runtime-test-${process.pid}-${Date.now()}.db`);
     dbPaths.push(dbPath);
