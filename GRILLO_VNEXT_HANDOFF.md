@@ -146,6 +146,15 @@ retrieval controller --> budgeted context packet --> main reply model
 - Repair diagnosis is not yet automatic. Add deterministic enqueue rules for
   weak grounding, missing lanes, dropped evidence, and unresolved questions;
   do not let model-written summaries alone create these signals.
+- Provenance-enabled context packets now include a deterministic memory
+  sufficiency receipt. It detects correction, temporal, commitment,
+  relationship, personal, and metacognitive intent; emits stable retrieval
+  probes; names required/missing lanes and dropped relevant IDs; and reports
+  sufficient, partial, or insufficient context. Commit `a863915` passed the
+  full release gate with 76 test files and 378 tests.
+- Sufficiency remains diagnostic. The probes do not trigger a second retrieval,
+  and partial/insufficient receipts do not write repair events. Either behavior
+  would add work to chat preflight and must be latency-measured before wiring.
 - Before any live switch, produce repeated participant-aware whole-prompt shadow
   reports. Also add the repair queue, a real atomic persistent worker lease,
   and an explicit per-scope switch with rollback. A live switch still requires
@@ -340,10 +349,13 @@ attempt to extract or persist hidden chain-of-thought.
 
 ### Phase 3: Retrieval controller and repair loop
 
-1. Detect temporal, correction, commitment, relationship, personal, and
-   metacognitive retrieval intent.
-2. Produce deterministic intent-specific retrieval probes.
-3. Compute a memory-sufficiency receipt before answering.
+1. Deterministic temporal, correction, commitment, relationship, personal, and
+   metacognitive intent detection is complete.
+2. Deterministic intent-specific retrieval probes are emitted diagnostically;
+   executing additional probes is not wired.
+3. The memory-sufficiency receipt is computed before answering for
+   provenance-enabled packets, but it does not yet control retrieval or reply
+   behavior.
 4. The append-only worker repair queue, explicit feedback/correction producers,
    and participant-safe worker tools are complete. Add deterministic producers
    for weak grounding, missing lanes, dropped evidence, and unresolved
