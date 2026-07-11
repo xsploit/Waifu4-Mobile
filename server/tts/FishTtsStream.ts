@@ -3,7 +3,7 @@ import { createLogger } from '../../src/shared/logger';
 
 const log = createLogger('tts');
 
-export type FishBackend = 's1' | 's2-pro';
+export type FishBackend = 's1' | 's2-pro' | 's2.1-pro-free';
 export type FishFormat = 'pcm' | 'mp3' | 'wav' | 'opus';
 
 export type FishTransport = 'websocket' | 'timestamp-sse';

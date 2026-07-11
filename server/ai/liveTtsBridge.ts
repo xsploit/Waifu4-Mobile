@@ -51,6 +51,9 @@ function normalizeFishBackend(value: unknown): FishBackend | undefined {
   if (model === 's2' || model === 's2-pro') {
     return 's2-pro';
   }
+  if (model === 's2.1-pro-free') {
+    return 's2.1-pro-free';
+  }
   return undefined;
 }
 

@@ -435,6 +435,20 @@ describe('chat settings persistence', () => {
     expect(loaded.aiSettings.fishSpeechModel).toBe('s2');
   });
 
+  it('preserves Fish s2.1-pro-free saves', async () => {
+    window.localStorage.setItem(
+      STORAGE_KEYS.aiSettings,
+      JSON.stringify({
+        ...createDefaultAiSettings(),
+        fishSpeechModel: 's2.1-pro-free',
+      }),
+    );
+
+    const loaded = await loadPersistedChatState();
+
+    expect(loaded.aiSettings.fishSpeechModel).toBe('s2.1-pro-free');
+  });
+
   it('normalizes copied Fish Voice Lab model ids before persona binding apply can use them', async () => {
     window.localStorage.setItem(
       STORAGE_KEYS.personaVoiceBindings,

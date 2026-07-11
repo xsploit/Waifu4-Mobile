@@ -115,7 +115,7 @@ export type RemoteTtsProxyOptions = {
 };
 
 export type RemoteTtsProxyRequest = {
-  backend?: 's1' | 's2-pro';
+  backend?: 's1' | 's2-pro' | 's2.1-pro-free';
   bufferCharThreshold?: number;
   chunkLength?: number;
   conditionOnPreviousChunks?: boolean;
@@ -222,6 +222,9 @@ function normalizeFishBackend(value: string | undefined) {
   }
   if (model === 's2' || model === 's2-pro') {
     return 's2-pro' as const;
+  }
+  if (model === 's2.1-pro-free') {
+    return 's2.1-pro-free' as const;
   }
   return undefined;
 }

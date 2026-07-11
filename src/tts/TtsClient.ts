@@ -10,7 +10,7 @@ export type TtsStreamRequest = {
   provider?: 'fish' | 'inworld';
   fishTransport?: 'websocket' | 'timestamp-sse';
   voiceId?: string;
-  backend?: 's1' | 's2-pro';
+  backend?: 's1' | 's2-pro' | 's2.1-pro-free';
   format?: 'pcm' | 'mp3' | 'wav' | 'opus';
   sampleRate?: number;
   chunkLength?: number;

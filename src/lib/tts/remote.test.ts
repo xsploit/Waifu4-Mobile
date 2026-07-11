@@ -56,6 +56,21 @@ describe('remote TTS proxy compatibility', () => {
     });
   });
 
+  it('keeps Fish s2.1-pro-free requests on the new backend id', () => {
+    expect(
+      createRemoteTtsProxyRequest({
+        provider: 'fish-speech',
+        text: 'hello',
+        streamingMode: 'full-response',
+        modelId: 's2.1-pro-free',
+        fishTransport: 'timestamp-sse',
+      }),
+    ).toMatchObject({
+      backend: 's2.1-pro-free',
+      fishTransport: 'timestamp-sse',
+    });
+  });
+
   it('clamps Fish chunk length to the rebuilt backend range', () => {
     expect(
       createRemoteTtsProxyRequest({

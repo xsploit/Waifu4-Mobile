@@ -137,6 +137,9 @@ function normalizeProviderVoiceModelId(
   }
   if (provider === 'fish-speech') {
     const normalized = modelId.toLowerCase();
+    if (normalized === 's2.1-pro-free') {
+      return 's2.1-pro-free';
+    }
     if (normalized === 's2' || normalized === 's2-pro' || normalized === 'fish-speech-s2') {
       return 's2';
     }
@@ -427,7 +430,9 @@ function normalizeAiSettings(value: unknown): AiSettings {
   const fishSpeechModel =
     fishSpeechModelRaw === 's1'
       ? 's1'
-      : fishSpeechModelRaw === 's2' || fishSpeechModelRaw === 's2-pro'
+      : fishSpeechModelRaw === 's2.1-pro-free'
+        ? 's2.1-pro-free'
+        : fishSpeechModelRaw === 's2' || fishSpeechModelRaw === 's2-pro'
         ? 's2'
         : defaults.fishSpeechModel;
   const fishSpeechChunkLength =

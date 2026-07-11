@@ -11,7 +11,7 @@ const ttsRequestSchema = z.object({
   provider: z.enum(['fish', 'inworld']).optional(),
   fishTransport: z.enum(['websocket', 'timestamp-sse']).optional(),
   voiceId: z.string().optional(),
-  backend: z.enum(['s1', 's2-pro']).optional(),
+  backend: z.enum(['s1', 's2-pro', 's2.1-pro-free']).optional(),
   format: z.enum(['pcm', 'mp3', 'wav', 'opus']).optional(),
   sampleRate: z.number().int().positive().optional(),
   chunkLength: z.number().int().min(100).max(300).optional(),

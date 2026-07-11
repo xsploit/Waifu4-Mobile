@@ -420,6 +420,7 @@ export function TtsTab({
             }
             value={aiSettings.fishSpeechModel}
           >
+            <option value="s2.1-pro-free">s2.1-pro-free</option>
             <option value="s2">s2-pro</option>
             <option value="s1">s1</option>
           </select>

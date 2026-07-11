@@ -34,6 +34,18 @@ describe('live TTS bridge', () => {
     });
   });
 
+  it('passes Fish s2.1-pro-free through the live bridge', () => {
+    expect(
+      normalizeLiveTtsBridge({
+        provider: 'fish-speech',
+        streamingMode: 'live-bridge',
+        modelId: 's2.1-pro-free',
+      }),
+    ).toMatchObject({
+      backend: 's2.1-pro-free',
+    });
+  });
+
   it('streams eager visible deltas without waiting for sentence segmentation', async () => {
     const bridge = createLiveSpeechTextBridge({ chunkingStrategy: 'eager' });
     const done = collect(bridge.stream);
