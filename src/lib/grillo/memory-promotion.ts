@@ -25,6 +25,7 @@ export interface PromotionCandidate {
   confidence: number;
   user_id: string;
   created_at?: string;
+  source_turn_ids: string[];
 }
 
 export interface MemoryBlock {
@@ -125,21 +126,41 @@ export function evaluatePromotion(
     candidate.confidence >= policy.confidenceThreshold
   ));
 
-  const grouped = new Map<string, PromotionCandidate[]>();
+  const clustered = new Map<string, PromotionCandidate[]>();
   for (const candidate of eligible) {
-    const key = `${candidate.user_id}::${candidate.type}`;
-    const list = grouped.get(key) ?? [];
+    const item = canonicalItem(candidate.summary || candidate.content);
+    if (!item) continue;
+    const key = `${candidate.user_id}::${candidate.type}::${item}`;
+    const list = clustered.get(key) ?? [];
     list.push(candidate);
-    grouped.set(key, list);
+    clustered.set(key, list);
+  }
+
+  const grouped = new Map<string, PromotionCandidate[][]>();
+  for (const cluster of clustered.values()) {
+    const distinctEvidenceIds = new Set(
+      cluster.flatMap((candidate) => candidate.source_turn_ids ?? []).filter(Boolean),
+    );
+    if (
+      cluster.length < policy.minCandidatesForPromotion ||
+      distinctEvidenceIds.size < policy.minCandidatesForPromotion
+    ) {
+      continue;
+    }
+    const first = cluster[0];
+    if (!first?.user_id || !first.type) continue;
+    const key = `${first.user_id}::${first.type}`;
+    const approved = grouped.get(key) ?? [];
+    approved.push(cluster);
+    grouped.set(key, approved);
   }
 
   const results: PromotionResult[] = [];
   const consumed = new Set<string>();
   const nowIso = new Date().toISOString();
 
-  for (const [, group] of grouped) {
-    if (group.length < policy.minCandidatesForPromotion) continue;
-
+  for (const [, clusters] of grouped) {
+    const group = clusters.flat();
     const first = group[0];
     const userId = first?.user_id;
     const type = first?.type;
@@ -153,7 +174,9 @@ export function evaluatePromotion(
     const existingItems = latest?.items ?? [];
     const existingKeys = new Set(existingItems.map((item) => canonicalItem(item)));
 
-    const rawItems = group
+    const rawItems = clusters
+      .map((cluster) => cluster[0])
+      .filter((candidate): candidate is PromotionCandidate => Boolean(candidate))
       .map((candidate) => candidate.summary || candidate.content)
       .map((value) => String(value || "").trim())
       .filter(Boolean);
@@ -176,7 +199,7 @@ export function evaluatePromotion(
       block_name: blockName,
       operation: "upsert",
       items: mergedItems,
-      reason: `promotion confidence>=${policy.confidenceThreshold} count=${group.length}`,
+      reason: `promotion confidence>=${policy.confidenceThreshold} clusters=${clusters.length} evidence=${dedupePreserveOrder(group.flatMap((candidate) => candidate.source_turn_ids)).length}`,
       source_candidate_ids: candidateIds,
       created_at: nowIso,
     };

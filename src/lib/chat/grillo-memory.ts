@@ -475,6 +475,7 @@ function toCorePromotionCandidate(candidate: GrilloMemoryCandidate): PromotionCa
     summary: candidate.summary,
     type: candidate.type,
     user_id: candidate.participantKey,
+    source_turn_ids: candidate.sourceTurnIds,
   };
 }
 
