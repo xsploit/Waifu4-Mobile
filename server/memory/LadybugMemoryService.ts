@@ -27,6 +27,10 @@ export type LadybugSemanticMemoryMatch = LadybugSemanticMemoryRecord & {
 
 export type LadybugGrilloRecordEntity =
   | 'turn_events'
+  | 'evidence_records'
+  | 'memory_claims'
+  | 'memory_corrections'
+  | 'worker_decisions'
   | 'memory_candidates'
   | 'diary_entries'
   | 'memory_blocks'
@@ -2387,6 +2391,10 @@ function snapshotId(kind: LadybugSnapshotKind, scopeKey: string) {
 
 const GRILLO_RECORD_ENTITIES = new Set<LadybugGrilloRecordEntity>([
   'turn_events',
+  'evidence_records',
+  'memory_claims',
+  'memory_corrections',
+  'worker_decisions',
   'memory_candidates',
   'diary_entries',
   'memory_blocks',

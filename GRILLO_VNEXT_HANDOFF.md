@@ -29,6 +29,27 @@ rebuildable LadybugDB projections and local vector indexes
 retrieval controller --> budgeted context packet --> main reply model
 ```
 
+## Current Progress (2026-07-11)
+
+- Phase 1 is live. Native GRILLO context packets use current-query semantic
+  vectors, preserve source/evidence IDs, and report inclusion, dropping,
+  duplicates, retrieval strategy, and embedding generation.
+- Phase 2's canonical foundation is live in
+  `server/memory/GrilloEvidenceLedger.ts`. New local and Twitch turn pairs are
+  copied into append-only evidence records without changing the existing turn
+  graph or reply pipeline.
+- Evidence-gated claims, corrections, and worker decisions support `ADD`,
+  `UPDATE`, `SUPERSEDE`, `NOOP`, `REJECT`, and `DEFER`. They enforce scope,
+  exact-target supersession, temporal validity, duplicate no-ops, and explicit
+  handling of conflicting current claims.
+- `GET /api/memory/grillo/ledger?scopeKey=...` replays the canonical records
+  into current claim states and reports malformed record IDs. This is an
+  inspection surface; existing blocks, slots, relationships, and prompt
+  injection still use their established projections.
+- Next Phase 2 work is deterministic projection rebuilding from the ledger.
+  Do not switch live prompt injection to the new projections until replay
+  equivalence tests cover blocks, slots, relationships, and timelines.
+
 ## Project Map
 
 ### Authoritative rebuild
@@ -280,4 +301,3 @@ matches through the native GRILLO packet with stable provenance IDs and context
 receipts. Do not start later developmental features until recall correctness is
 measured.
 ```
-

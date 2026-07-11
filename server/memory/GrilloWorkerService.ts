@@ -7,6 +7,7 @@ import type {
   LadybugMemorySlotPatchRecord,
   LadybugMemorySlotRecord,
 } from './LadybugMemoryService.js';
+import { GrilloEvidenceLedger } from './GrilloEvidenceLedger.js';
 import type {
   GrilloContextPacket,
   GrilloEmbeddingIdentity,
@@ -194,6 +195,7 @@ type GrilloWorkerTaskResult = {
 };
 
 export class GrilloWorkerService {
+  private readonly evidenceLedger: GrilloEvidenceLedger;
   private activeTickPromise: Promise<GrilloWorkerTickResult> | null = null;
   private runtime: GrilloWorkerRuntimeState = {
     enabled: false,
@@ -216,7 +218,12 @@ export class GrilloWorkerService {
     private readonly nowMs: () => number = () => Date.now(),
     private readonly idFactory: () => string = () => randomUUID(),
     private readonly tickTask?: GrilloWorkerTickTask,
-  ) {}
+  ) {
+    this.evidenceLedger = new GrilloEvidenceLedger(memory, {
+      nowMs,
+      idFactory: () => idFactory(),
+    });
+  }
 
   start(options: GrilloWorkerRuntimeOptions = {}) {
     const intervalMs = clampInteger(options.intervalMs, 5_000, 60 * 60 * 1000, this.runtime.intervalMs);
@@ -252,6 +259,10 @@ export class GrilloWorkerService {
       ...this.runtime,
       running: Boolean(this.activeTickPromise),
     };
+  }
+
+  getEvidenceLedgerReplay(scopeKey: unknown) {
+    return this.evidenceLedger.replay(normalizeKey(scopeKey, 'local:persona:default'));
   }
 
   runTick(input: GrilloWorkerTickInput = {}) {
@@ -308,6 +319,22 @@ export class GrilloWorkerService {
         turn_id: turnId,
         user_id: scopeKey,
       });
+      await this.evidenceLedger.appendEvidence({
+        id: turnId,
+        content: userText,
+        createdAt,
+        kind: 'turn',
+        metadata: {
+          authorName: normalizeText(input.authorName) || 'User',
+          channelId,
+          interfacePath,
+        },
+        participantKey: participantKey || undefined,
+        role: 'user',
+        scopeKey,
+        source,
+        sourceRecordIds: [turnId],
+      });
       writtenTurnIds.push(turnId);
     }
 
@@ -325,6 +352,22 @@ export class GrilloWorkerService {
         source,
         turn_id: turnId,
         user_id: scopeKey,
+      });
+      await this.evidenceLedger.appendEvidence({
+        id: turnId,
+        content: assistantText,
+        createdAt: createdAt + 1,
+        kind: 'turn',
+        metadata: {
+          authorName: normalizeText(input.assistantName) || 'Assistant',
+          channelId,
+          interfacePath,
+        },
+        participantKey: participantKey || undefined,
+        role: 'assistant',
+        scopeKey,
+        source,
+        sourceRecordIds: [turnId],
       });
       writtenTurnIds.push(turnId);
     }

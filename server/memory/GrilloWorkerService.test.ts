@@ -47,8 +47,23 @@ describe('GrilloWorkerService', () => {
       });
 
       const graph = await memory.getGraphSummary();
+      const ledger = await grillo.getEvidenceLedgerReplay('local:persona:hikari-chan');
 
       expect(result.turnIds).toEqual(['id-1', 'id-2']);
+      expect(ledger.evidence).toEqual([
+        expect.objectContaining({
+          content: 'remember that clean memory matters',
+          id: 'id-1',
+          role: 'user',
+          scopeKey: 'local:persona:hikari-chan',
+        }),
+        expect.objectContaining({
+          content: 'I will remember that clean memory matters.',
+          id: 'id-2',
+          role: 'assistant',
+          scopeKey: 'local:persona:hikari-chan',
+        }),
+      ]);
       expect(graph.recent.turns).toEqual(
         expect.arrayContaining([
           expect.objectContaining({
