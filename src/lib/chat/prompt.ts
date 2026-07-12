@@ -409,6 +409,28 @@ export function trimChatHistory(history: ChatMessage[], limit = 36) {
   return history.slice(-limit);
 }
 
+export function updateChatMessageContent(
+  history: ChatMessage[],
+  messageId: string,
+  content: string,
+) {
+  for (let index = history.length - 1; index >= 0; index -= 1) {
+    const message = history[index];
+    if (message.id !== messageId) {
+      continue;
+    }
+    if (message.content === content) {
+      return history;
+    }
+
+    const next = history.slice();
+    next[index] = { ...message, content };
+    return trimChatHistory(next);
+  }
+
+  return history;
+}
+
 export async function buildChatCompletionMessages(
   options: BuildChatCompletionMessagesOptions,
 ): Promise<CompletionMessage[]> {

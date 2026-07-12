@@ -577,7 +577,7 @@ export class TtsManager {
     if (!this.audioContext || !this.audioAnalyser) {
       throw new Error('AudioContext not initialized');
     }
-    const raw = new Uint8Array(await chunk.audioBlob.arrayBuffer());
+    const raw = chunk.audioBytes ?? new Uint8Array(await chunk.audioBlob.arrayBuffer());
     if (generation !== this.queueGeneration || signal.aborted || raw.byteLength < 2) {
       return null;
     }

@@ -10,6 +10,8 @@ export interface PostProcessingRefs {
   colorCorrectionPass: ShaderPass;
   composer: EffectComposer;
   outlineEffect: OutlineEffect;
+  height: number;
+  width: number;
 }
 
 export function initPostProcessing(
@@ -46,9 +48,17 @@ export function initPostProcessing(
     colorCorrectionPass,
     composer,
     outlineEffect,
+    height: 0,
+    width: 0,
   };
 }
 
-export function resizePostProcessing(refs: PostProcessingRefs) {
-  refs.composer.setSize(window.innerWidth, window.innerHeight);
+export function resizePostProcessing(refs: PostProcessingRefs, width: number, height: number) {
+  if (refs.width === width && refs.height === height) {
+    return;
+  }
+
+  refs.width = width;
+  refs.height = height;
+  refs.composer.setSize(width, height);
 }

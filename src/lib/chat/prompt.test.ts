@@ -4,7 +4,28 @@ import { createDefaultRelationshipMemory, HIKARI_PERSONA } from './defaults';
 import {
   buildChatCompletionMessages,
   buildChatCompletionMessagesWithReceipt,
+  updateChatMessageContent,
 } from './prompt';
+
+describe('updateChatMessageContent', () => {
+  const history = [
+    { content: 'hello', createdAt: 1, id: 'user-1', role: 'user' as const },
+    { content: 'partial', createdAt: 2, id: 'assistant-1', role: 'assistant' as const },
+  ];
+
+  it('copies only the changed message and preserves the other entries', () => {
+    const updated = updateChatMessageContent(history, 'assistant-1', 'complete');
+
+    expect(updated).not.toBe(history);
+    expect(updated[0]).toBe(history[0]);
+    expect(updated[1]).toEqual({ ...history[1], content: 'complete' });
+  });
+
+  it('preserves the array identity for missing messages and unchanged content', () => {
+    expect(updateChatMessageContent(history, 'missing', 'complete')).toBe(history);
+    expect(updateChatMessageContent(history, 'assistant-1', 'partial')).toBe(history);
+  });
+});
 
 describe('buildChatCompletionMessages', () => {
   beforeEach(() => {

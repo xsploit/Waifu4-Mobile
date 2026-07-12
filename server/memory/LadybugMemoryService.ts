@@ -1,4 +1,4 @@
-import { mkdir, readFile, rename, writeFile } from 'node:fs/promises';
+import { mkdir, readFile, rename, stat, writeFile } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
 import { randomUUID } from 'node:crypto';
 import type { Connection, Database } from '@ladybugdb/core';
@@ -121,7 +121,14 @@ type FallbackStore = {
   version: 1;
 };
 
+type FallbackStoreCache = {
+  mtimeMs: number;
+  size: number;
+  store: FallbackStore;
+};
+
 const DEFAULT_MEMORY_DB_DIR = join(process.cwd(), '.webwaifu4', 'ladybug-memory.db');
+const fallbackMutationQueues = new Map<string, Promise<void>>();
 const MAX_SCOPE_KEY_LENGTH = 180;
 const MAX_SNAPSHOT_BYTES = 8 * 1024 * 1024;
 
@@ -130,7 +137,7 @@ export class LadybugMemoryService {
   private state: LadybugState | null = null;
   private initPromise: Promise<LadybugState> | null = null;
   private fallbackReason: string | null = null;
-  private fallbackMutationQueue: Promise<void> = Promise.resolve();
+  private fallbackStoreCache: FallbackStoreCache | null = null;
 
   constructor(dbDir = process.env['WEBWAIFU_MEMORY_DB_DIR']?.trim() || DEFAULT_MEMORY_DB_DIR) {
     this.dbDir = dbDir;
@@ -851,17 +858,19 @@ export class LadybugMemoryService {
             responseText: stringValue(row['responseText']),
             scopeKey: stringValue(row['scopeKey']),
           })),
-          blocks: blocks.map((row) => ({
-            blockName: stringValue(row['blockName']),
-            id: stringValue(row['id']),
-            itemCount: arrayValue(safeJsonParse(stringValue(row['itemsJson']))).length,
-            items: arrayValue(safeJsonParse(stringValue(row['itemsJson'])))
+          blocks: blocks.map((row) => {
+            const items = arrayValue(safeJsonParse(stringValue(row['itemsJson'])))
               .map((item) => stringValue(item))
-              .filter(Boolean)
-              .slice(0, 4),
-            participantKey: stringValue(row['participantKey']),
-            scopeKey: stringValue(row['scopeKey']),
-          })),
+              .filter(Boolean);
+            return {
+              blockName: stringValue(row['blockName']),
+              id: stringValue(row['id']),
+              itemCount: items.length,
+              items: items.slice(0, 4),
+              participantKey: stringValue(row['participantKey']),
+              scopeKey: stringValue(row['scopeKey']),
+            };
+          }),
           candidates: candidates.map((row) => ({
             id: stringValue(row['id']),
             participantKey: stringValue(row['participantKey']),
@@ -1490,7 +1499,7 @@ export class LadybugMemoryService {
     await this.enableFallback(error);
     const store = await this.readFallbackStore();
     const records = readFallbackGrilloBucket(store, entity);
-    return records as T[];
+    return structuredClone(records) as T[];
   }
 
   private async replaceFallbackGrilloRecords(
@@ -1511,7 +1520,7 @@ export class LadybugMemoryService {
     await this.enableFallback(error);
     const store = await this.readFallbackStore();
     const value = readFallbackGrilloSingletonValue(store, entity);
-    return value ? (value as T) : null;
+    return value ? (structuredClone(value) as T) : null;
   }
 
   private async writeFallbackGrilloSingleton(
@@ -1533,7 +1542,8 @@ export class LadybugMemoryService {
     await this.enableFallback(error);
     const normalizedScopeKey = normalizeScopeKey(scopeKey);
     const store = await this.readFallbackStore();
-    return store.snapshots[snapshotId(kind, normalizedScopeKey)]?.value ?? null;
+    const value = store.snapshots[snapshotId(kind, normalizedScopeKey)]?.value;
+    return value === undefined ? null : structuredClone(value);
   }
 
   private async saveFallbackSnapshotValue(
@@ -1624,10 +1634,17 @@ export class LadybugMemoryService {
   private async readFallbackStore(): Promise<FallbackStore> {
     await mkdir(dirname(this.fallbackStorePath), { recursive: true });
     try {
+      const fileStat = await stat(this.fallbackStorePath);
+      if (
+        this.fallbackStoreCache?.mtimeMs === fileStat.mtimeMs &&
+        this.fallbackStoreCache.size === fileStat.size
+      ) {
+        return this.fallbackStoreCache.store;
+      }
       const parsed = JSON.parse(
         await readFile(this.fallbackStorePath, 'utf8'),
       ) as Partial<FallbackStore>;
-      return {
+      const store: FallbackStore = {
         reason: typeof parsed.reason === 'string' ? parsed.reason : this.fallbackReason,
         snapshots:
           parsed.snapshots &&
@@ -1638,7 +1655,10 @@ export class LadybugMemoryService {
         updatedAt: typeof parsed.updatedAt === 'number' ? parsed.updatedAt : Date.now(),
         version: 1,
       };
+      this.fallbackStoreCache = { mtimeMs: fileStat.mtimeMs, size: fileStat.size, store };
+      return store;
     } catch {
+      this.fallbackStoreCache = null;
       return {
         reason: this.fallbackReason,
         snapshots: {},
@@ -1657,23 +1677,34 @@ export class LadybugMemoryService {
     };
     await mkdir(dirname(this.fallbackStorePath), { recursive: true });
     const temporaryPath = `${this.fallbackStorePath}.${process.pid}.${randomUUID()}.tmp`;
-    await writeFile(temporaryPath, `${JSON.stringify(nextStore, null, 2)}\n`, 'utf8');
+    const serialized = `${JSON.stringify(nextStore, null, 2)}\n`;
+    await writeFile(temporaryPath, serialized, 'utf8');
     await rename(temporaryPath, this.fallbackStorePath);
+    const fileStat = await stat(this.fallbackStorePath);
+    this.fallbackStoreCache = {
+      mtimeMs: fileStat.mtimeMs,
+      size: fileStat.size,
+      store: nextStore,
+    };
   }
 
   private async updateFallbackStore(mutator: (store: FallbackStore) => void | Promise<void>) {
-    const run = this.fallbackMutationQueue
+    const previous = fallbackMutationQueues.get(this.fallbackStorePath) ?? Promise.resolve();
+    const run = previous
       .catch(() => undefined)
       .then(async () => {
-        const store = await this.readFallbackStore();
+        const store = structuredClone(await this.readFallbackStore());
         await mutator(store);
         await this.writeFallbackStore(store);
       });
-    this.fallbackMutationQueue = run.then(
-      () => undefined,
-      () => undefined,
-    );
-    return run;
+    fallbackMutationQueues.set(this.fallbackStorePath, run);
+    try {
+      await run;
+    } finally {
+      if (fallbackMutationQueues.get(this.fallbackStorePath) === run) {
+        fallbackMutationQueues.delete(this.fallbackStorePath);
+      }
+    }
   }
 
   async close() {

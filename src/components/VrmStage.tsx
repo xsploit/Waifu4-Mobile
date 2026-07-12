@@ -105,6 +105,21 @@ type GazeRuntimeState = {
   euler: THREE.Euler;
 };
 
+type HumanoidBoneCache = {
+  chest: THREE.Object3D | null;
+  head: THREE.Object3D | null;
+  hips: THREE.Object3D | null;
+  leftEye: THREE.Object3D | null;
+  leftHand: THREE.Object3D | null;
+  leftLowerArm: THREE.Object3D | null;
+  leftUpperArm: THREE.Object3D | null;
+  neck: THREE.Object3D | null;
+  rightEye: THREE.Object3D | null;
+  rightHand: THREE.Object3D | null;
+  rightLowerArm: THREE.Object3D | null;
+  rightUpperArm: THREE.Object3D | null;
+};
+
 const SCALE_LIMITS = {
   min: 0.25,
   max: 4,
@@ -245,6 +260,35 @@ const armGuardParentWorld = new THREE.Quaternion();
 const armGuardParentInverse = new THREE.Quaternion();
 const armGuardLocalDelta = new THREE.Quaternion();
 const vrmBaseRotations = new WeakMap<THREE.Object3D, THREE.Quaternion>();
+const humanoidBoneCaches = new WeakMap<VRM, HumanoidBoneCache>();
+
+function getHumanoidBoneCache(vrm: VRM): HumanoidBoneCache {
+  const cached = humanoidBoneCaches.get(vrm);
+  if (cached) {
+    return cached;
+  }
+
+  const humanoid = vrm.humanoid;
+  const bones: HumanoidBoneCache = {
+    chest:
+      humanoid.getNormalizedBoneNode('upperChest') ??
+      humanoid.getNormalizedBoneNode('chest') ??
+      humanoid.getNormalizedBoneNode('spine'),
+    head: humanoid.getNormalizedBoneNode('head'),
+    hips: humanoid.getNormalizedBoneNode('hips'),
+    leftEye: humanoid.getNormalizedBoneNode('leftEye'),
+    leftHand: humanoid.getNormalizedBoneNode('leftHand'),
+    leftLowerArm: humanoid.getNormalizedBoneNode('leftLowerArm'),
+    leftUpperArm: humanoid.getNormalizedBoneNode('leftUpperArm'),
+    neck: humanoid.getNormalizedBoneNode('neck'),
+    rightEye: humanoid.getNormalizedBoneNode('rightEye'),
+    rightHand: humanoid.getNormalizedBoneNode('rightHand'),
+    rightLowerArm: humanoid.getNormalizedBoneNode('rightLowerArm'),
+    rightUpperArm: humanoid.getNormalizedBoneNode('rightUpperArm'),
+  };
+  humanoidBoneCaches.set(vrm, bones);
+  return bones;
+}
 
 function clampCameraVerticalOffset(value: number) {
   return THREE.MathUtils.clamp(
@@ -462,10 +506,11 @@ function applyProceduralOverlay(
 }
 
 function clearProceduralGaze(vrm: VRM | null, state: GazeRuntimeState) {
-  const head = vrm?.humanoid?.getNormalizedBoneNode('head');
-  const neck = vrm?.humanoid?.getNormalizedBoneNode('neck');
-  const leftEye = vrm?.humanoid?.getNormalizedBoneNode('leftEye');
-  const rightEye = vrm?.humanoid?.getNormalizedBoneNode('rightEye');
+  const bones = vrm ? getHumanoidBoneCache(vrm) : null;
+  const head = bones?.head;
+  const neck = bones?.neck;
+  const leftEye = bones?.leftEye;
+  const rightEye = bones?.rightEye;
   removeProceduralOverlay(head, state, 'head');
   removeProceduralOverlay(neck, state, 'neck');
   removeProceduralOverlay(leftEye, state, 'leftEye');
@@ -786,8 +831,9 @@ function updateAutoGaze(
   state.targetObject.position.copy(state.noisyTarget);
   state.targetObject.updateMatrixWorld(true);
 
-  const leftEye = vrm.humanoid.getNormalizedBoneNode('leftEye');
-  const rightEye = vrm.humanoid.getNormalizedBoneNode('rightEye');
+  const bones = getHumanoidBoneCache(vrm);
+  const leftEye = bones.leftEye;
+  const rightEye = bones.rightEye;
   const hasEyeBones = Boolean(leftEye || rightEye);
   if (vrm.lookAt) {
     if (hasEyeBones) {
@@ -802,8 +848,8 @@ function updateAutoGaze(
   }
 
   const follow = headDrift * THREE.MathUtils.lerp(GAZE_HEAD_FOLLOW_FLOOR, 1, headFollow);
-  const head = vrm.humanoid.getNormalizedBoneNode('head');
-  const neck = vrm.humanoid.getNormalizedBoneNode('neck');
+  const head = bones.head;
+  const neck = bones.neck;
   const xAmount = THREE.MathUtils.clamp(headX / GAZE_HEAD_MAX_HORIZONTAL, -1, 1);
   const yAmount = THREE.MathUtils.clamp((headY - baseY) / GAZE_HEAD_MAX_VERTICAL, -1, 1);
   const yaw = xAmount * 0.28 * follow;
@@ -1019,12 +1065,9 @@ function updateArmClipGuard(vrm: VRM, settings: VisualSettings) {
     return;
   }
 
-  const humanoid = vrm.humanoid;
-  const hips = humanoid.getNormalizedBoneNode('hips');
-  const chest =
-    humanoid.getNormalizedBoneNode('upperChest') ??
-    humanoid.getNormalizedBoneNode('chest') ??
-    humanoid.getNormalizedBoneNode('spine');
+  const bones = getHumanoidBoneCache(vrm);
+  const hips = bones.hips;
+  const chest = bones.chest;
   if (!getBoneWorldPosition(hips, armGuardHips) || !getBoneWorldPosition(chest, armGuardChest)) {
     return;
   }
@@ -1033,17 +1076,17 @@ function updateArmClipGuard(vrm: VRM, settings: VisualSettings) {
   const torsoRadius = THREE.MathUtils.clamp(settings.armClipTorsoRadius, 0.08, 0.55) * sceneScale;
   const changedLeft = guardArmSide(
     vrm,
-    humanoid.getNormalizedBoneNode('leftUpperArm'),
-    humanoid.getNormalizedBoneNode('leftLowerArm'),
-    humanoid.getNormalizedBoneNode('leftHand'),
+    bones.leftUpperArm,
+    bones.leftLowerArm,
+    bones.leftHand,
     torsoRadius,
     strength,
   );
   const changedRight = guardArmSide(
     vrm,
-    humanoid.getNormalizedBoneNode('rightUpperArm'),
-    humanoid.getNormalizedBoneNode('rightLowerArm'),
-    humanoid.getNormalizedBoneNode('rightHand'),
+    bones.rightUpperArm,
+    bones.rightLowerArm,
+    bones.rightHand,
     torsoRadius,
     strength,
   );
@@ -1173,7 +1216,7 @@ function SceneRuntime({
       return;
     }
 
-    resizePostProcessing(postProcessingRef.current);
+    resizePostProcessing(postProcessingRef.current, size.width, size.height);
   }, [gl, size.height, size.width]);
 
   useEffect(() => {
@@ -1220,7 +1263,9 @@ function SceneRuntime({
     }
 
     if (mixer && active) {
-      mixer.timeScale = animationSpeed;
+      if (mixer.timeScale !== animationSpeed) {
+        mixer.timeScale = animationSpeed;
+      }
       mixer.update(delta);
     }
 
@@ -1265,6 +1310,9 @@ function Avatar({
   modelVerticalOffset,
   vrm,
 }: AvatarProps) {
+  const placementRotationRef = useRef(new THREE.Euler(0, 0, 0, 'YXZ'));
+  const placementQuaternionRef = useRef(new THREE.Quaternion());
+
   useEffect(() => {
     if (!vrm) {
       return;
@@ -1284,7 +1332,7 @@ function Avatar({
         MODEL_DEPTH_POSITION_LIMITS.max,
       ),
     );
-    const placementRotation = new THREE.Euler(
+    const placementRotation = placementRotationRef.current.set(
       THREE.MathUtils.degToRad(
         THREE.MathUtils.clamp(
           modelRotationX,
@@ -1302,11 +1350,10 @@ function Avatar({
           MODEL_PITCH_ROLL_LIMITS.max,
         ),
       ),
-      'YXZ',
     );
     vrm.scene.quaternion
       .copy(getBaseVrmRotation(vrm.scene))
-      .multiply(new THREE.Quaternion().setFromEuler(placementRotation));
+      .multiply(placementQuaternionRef.current.setFromEuler(placementRotation));
   }, [
     modelPositionX,
     modelPositionZ,

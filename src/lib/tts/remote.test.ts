@@ -179,6 +179,17 @@ describe('remote TTS proxy compatibility', () => {
     expect(chunk?.mimeType).toBe('audio/pcm');
     expect(chunk?.sampleRate).toBe(44100);
     expect(chunk?.timestamps).toEqual({ words: ['hello'] });
+    expect(chunk?.audioBytes).toEqual(new Uint8Array([1, 2, 3, 4]));
     await expect(chunk?.audioBlob.arrayBuffer()).resolves.toHaveProperty('byteLength', 4);
+  });
+
+  it('does not retain decoded bytes for non-PCM audio chunks', () => {
+    const chunk = remoteTtsStreamEventToAudioChunk({
+      audio: 'AQIDBA==',
+      mimeType: 'audio/mpeg',
+      type: 'audio',
+    });
+
+    expect(chunk?.audioBytes).toBeUndefined();
   });
 });

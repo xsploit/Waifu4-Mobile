@@ -1,4 +1,4 @@
-import { rm } from 'node:fs/promises';
+import { readFile, rm, writeFile } from 'node:fs/promises';
 import { randomUUID } from 'node:crypto';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
@@ -650,17 +650,20 @@ describe('LadybugMemoryService', () => {
   });
 
   it('serializes concurrent JSON fallback writes without losing snapshots', async () => {
-    const service = createService();
-    const failingService = service as unknown as { init: () => Promise<never> };
-    failingService.init = async () => {
-      throw new Error('native wal unavailable');
-    };
+    const dbPath = join(tmpdir(), `webwaifu4-ladybug-test-${process.pid}-${randomUUID()}.db`);
+    dbPaths.push(dbPath);
+    const services = [new LadybugMemoryService(dbPath), new LadybugMemoryService(dbPath)];
+    for (const service of services) {
+      (service as unknown as { init: () => Promise<never> }).init = async () => {
+        throw new Error('native wal unavailable');
+      };
+    }
 
     try {
       await Promise.all(
         Array.from({ length: 20 }, async (_, index) => {
           const scopeKey = `local:persona:fallback-${index}`;
-          await service.saveSemanticRecords(scopeKey, [
+          await services[index % services.length]!.saveSemanticRecords(scopeKey, [
             {
               assistantText: `assistant-${index}`,
               createdAt: index,
@@ -678,11 +681,53 @@ describe('LadybugMemoryService', () => {
       await Promise.all(
         Array.from({ length: 20 }, async (_, index) => {
           const scopeKey = `local:persona:fallback-${index}`;
-          await expect(service.loadSemanticRecords(scopeKey)).resolves.toEqual([
+          await expect(services[index % services.length]!.loadSemanticRecords(scopeKey)).resolves.toEqual([
             expect.objectContaining({ id: `fallback-semantic-${index}` }),
           ]);
         }),
       );
+    } finally {
+      await Promise.all(services.map((service) => service.close()));
+    }
+  });
+
+  it('reuses fallback state without exposing cached objects and refreshes external writes', async () => {
+    const service = createService();
+    const failingService = service as unknown as { init: () => Promise<never> };
+    failingService.init = async () => {
+      throw new Error('native wal unavailable');
+    };
+    const fallbackPath = `${service.dbDir}.json`;
+
+    try {
+      await service.appendGrilloRecord('turn_events', {
+        id: 'cached-turn',
+        content: 'Cached fallback turn.',
+        createdAt: 1,
+        scopeKey: 'local:persona:cache-test',
+      });
+
+      const firstRead = await service.readGrilloRecords<Record<string, unknown>>('turn_events');
+      firstRead[0]!['content'] = 'mutated by caller';
+      await expect(service.readGrilloRecords('turn_events')).resolves.toEqual([
+        expect.objectContaining({ content: 'Cached fallback turn.' }),
+      ]);
+
+      const externalStore = JSON.parse(await readFile(fallbackPath, 'utf8')) as {
+        snapshots: Record<string, { value: Array<Record<string, unknown>> }>;
+      };
+      externalStore.snapshots['grillo-records:turn_events']!.value.push({
+        id: 'external-turn',
+        content: 'Externally appended fallback turn.',
+        createdAt: 2,
+        scopeKey: 'local:persona:cache-test',
+      });
+      await writeFile(fallbackPath, `${JSON.stringify(externalStore, null, 2)}\n`, 'utf8');
+
+      await expect(service.readGrilloRecords('turn_events')).resolves.toEqual([
+        expect.objectContaining({ id: 'cached-turn' }),
+        expect.objectContaining({ id: 'external-turn' }),
+      ]);
     } finally {
       await service.close();
     }

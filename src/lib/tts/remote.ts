@@ -43,6 +43,7 @@ export type RemoteTtsRequest = {
 
 export type RemoteTtsAudioChunk = {
   audioBlob: Blob;
+  audioBytes?: Uint8Array;
   mimeType: string;
   sampleRate?: number | null;
   speechTiming?: unknown;
@@ -285,8 +286,10 @@ export function remoteTtsStreamEventToAudioChunk(
     return null;
   }
   const mimeType = getRemoteAudioMimeType(event);
+  const audioBytes = base64ToBytes(event.audio);
   return {
-    audioBlob: new Blob([base64ToBytes(event.audio)], { type: mimeType }),
+    audioBlob: new Blob([audioBytes], { type: mimeType }),
+    ...(mimeType === 'audio/pcm' ? { audioBytes } : {}),
     mimeType,
     sampleRate: event.sampleRate ?? null,
     speechTiming: event.speechTiming,
@@ -337,6 +340,7 @@ export function createRemoteTtsStream(
   options: RemoteTtsProxyOptions = {},
 ): AsyncIterable<RemoteTtsAudioChunk> {
   const queue: RemoteTtsAudioChunk[] = [];
+  let queueIndex = 0;
   const waiters: Array<() => void> = [];
   let done = false;
   let failure: Error | null = null;
@@ -435,8 +439,13 @@ export function createRemoteTtsStream(
   return {
     async *[Symbol.asyncIterator]() {
       while (true) {
-        if (queue.length > 0) {
-          yield queue.shift()!;
+        if (queueIndex < queue.length) {
+          const chunk = queue[queueIndex++]!;
+          if (queueIndex === queue.length) {
+            queue.length = 0;
+            queueIndex = 0;
+          }
+          yield chunk;
           continue;
         }
         if (failure) {

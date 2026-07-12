@@ -113,6 +113,58 @@ describe('TtsManager remote PCM scheduling', () => {
     expect(sourceOnEnded).toBeTypeOf('function');
   });
 
+  it('schedules decoded PCM bytes without reading the compatibility blob again', async () => {
+    Object.assign(globalThis, {
+      window: { setTimeout: (callback: () => void) => (callback(), 1) },
+    });
+    const arrayBuffer = vi.fn().mockRejectedValue(new Error('unexpected blob read'));
+    const source = {
+      buffer: null,
+      connect: () => {},
+      disconnect: () => {},
+      onended: null as (() => void) | null,
+      playbackRate: { value: 1 },
+      start: () => {},
+      stop: () => {},
+    };
+    const context = {
+      currentTime: 10,
+      createBuffer: (_channels: number, length: number, sampleRate: number) => ({
+        duration: length / sampleRate,
+        getChannelData: () => new Float32Array(length),
+      }),
+      createBufferSource: () => source,
+      createGain: () => ({
+        connect: () => {},
+        disconnect: () => {},
+        gain: {
+          cancelScheduledValues: () => {},
+          linearRampToValueAtTime: () => {},
+          setValueAtTime: () => {},
+          value: 1,
+        },
+      }),
+      destination: {},
+      state: 'running',
+    };
+    const manager = new TtsManager();
+    Object.assign(manager, {
+      audioAnalyser: { connect: () => {} },
+      audioContext: context,
+      masterGain: { connect: () => {}, gain: { value: 1 } },
+    });
+
+    const stream = manager.startRemotePcmPushStream('hello');
+    await stream.push({
+      audioBlob: { arrayBuffer } as unknown as Blob,
+      audioBytes: new Uint8Array([100, 0, 200, 0]),
+      mimeType: 'audio/pcm',
+      sampleRate: 4,
+    });
+
+    expect(arrayBuffer).not.toHaveBeenCalled();
+  });
+
   it('converts provider speech timing into subtitle word boundaries with stream offsets', () => {
     expect(
       remoteSpeechTimingToWordBoundaries(

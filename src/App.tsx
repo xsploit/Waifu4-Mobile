@@ -72,7 +72,11 @@ import {
   extractGrilloWorkerRelationshipJson,
   runGrilloMemoryWorkerLoop,
 } from './lib/chat/grillo-memory-loop';
-import { buildChatCompletionMessagesWithReceipt, trimChatHistory } from './lib/chat/prompt';
+import {
+  buildChatCompletionMessagesWithReceipt,
+  trimChatHistory,
+  updateChatMessageContent,
+} from './lib/chat/prompt';
 import { buildPromptProvenanceReceipt } from './lib/chat/prompt-provenance';
 import { getTurnReplyLengthInstruction } from './lib/chat/reply-length';
 import {
@@ -748,6 +752,7 @@ function decodeAiProxyAudioEvent(event: AiProxyStreamEvent): RemoteTtsAudioChunk
   const mimeType = event.mimeType || 'audio/pcm';
   return {
     audioBlob: new Blob([bytes], { type: mimeType }),
+    ...(mimeType === 'audio/pcm' ? { audioBytes: bytes } : {}),
     mimeType,
     sampleRate: typeof event.sampleRate === 'number' ? event.sampleRate : undefined,
   };
@@ -3124,18 +3129,7 @@ function App() {
   );
 
   const updateAssistantMessageContent = useCallback((messageId: string, content: string) => {
-    setChatHistory((current) =>
-      trimChatHistory(
-        current.map((message) =>
-          message.id === messageId
-            ? {
-                ...message,
-                content,
-              }
-            : message,
-        ),
-      ),
-    );
+    setChatHistory((current) => updateChatMessageContent(current, messageId, content));
   }, []);
 
   const createStreamingAssistantPlayer = useCallback(
