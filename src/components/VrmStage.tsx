@@ -1125,6 +1125,8 @@ function updateVrmFrame(
     vrm.lookAt?.update(delta);
   }
   vrm.expressionManager?.update();
+  vrm.nodeConstraintManager?.update();
+  vrm.springBoneManager?.update(delta);
   vrm.materials?.forEach((material) => {
     const updatableMaterial = material as THREE.Material & { update?: (delta: number) => void };
     updatableMaterial.update?.(delta);

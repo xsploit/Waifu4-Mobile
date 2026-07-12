@@ -2258,6 +2258,7 @@ function App() {
   const [subtitleText, setSubtitleText] = useState('');
   const blobAnimationUrlsRef = useRef<Set<string>>(new Set());
   const bundledModelUrlCacheRef = useRef<Map<string, string>>(new Map());
+  const modelLoadRequestRef = useRef(0);
   const didHydrateAvatarRef = useRef(false);
   const ttsWarmVoicesRef = useRef<Set<string>>(new Set());
   const remoteTtsVoiceFetchAttemptedRef = useRef<Set<string>>(new Set());
@@ -4653,12 +4654,16 @@ function App() {
         return;
       }
 
+      const requestId = ++modelLoadRequestRef.current;
       prepareForModelSwap();
       let cachedUrl = bundledModelUrlCacheRef.current.get(bundledModel.id);
       if (!cachedUrl) {
         const assetBlob = await fetchGameAssetBlob(bundledModel.assetPath);
         cachedUrl = URL.createObjectURL(assetBlob);
         bundledModelUrlCacheRef.current.set(bundledModel.id, cachedUrl);
+      }
+      if (modelLoadRequestRef.current !== requestId) {
+        return;
       }
       loadModelUrl(cachedUrl);
       setCurrentBundledModelId(bundledModel.id);
@@ -4671,9 +4676,14 @@ function App() {
   const handleLoadSavedVrmModel = useCallback(
     async (modelId: string) => {
       const model = savedVrmModels.find((entry) => entry.id === modelId);
+      const requestId = ++modelLoadRequestRef.current;
       prepareForModelSwap();
       const blob = await getSavedVrmModelBlob(modelId);
       const url = URL.createObjectURL(blob);
+      if (modelLoadRequestRef.current !== requestId) {
+        URL.revokeObjectURL(url);
+        return;
+      }
       loadModelUrl(url);
       setCurrentBundledModelId('');
       setCurrentCustomVrmModelId(modelId);
@@ -4684,6 +4694,7 @@ function App() {
 
   const handleSaveAndLoadVrmFile = useCallback(
     async (file: File) => {
+      const requestId = ++modelLoadRequestRef.current;
       prepareForModelSwap();
       setSavedVrmStatus(`Saving ${file.name}...`);
       const savedModel = await saveVrmModelFile(file);
@@ -4691,6 +4702,10 @@ function App() {
       const savedName = models.find((model) => model.id === savedModel.id)?.name ?? savedModel.name;
       const blob = await getSavedVrmModelBlob(savedModel.id);
       const url = URL.createObjectURL(blob);
+      if (modelLoadRequestRef.current !== requestId) {
+        URL.revokeObjectURL(url);
+        return;
+      }
       loadModelUrl(url);
       setCurrentBundledModelId('');
       setCurrentCustomVrmModelId(savedModel.id);
