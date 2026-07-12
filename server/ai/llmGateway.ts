@@ -111,15 +111,19 @@ export function buildProviderOptions(
 ): Record<string, unknown> | undefined {
   const options: Record<string, unknown> = {};
 
+  if (req.provider === 'vercel-gateway') {
+    const gateway: Record<string, unknown> = { sort: 'ttft' };
+    if (req.byokOpenAiKey?.trim()) {
+      gateway.byok = { openai: [{ apiKey: req.byokOpenAiKey.trim() }] };
+    }
+    options.gateway = gateway;
+  }
+
   // Reasoning off/low by default so a reasoning model actually emits visible
   // text instead of spending the turn thinking. (Gateway routes openai-namespaced
   // options to the OpenAI provider.)
   if (req.provider === 'vercel-gateway' && isReasoningModel(req.model)) {
     options.openai = { reasoningEffort: req.reasoningEffort ?? 'minimal' };
-  }
-
-  if (req.provider === 'vercel-gateway' && req.byokOpenAiKey?.trim()) {
-    options.gateway = { byok: { openai: [{ apiKey: req.byokOpenAiKey.trim() }] } };
   }
 
   // The crown-jewel lesson: without require_parameters, OpenRouter can silently

@@ -54,6 +54,39 @@ describe('LLM gateway message mapping', () => {
 });
 
 describe('LLM gateway provider options', () => {
+  it('sorts Vercel Gateway providers by time to first token', () => {
+    expect(
+      buildProviderOptions(
+        {
+          provider: 'vercel-gateway',
+          model: 'deepseek/deepseek-v4-flash',
+        },
+        false,
+        false,
+      ),
+    ).toEqual({ gateway: { sort: 'ttft' } });
+  });
+
+  it('keeps Vercel TTFT routing when request-scoped BYOK is present', () => {
+    expect(
+      buildProviderOptions(
+        {
+          provider: 'vercel-gateway',
+          model: 'openai/gpt-5-nano',
+          byokOpenAiKey: ' openai-key ',
+        },
+        false,
+        false,
+      ),
+    ).toEqual({
+      gateway: {
+        byok: { openai: [{ apiKey: 'openai-key' }] },
+        sort: 'ttft',
+      },
+      openai: { reasoningEffort: 'minimal' },
+    });
+  });
+
   it('requires OpenRouter providers that support attached tools', () => {
     expect(
       buildProviderOptions(
