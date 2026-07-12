@@ -899,17 +899,15 @@ input[type='range']::-webkit-slider-thumb:hover {
 .playlist {
   display: flex;
   flex-direction: column;
-  gap: 12px;
-  max-height: min(58vh, 640px);
-  overflow-y: auto;
-  padding-right: 2px;
+  gap: 6px;
+  min-width: 0;
 }
 
 .anim-group {
   display: flex;
   flex-direction: column;
-  gap: 8px;
-  padding: 8px;
+  gap: 6px;
+  padding: 7px 8px;
   border: 1px solid rgba(255, 179, 143, 0.14);
   border-radius: 8px;
   background: rgba(6, 3, 6, 0.25);
@@ -920,6 +918,26 @@ input[type='range']::-webkit-slider-thumb:hover {
   grid-template-columns: minmax(0, 1fr) auto;
   gap: 8px;
   align-items: start;
+}
+
+.anim-group-toggle {
+  min-width: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.anim-group-caret {
+  display: inline-grid;
+  width: 18px;
+  height: 18px;
+  place-items: center;
+  border: 1px solid rgba(255, 64, 105, 0.32);
+  color: var(--c-text-accent) !important;
+  font-size: 0.75rem !important;
 }
 
 .anim-group-title {
@@ -956,7 +974,7 @@ input[type='range']::-webkit-slider-thumb:hover {
 .anim-group-list {
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 4px;
 }
 
 .row {
@@ -973,8 +991,9 @@ input[type='range']::-webkit-slider-thumb:hover {
   display: flex;
   flex-direction: column;
   align-items: stretch;
-  gap: 8px;
-  padding: 9px 10px;
+  min-width: 0;
+  gap: 6px;
+  padding: 6px 7px;
   border-color: rgba(255, 65, 86, 0.12);
   border-radius: 6px;
   background: rgba(6, 3, 6, 0.4);
@@ -982,9 +1001,26 @@ input[type='range']::-webkit-slider-thumb:hover {
 
 .anim-row-main {
   display: grid;
-  grid-template-columns: 20px minmax(0, 1fr) auto;
-  align-items: start;
-  gap: 8px;
+  grid-template-columns: 20px minmax(0, 1fr) auto auto;
+  align-items: center;
+  gap: 6px;
+}
+
+.anim-edit-btn {
+  min-height: 26px;
+  padding: 3px 7px;
+  border: 1px solid rgba(255, 179, 143, 0.2);
+  background: transparent;
+  color: var(--text-muted);
+  font-family: var(--font-tech);
+  font-size: 0.55rem;
+  text-transform: uppercase;
+  cursor: pointer;
+}
+
+.anim-edit-btn.active {
+  border-color: var(--c-text-accent);
+  color: var(--c-text-accent);
 }
 
 .row:hover {
@@ -1057,10 +1093,11 @@ input[type='range']::-webkit-slider-thumb:hover {
 
 .anim-meta {
   display: grid;
-  grid-template-columns: minmax(160px, 1fr) minmax(96px, 120px) minmax(78px, 92px);
+  grid-template-columns: minmax(120px, 0.8fr) minmax(82px, 0.45fr) minmax(180px, 1.4fr) minmax(82px, 0.55fr);
   align-items: end;
   gap: 8px;
-  padding-left: 28px;
+  padding: 7px 0 1px 26px;
+  border-top: 1px solid rgba(255, 179, 143, 0.1);
 }
 
 .anim-meta-field {
@@ -2218,12 +2255,17 @@ input[type='range']::-webkit-slider-thumb:hover {
   }
 
   .anim-row-main {
-    grid-template-columns: 20px minmax(0, 1fr);
+    grid-template-columns: 20px minmax(0, 1fr) auto;
   }
 
   .anim-row-main .play-btn {
     grid-column: 2;
     justify-self: start;
+  }
+
+  .anim-row-main .anim-edit-btn {
+    grid-column: 3;
+    grid-row: 2;
   }
 }
 

@@ -172,6 +172,10 @@ export function AnimTab({
 }: AnimTabProps) {
   const [animationFilter, setAnimationFilter] = useState('');
   const [catalogCopyStatus, setCatalogCopyStatus] = useState('');
+  const [expandedGroups, setExpandedGroups] = useState<Set<AnimationGroupId>>(
+    () => new Set(['base']),
+  );
+  const [expandedRows, setExpandedRows] = useState<Set<string>>(() => new Set());
   const playlistWithIndexes = sequencerSettings.playlist.map((entry, index) => ({ entry, index }));
   const normalizedAnimationFilter = animationFilter.trim().toLowerCase();
   const filteredPlaylistWithIndexes = normalizedAnimationFilter
@@ -215,6 +219,7 @@ export function AnimTab({
   );
   const renderAnimationRow = (entry: AnimationEntry, index: number) => {
     const isPlaying = sequencerSettings.currentIndex === index;
+    const isExpanded = expandedRows.has(entry.id);
     return (
       <div
         className={`row anim-row ${isPlaying ? 'active' : ''} ${!entry.enabled ? 'disabled' : ''}`}
@@ -269,8 +274,26 @@ export function AnimTab({
             </svg>
             <span>Play</span>
           </button>
+          <button
+            aria-expanded={isExpanded}
+            className={`anim-edit-btn ${isExpanded ? 'active' : ''}`}
+            onClick={() =>
+              setExpandedRows((current) => {
+                const next = new Set(current);
+                if (next.has(entry.id)) {
+                  next.delete(entry.id);
+                } else {
+                  next.add(entry.id);
+                }
+                return next;
+              })
+            }
+            type="button"
+          >
+            {isExpanded ? 'Done' : 'Edit'}
+          </button>
         </div>
-        <div className="anim-meta">
+        {isExpanded ? <div className="anim-meta">
           <div className="anim-meta-field">
             <span>Purpose</span>
             <select
@@ -330,7 +353,7 @@ export function AnimTab({
               {entry.experimental ? 'Experimental' : 'Stable'}
             </button>
           </div>
-        </div>
+        </div> : null}
       </div>
     );
   };
@@ -526,18 +549,35 @@ export function AnimTab({
         {groupedAnimations.length ? (
           groupedAnimations.map((group) => {
           const enabled = group.entries.filter(({ entry }) => entry.enabled).length;
+          const isExpanded = normalizedAnimationFilter ? true : expandedGroups.has(group.id);
           return (
-            <section className="anim-group" key={group.id}>
+            <section className={`anim-group ${isExpanded ? 'expanded' : ''}`} key={group.id}>
               <div className="anim-group-header">
-                <div>
+                <button
+                  aria-expanded={isExpanded}
+                  className="anim-group-toggle"
+                  onClick={() =>
+                    setExpandedGroups((current) => {
+                      const next = new Set(current);
+                      if (next.has(group.id)) {
+                        next.delete(group.id);
+                      } else {
+                        next.add(group.id);
+                      }
+                      return next;
+                    })
+                  }
+                  type="button"
+                >
                   <div className="anim-group-title">
+                    <span className="anim-group-caret">{isExpanded ? '-' : '+'}</span>
                     {group.label}
                     <span>
                       {enabled}/{group.entries.length} enabled
                     </span>
                   </div>
                   <p>{group.description}</p>
-                </div>
+                </button>
                 <div className="anim-group-actions">
                   <button
                     className="btn-xs"
@@ -564,9 +604,9 @@ export function AnimTab({
                   </button>
                 </div>
               </div>
-              <div className="anim-group-list">
+              {isExpanded ? <div className="anim-group-list">
                 {group.entries.map(({ entry, index }) => renderAnimationRow(entry, index))}
-              </div>
+              </div> : null}
             </section>
           );
           })
