@@ -4,10 +4,16 @@ import { TtsManager } from './manager';
 import { synthesizePiperChunk } from './piper';
 import { uploadPiperWav } from './piper-output';
 
+const createRemoteTtsStream = vi.hoisted(() => vi.fn());
+
 vi.mock('./piper', () => ({ synthesizePiperChunk: vi.fn() }));
 vi.mock('./piper-output', () => ({
   shouldUploadPiperOutput: (mode: string) => mode === 'discord-only' || mode === 'local+discord',
   uploadPiperWav: vi.fn(),
+}));
+vi.mock('./remote', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('./remote')>()),
+  createRemoteTtsStream,
 }));
 
 beforeEach(() => {
@@ -63,13 +69,15 @@ describe('TtsManager remote PCM scheduling', () => {
       },
     });
     let sourceOnEnded: (() => void) | null = null;
+    let sourceStartAt = 0;
     const source = {
       buffer: null,
       connect: () => {},
       disconnect: () => {},
       onended: null as (() => void) | null,
       playbackRate: { value: 1 },
-      start: () => {
+      start: (startAt: number) => {
+        sourceStartAt = startAt;
         sourceOnEnded = source.onended;
       },
       stop: () => {},
@@ -101,16 +109,93 @@ describe('TtsManager remote PCM scheduling', () => {
       masterGain: { connect: () => {}, gain: { value: 1 } },
     });
 
+    const onLipSyncData = vi.fn();
+    manager.onLipSyncData = onLipSyncData;
     const stream = manager.startRemotePcmPushStream('hello');
     await expect(
       stream.push({
         audioBlob: createPcm16Blob([100, 200, 300, 400]),
         mimeType: 'audio/pcm',
         sampleRate: 4,
+        speechTiming: {
+          phonemes: [],
+          words: [{ text: 'hello', start: 0, end: 0.5 }],
+        },
       }),
     ).resolves.toBeUndefined();
 
     expect(sourceOnEnded).toBeTypeOf('function');
+    expect(sourceStartAt).toBeCloseTo(10.05);
+    expect(manager.wordBoundaryStartTime).toBeCloseTo(10.05);
+    expect(onLipSyncData).toHaveBeenLastCalledWith(
+      expect.objectContaining({ wordBoundaries: [expect.objectContaining({ word: 'hello' })] }),
+    );
+  });
+
+  it('stops already scheduled PCM when the provider stream fails', async () => {
+    Object.assign(globalThis, {
+      window: {
+        clearTimeout: () => {},
+        setTimeout: (callback: () => void) => (callback(), 1),
+      },
+    });
+    const stop = vi.fn();
+    const start = vi.fn();
+    const source = {
+      buffer: null,
+      connect: () => {},
+      disconnect: () => {},
+      onended: null as (() => void) | null,
+      playbackRate: { value: 1 },
+      start,
+      stop,
+    };
+    const context = {
+      currentTime: 10,
+      createBuffer: (_channels: number, length: number, sampleRate: number) => ({
+        duration: length / sampleRate,
+        getChannelData: () => new Float32Array(length),
+      }),
+      createBufferSource: () => source,
+      createGain: () => ({
+        connect: () => {},
+        disconnect: () => {},
+        gain: {
+          cancelScheduledValues: () => {},
+          linearRampToValueAtTime: () => {},
+          setValueAtTime: () => {},
+          value: 1,
+        },
+      }),
+      destination: {},
+      state: 'running',
+    };
+    let releaseProviderError: (() => void) | undefined;
+    const providerErrorGate = new Promise<void>((resolve) => {
+      releaseProviderError = resolve;
+    });
+    createRemoteTtsStream.mockImplementationOnce(async function* () {
+      yield {
+        audioBlob: createPcm16Blob([100, 200, 300, 400]),
+        mimeType: 'audio/pcm',
+        sampleRate: 4,
+      };
+      await providerErrorGate;
+      throw new Error('provider stream failed');
+    });
+    const manager = new TtsManager();
+    Object.assign(manager, {
+      audioAnalyser: { connect: () => {} },
+      audioContext: context,
+      masterGain: { connect: () => {}, gain: { value: 1 } },
+    });
+
+    const queued = manager.queueRemoteText({ provider: 'fish-speech', text: 'hello' });
+    await vi.waitFor(() => expect(start).toHaveBeenCalledOnce());
+    releaseProviderError!();
+    await expect(queued).rejects.toThrow('provider stream failed');
+    expect(stop).toHaveBeenCalledOnce();
+    expect(manager.isPlaying).toBe(false);
   });
 
   it('schedules decoded PCM bytes without reading the compatibility blob again', async () => {

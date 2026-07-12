@@ -28,8 +28,6 @@ const AUTO_RESUME_AUDIO =
     new URLSearchParams(window.location.search).get('routelet') === '1');
 const REMOTE_PCM_INITIAL_LEAD_SECONDS = 0.05;
 const REMOTE_PCM_MIN_LEAD_SECONDS = 0.02;
-const REMOTE_PCM_FADE_SECONDS = 0.006;
-const REMOTE_PCM_CROSSFADE_SECONDS = 0.004;
 const PIPER_TIMING_TICKS_PER_SECOND = 10000000;
 interface ChunkData {
   audioBlob: Blob;
@@ -111,7 +109,6 @@ export class TtsManager {
   private currentStreamGains = new Set<GainNode>();
   private streamPlaybackEndTime = 0;
   private streamPlaybackStartTime = 0;
-  private streamScheduledChunkCount = 0;
   private streamStartedTimer: number | null = null;
 
   wordBoundaries: WordBoundary[] = [];
@@ -224,7 +221,6 @@ export class TtsManager {
     }
     this.streamPlaybackEndTime = 0;
     this.streamPlaybackStartTime = 0;
-    this.streamScheduledChunkCount = 0;
     this.disconnectAudioSource();
     this.clearPlaybackState();
 
@@ -484,6 +480,13 @@ export class TtsManager {
               audioChunks.push(chunk);
             }
           }
+        } catch (error) {
+          if (playingPcmStream && generation === this.queueGeneration) {
+            abortController.abort();
+            await pcmScheduleTail.catch(() => {});
+            this.teardownCurrentAudio();
+          }
+          throw error;
         } finally {
           this.remoteAbortControllers.delete(abortController);
         }
@@ -565,7 +568,6 @@ export class TtsManager {
     }
     this.streamPlaybackEndTime = this.audioContext.currentTime + REMOTE_PCM_INITIAL_LEAD_SECONDS;
     this.streamPlaybackStartTime = this.streamPlaybackEndTime;
-    this.streamScheduledChunkCount = 0;
   }
 
   private async scheduleRemotePcmChunk(
@@ -603,31 +605,13 @@ export class TtsManager {
     this.ensureAnalyserConnected();
 
     const duration = audioBuffer.duration / Math.max(0.01, this.playbackRate);
-    const canCrossfade =
-      this.streamScheduledChunkCount > 0 &&
-      this.streamPlaybackEndTime > this.audioContext.currentTime + REMOTE_PCM_CROSSFADE_SECONDS;
-    const overlap = canCrossfade
-      ? Math.min(REMOTE_PCM_CROSSFADE_SECONDS, Math.max(0, duration * 0.35))
-      : 0;
-    const startAt = Math.max(
-      this.streamPlaybackEndTime - overlap,
+    const { startAt, endAt } = getRemotePcmChunkSchedule(
       this.audioContext.currentTime + REMOTE_PCM_MIN_LEAD_SECONDS,
+      this.streamPlaybackEndTime,
+      duration,
     );
-    const endAt = startAt + duration;
-    const fadeSeconds = Math.min(REMOTE_PCM_FADE_SECONDS, Math.max(0, duration / 3));
-    const fadeInEnd = startAt + fadeSeconds;
-    const fadeOutStart = Math.max(fadeInEnd, endAt - fadeSeconds);
     frameGain.gain.cancelScheduledValues(startAt);
-    frameGain.gain.setValueAtTime(0, startAt);
-    if (fadeSeconds > 0) {
-      frameGain.gain.linearRampToValueAtTime(1, fadeInEnd);
-      if (fadeOutStart > fadeInEnd) {
-        frameGain.gain.setValueAtTime(1, fadeOutStart);
-      }
-      frameGain.gain.linearRampToValueAtTime(0, endAt);
-    } else {
-      frameGain.gain.setValueAtTime(1, startAt);
-    }
+    frameGain.gain.setValueAtTime(1, startAt);
     this.streamPlaybackEndTime = endAt;
     const timedWordBoundaries = remoteSpeechTimingToWordBoundaries(
       chunk.speechTiming,
@@ -640,7 +624,6 @@ export class TtsManager {
     }
     this.currentStreamSources.add(source);
     this.currentStreamGains.add(frameGain);
-    this.streamScheduledChunkCount += 1;
 
     const ended = new Promise<void>((resolve) => {
       source.onended = () => {
@@ -667,10 +650,10 @@ export class TtsManager {
         if (generation !== this.queueGeneration || signal.aborted) {
           return;
         }
-        this.wordBoundaryStartTime = 0;
+        this.wordBoundaryStartTime = this.streamPlaybackStartTime;
         this.isPlaying = true;
         this.onSpeechStarted?.();
-        this.onLipSyncData?.({ wordBoundaries: [], phonemes: null, text });
+        this.onLipSyncData?.({ wordBoundaries: this.wordBoundaries, phonemes: null, text });
       }, delayMs);
     }
 

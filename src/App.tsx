@@ -53,6 +53,7 @@ import {
   recordGrilloMemoryTurnFailClosedAsync,
   type GrilloMemoryState,
 } from './lib/chat/grillo-memory';
+import { resolveDiscordInterruptionAction } from './lib/chat/discord-interruption';
 import {
   deleteLadybugRelationshipMemory,
   loadLadybugGrilloContextPacket,
@@ -4184,6 +4185,16 @@ function App() {
       if (liveBridgeSubtitleActiveRef.current && data.wordBoundaries.length === 0) {
         return;
       }
+      const currentSubtitle = subtitleDataRef.current;
+      if (
+        subtitleIntervalRef.current !== null &&
+        currentSubtitle?.text === data.text &&
+        data.wordBoundaries.length > 0
+      ) {
+        subtitleDataRef.current = data;
+        refreshSubtitleFromAudio();
+        return;
+      }
       startSubtitleTrackingRef.current(data);
     };
     ttsManager.onError = (error) => {
@@ -4199,7 +4210,7 @@ function App() {
       ttsManager.onError = null;
       stopSubtitleTrackingRef.current(true);
     };
-  }, [ttsManager]);
+  }, [refreshSubtitleFromAudio, ttsManager]);
 
   useEffect(() => {
     let cancelled = false;
@@ -6893,6 +6904,22 @@ function App() {
         }
       }
 
+      const interruptionAction = resolveDiscordInterruptionAction(
+        settings.interruptionPolicy,
+        assistantReplyLockedRef.current || ttsManager.isPlaying,
+      );
+      if (interruptionAction === 'stop-speaking') {
+        ttsManager.enableTts = false;
+        stopTtsPlayback();
+        setTtsBusy(false);
+        setTtsStatus('Speech interrupted by Discord voice input.');
+      } else if (interruptionAction === 'barge-in') {
+        cancelAssistantPresentation(true);
+        setChatGenerating(false);
+        setTtsBusy(false);
+        setTtsStatus('Discord voice input interrupted the current reply.');
+      }
+
       const persona = activePersonaRef.current ?? DEFAULT_PERSONA;
       const stateKey = getDiscordConversationStateKey(
         transcript.guildId,
@@ -6947,7 +6974,13 @@ function App() {
         mode: 'direct',
       });
     },
-    [enqueueTwitchAiJob, recordRawChatMemoryTurns],
+    [
+      cancelAssistantPresentation,
+      enqueueTwitchAiJob,
+      recordRawChatMemoryTurns,
+      stopTtsPlayback,
+      ttsManager,
+    ],
   );
 
   useEffect(() => {
