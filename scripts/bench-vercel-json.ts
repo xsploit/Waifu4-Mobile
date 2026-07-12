@@ -105,7 +105,12 @@ async function runCase(provider: string, mode: Mode, round: number): Promise<Res
       toolChoice: mode === 'strict-tool'
         ? { type: 'tool', toolName: 'assistant_reply' }
         : undefined,
-      providerOptions: { gateway: { only: [provider] } },
+      providerOptions: {
+        ...(modelId === 'deepseek/deepseek-v4-pro' && mode === 'strict-tool'
+          ? { deepseek: { thinking: { type: 'disabled' } } }
+          : {}),
+        gateway: { only: [provider] },
+      },
     });
     let output: unknown;
     if (mode === 'strict-tool') {

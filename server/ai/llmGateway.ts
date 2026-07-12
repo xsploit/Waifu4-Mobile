@@ -118,7 +118,7 @@ export function buildProviderOptions(
       ? req.model === 'deepseek/deepseek-v4-flash'
         ? { order: ['azure', 'fireworks'] }
         : req.model === 'deepseek/deepseek-v4-pro'
-          ? { order: ['baseten', 'fireworks'] }
+          ? { order: ['baseten', 'deepseek', 'fireworks'] }
           : { sort: 'ttft' }
       : { sort: 'ttft' };
     if (req.byokOpenAiKey?.trim()) {
@@ -132,6 +132,10 @@ export function buildProviderOptions(
   // options to the OpenAI provider.)
   if (req.provider === 'vercel-gateway' && isReasoningModel(req.model)) {
     options.openai = { reasoningEffort: req.reasoningEffort ?? 'minimal' };
+  }
+
+  if (req.provider === 'vercel-gateway' && req.model === 'deepseek/deepseek-v4-pro' && structured) {
+    options.deepseek = { thinking: { type: 'disabled' } };
   }
 
   // The crown-jewel lesson: without require_parameters, OpenRouter can silently

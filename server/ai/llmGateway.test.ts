@@ -107,7 +107,10 @@ describe('LLM gateway provider options', () => {
         true,
         true,
       ),
-    ).toEqual({ gateway: { order: ['baseten', 'fireworks'] } });
+    ).toEqual({
+      deepseek: { thinking: { type: 'disabled' } },
+      gateway: { order: ['baseten', 'deepseek', 'fireworks'] },
+    });
   });
 
   it('keeps Vercel TTFT routing when request-scoped BYOK is present', () => {
