@@ -1,7 +1,7 @@
 import type { ChatMessage, PersonaProfile } from './types';
 import type { DirectTwitchChatMessage } from '../twitch/direct-irc';
 
-export type ChatTurnSource = 'local' | 'twitch' | 'discord';
+type ChatTurnSource = 'local' | 'twitch' | 'discord';
 
 type BaseChatTurn = {
   id: string;

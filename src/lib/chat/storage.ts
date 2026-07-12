@@ -960,7 +960,7 @@ function normalizeDiscordControllerIds(value: unknown) {
   ).slice(0, 50);
 }
 
-export function normalizeDiscordSettings(value: unknown): DiscordSettings {
+function normalizeDiscordSettings(value: unknown): DiscordSettings {
   const defaults = createDefaultDiscordSettings();
   if (!value || typeof value !== 'object') {
     return defaults;

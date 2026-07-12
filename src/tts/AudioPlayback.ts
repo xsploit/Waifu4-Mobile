@@ -84,7 +84,6 @@ export class AudioPlayback {
     this.resolveIdle();
   }
 
-  // fallow-ignore-next-line unused-class-member
   stop(): void {
     for (const source of this.sources) {
       try {

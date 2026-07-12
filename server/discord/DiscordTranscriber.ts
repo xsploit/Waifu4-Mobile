@@ -113,14 +113,6 @@ export class DiscordTranscriber {
     }
   }
 
-  public get pendingCount(): number {
-    return this.pending.length;
-  }
-
-  public get activeCount(): number {
-    return this.active;
-  }
-
   public enqueue(identity: DiscordVoiceIdentity, utterance: VoiceUtterance): boolean {
     if (this.closed || this.pending.length >= this.maxQueuedUtterances) {
       this.options.onDropped?.(identity);

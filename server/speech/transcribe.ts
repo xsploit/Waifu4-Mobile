@@ -27,7 +27,7 @@ export function normalizeTranscriptText(value: string) {
   return value.replace(/\s+/g, ' ').trim();
 }
 
-export function normalizeTranscriptionProviderLabel(provider: AudioTranscriptionProvider) {
+function normalizeTranscriptionProviderLabel(provider: AudioTranscriptionProvider) {
   switch (provider) {
     case 'openrouter':
       return 'OpenRouter';
@@ -39,7 +39,7 @@ export function normalizeTranscriptionProviderLabel(provider: AudioTranscription
   }
 }
 
-export function resolveFishAsrUrl(baseUrl: string | undefined) {
+function resolveFishAsrUrl(baseUrl: string | undefined) {
   const raw = baseUrl?.trim() || 'https://api.fish.audio';
   const withoutTrailingSlash = raw.replace(/\/+$/, '');
   if (withoutTrailingSlash.endsWith('/v1')) {

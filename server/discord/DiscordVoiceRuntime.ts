@@ -80,7 +80,7 @@ function createDefaultClient(): DiscordClientLike {
  * Lifecycle owner for a single guild/channel receive session. DAVE decryption is
  * performed by @discordjs/voice before receiver subscriptions receive Opus packets.
  */
-export class DiscordVoiceRuntime {
+class DiscordVoiceRuntime {
   private readonly client: DiscordClientLike;
   private readonly readyTimeoutMs: number;
   private readonly reconnectDelayMs: number;

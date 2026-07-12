@@ -2,9 +2,9 @@ import { getDesktopOverlaySocketUrl } from '../desktop/runtime';
 import type { StreamBotEvent, StreamTwitchChatMessage, StreamTwitchMembershipEvent } from '../../shared/streamEvents';
 import type { DiscordConnectionStatus } from '../chat/types';
 
-export type OverlayTwitchChatMessage = StreamTwitchChatMessage;
+type OverlayTwitchChatMessage = StreamTwitchChatMessage;
 
-export type OverlayTwitchMembershipEvent = StreamTwitchMembershipEvent;
+type OverlayTwitchMembershipEvent = StreamTwitchMembershipEvent;
 
 export type OverlayDiscordTranscript = {
   displayName: string;
