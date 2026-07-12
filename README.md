@@ -2,11 +2,11 @@
 
 # WebWaifu4 Rebuild
 
-### _Local-first VTuber AI companion. Rebuilt without changing the shape._
+### _Local-first VTuber AI companion with browser, desktop, Twitch, and collaboration voice._
 
-WebWaifu4 Rebuild is a clean rebuild of the WebWaifu4 runtime: LLM brain,
-Fish/Inworld TTS, VRM avatar, Twitch chat, memory, tools, captions, and local
-backup restore, while keeping the original frontend look and tab workflow.
+WebWaifu4 Rebuild combines an LLM chat runtime, Fish/Inworld/Piper TTS, a VRM
+avatar, Twitch intake, Discord collaboration voice, memory, tools, captions,
+and local backup restore while keeping the original frontend look and tab workflow.
 
 <br/>
 
@@ -40,14 +40,15 @@ backup restore, while keeping the original frontend look and tab workflow.
 <h2 align="center" id="what-this-is">What This Is</h2>
 
 <p align="center">
-  <strong>A local AI co-host stack with a VRM body, realtime voice, Twitch intake, and memory.</strong>
+  <strong>A local-first AI co-host and companion with a VRM body, streamed voice, Twitch intake, Discord collaboration audio, and persistent memory.</strong>
 </p>
 
 <p align="center">
   The rebuild keeps the original WebWaifu4 UI shape: Account, Avatar, Background,
-  Animation, Emotion Log, Character, Voice Lab, AI, Twitch, Memory, and TTS.
-  The internals are being cleaned around the new brain/TTS contracts so the app
-  stays fast, debuggable, and less fragile.
+  Animation, Emotion Log, Character, Voice Lab, AI, Twitch, Discord, Memory,
+  TTS, and G.R.I.L.L.O.
+  The browser remains the primary control surface. External providers supply
+  chat, speech, transcription, search, and optional embeddings when selected.
 </p>
 
 <p align="center">
@@ -65,6 +66,7 @@ backup restore, while keeping the original frontend look and tab workflow.
       <h3 align="center">Brain</h3>
       <ul>
         <li>OpenRouter Responses and Vercel Gateway chat lanes.</li>
+        <li>AI SDK 7 provider integrations on Node.js 22.</li>
         <li>OpenRouter Routing modes: Auto, Fastest latency, Highest throughput / Nitro, and Pinned provider slug.</li>
         <li>OpenRouter model catalog loading with provider metadata displayed in the AI tab.</li>
         <li>Structured/text reply routing from model capability metadata.</li>
@@ -84,6 +86,8 @@ backup restore, while keeping the original frontend look and tab workflow.
         <li>Early Chunks mode for fast first speech without waiting for the full reply.</li>
         <li>Fish S2-oriented controls: latency, chunk length, sample rate, format, transport, and continuity.</li>
         <li>Inworld HTTP and WebSocket streaming with delivery, timestamp, and buffer controls.</li>
+        <li>Browser-local Piper synthesis with cached ONNX voices.</li>
+        <li>Local, Discord, local + Discord, and external-device output routing.</li>
         <li>Audible browser benchmark for comparing transports and regressions.</li>
       </ul>
     </td>
@@ -106,6 +110,8 @@ backup restore, while keeping the original frontend look and tab workflow.
         <li>Local chat and Twitch chat queue behavior.</li>
         <li>Command handling, membership events, and optional backend overlay runtime.</li>
         <li>Stream transcription/ASR controls.</li>
+        <li>Discord collaboration voice receive with DAVE, VAD, speaker attribution, and Fish/OpenRouter/Vercel transcription.</li>
+        <li>Optional best-effort waifu speech output and readable reply text for collaborators in the connected voice session.</li>
         <li>Video frame capture for vision-capable models.</li>
       </ul>
     </td>
@@ -143,9 +149,9 @@ backup restore, while keeping the original frontend look and tab workflow.
   should use.
 </p>
 
-### OpenRouter-Focused Compatibility
+### Provider Compatibility
 
-OpenRouter is a first-class lane in the rebuild. The app loads model metadata
+The OpenRouter lane loads model metadata
 and uses it to avoid the old failure mode where a model is selected because it
 looks capable but then rejects the request shape at runtime.
 
@@ -190,6 +196,7 @@ looks capable but then rejects the request shape at runtime.
 | TTS | Per-provider mode selection for Fish WebSocket, Fish Timestamp SSE, Inworld HTTP, Inworld WebSocket, Early Chunks, latency controls, timestamp controls, continuity controls, and audible benchmark comparison. |
 | Avatar | VRM loading/saving, stage controls, animation categories, expression resolution, talking/idle animation hooks, mouth ownership, and emotion telemetry. |
 | Twitch | Frontend direct IRC, local/Twitch queue intake, command handling, membership/event reactions, transcription hooks, and video-frame context for vision models. |
+| Discord Voice | Collaboration voice I/O only: DAVE receive, VAD, per-speaker transcription into the normal conversation pipeline, readable reply text, and optional TTS output. |
 | Memory | LadybugDB, GRILLO worker passes, relationship profile, candidate memories, diary/reflection, semantic/vector records, embeddings, graph view, activity logs, and worker traces. |
 | Voice Lab | Provider voice catalogs, persona voice binding, voice creation surfaces, and backup/restore of voice settings. |
 | Local Backup | Import/export of settings, provider keys, personas, chat scopes, saved VRMs, relationship memory, and voice lab data with worker-backed large-file handling. |
@@ -225,7 +232,7 @@ looks capable but then rejects the request shape at runtime.
   </tr>
   <tr>
     <td>TTS</td>
-    <td>Fish WebSocket, Fish Timestamp SSE, Inworld HTTP, Inworld WebSocket, browser benchmark.</td>
+    <td>Fish WebSocket, Fish Timestamp SSE, Inworld HTTP, Inworld WebSocket, browser-local Piper, four output modes, and browser benchmark.</td>
   </tr>
   <tr>
     <td>Captions and Mouth</td>
@@ -245,6 +252,8 @@ looks capable but then rejects the request shape at runtime.
 npm install
 npm run dev
 ```
+
+Requires Node.js 22 or newer.
 
 Open:
 
@@ -291,7 +300,8 @@ npm run smoke:desktop-owned-backend-reuse
 npm run smoke:desktop-relaunch
 ```
 
-The GitHub release contains both an NSIS installer and a portable executable.
+The desktop build produces an NSIS installer and a portable executable for a
+GitHub release.
 The desktop backend reuses a matching WebWaifu-owned process when available and
 selects another local port when the default port is occupied.
 
@@ -344,13 +354,19 @@ Notes:
 - Caddy handles TLS and WebSocket upgrade proxying through `reverse_proxy`.
 - Set `WEBWAIFU_SITE_ADDRESS` to the real domain once DNS points at the VPS.
 
+Discord voice requires a bot token, guild ID, voice-channel ID, and a key for
+the selected Fish, OpenRouter, or Vercel transcription provider. Speech output
+to Discord is a best-effort, nonblocking sidecar: local reply generation and
+browser playback do not wait for the Discord sink.
+
 ---
 
 <h2 align="center" id="status">Status</h2>
 
-The rebuild is in active parity mode. The current priority is preserving the
-original WebWaifu4 look and feature surface while hardening the brain, TTS,
-memory, Twitch, and VRM seams.
+The main browser and desktop feature surfaces are implemented. Release checks
+cover source scanning, type safety, tests, production build output, runtime
+smoke tests, and packaged desktop behavior; provider-backed features still
+require their corresponding credentials and live-service verification.
 
 <table align="center">
   <tr>
@@ -373,12 +389,12 @@ memory, Twitch, and VRM seams.
 
 ## Backlog
 
-- Add local microphone voice chat: audio VAD, selectable Fish ASR or browser-local Whisper Web, editable transcript, then the normal local-chat pipeline. Current Fish/Whisper transcription is limited to Twitch stream audio sampling.
+- Add browser microphone voice chat. Discord voice intake is implemented; Twitch transcription remains stream-audio sampling.
 - Capture provider-safe reasoning summaries as memory signals when models expose them; do not store hidden chain-of-thought.
 - Persist and expose richer GRILLO reasoning/debrief data where useful, beyond compact activity logs and worker traces.
 - Add silence/gap detection to the browser TTS benchmark.
 - Continue real-key verification for Voice Lab, Tavily tools, Inworld, and OpenRouter edge cases.
-- Keep Piper browser TTS parked unless it becomes a priority again.
+- Continue validating Piper voice/model packaging and Discord output routing across browser and desktop builds.
 - Continue desktop release testing across Windows GPU and transparent-window configurations.
 
 ## Ground Rules
