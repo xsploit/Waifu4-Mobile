@@ -1,6 +1,18 @@
-import { describe, expect, it } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { getRemotePcmChunkSchedule, remoteSpeechTimingToWordBoundaries } from './manager';
 import { TtsManager } from './manager';
+import { synthesizePiperChunk } from './piper';
+import { uploadPiperWav } from './piper-output';
+
+vi.mock('./piper', () => ({ synthesizePiperChunk: vi.fn() }));
+vi.mock('./piper-output', () => ({
+  shouldUploadPiperOutput: (mode: string) => mode === 'discord-only' || mode === 'local+discord',
+  uploadPiperWav: vi.fn(),
+}));
+
+beforeEach(() => {
+  vi.clearAllMocks();
+});
 
 function createPcm16Blob(samples: number[]) {
   const bytes = new Uint8Array(samples.length * 2);
@@ -120,5 +132,63 @@ describe('TtsManager remote PCM scheduling', () => {
       { word: 'hello', offset: 13500000, duration: 3000000 },
       { word: 'world', offset: 17500000, duration: 4000000 },
     ]);
+  });
+
+  it('uses one Piper synthesis result for playback and a nonblocking Discord sidecar', async () => {
+    const audioBlob = new Blob([new Uint8Array([1, 2, 3, 4])], { type: 'audio/wav' });
+    vi.mocked(synthesizePiperChunk).mockResolvedValue({
+      audioBlob,
+      phonemes: null,
+      sampleRate: null,
+      text: 'hello',
+      wordBoundaries: [],
+    });
+    const playAudioChunk = vi.fn().mockResolvedValue(undefined);
+    const manager = new TtsManager();
+    Object.assign(manager, { audioContext: {}, playAudioChunk });
+
+    await manager.queuePiperText('hello', 'voice-1', {
+      outputMode: 'local+discord',
+      segmentIndex: 0,
+      ttsSessionId: 'session-1',
+      utteranceId: 'utterance-1',
+    });
+
+    expect(synthesizePiperChunk).toHaveBeenCalledTimes(1);
+    expect(playAudioChunk).toHaveBeenCalledWith(expect.objectContaining({ audioBlob, text: 'hello' }));
+    expect(uploadPiperWav).toHaveBeenCalledWith(audioBlob, {
+      outputMode: 'local+discord',
+      segmentIndex: 0,
+      ttsSessionId: 'session-1',
+      utteranceId: 'utterance-1',
+    });
+  });
+
+  it('does not upload stale Piper audio after its speech queue is reset', async () => {
+    let resolveChunk: ((value: Awaited<ReturnType<typeof synthesizePiperChunk>>) => void) | undefined;
+    vi.mocked(synthesizePiperChunk).mockReturnValue(
+      new Promise((resolve) => {
+        resolveChunk = resolve;
+      }),
+    );
+    const manager = new TtsManager();
+    Object.assign(manager, { playAudioChunk: vi.fn().mockResolvedValue(undefined) });
+    const queued = manager.queuePiperText('hello', 'voice-1', {
+      outputMode: 'discord-only',
+      segmentIndex: 0,
+      ttsSessionId: 'session-1',
+      utteranceId: 'utterance-1',
+    });
+    manager.resetSpeechQueue();
+    resolveChunk!({
+      audioBlob: new Blob([new Uint8Array([1, 2])], { type: 'audio/wav' }),
+      phonemes: null,
+      sampleRate: null,
+      text: 'hello',
+      wordBoundaries: [],
+    });
+
+    await queued;
+    expect(uploadPiperWav).not.toHaveBeenCalled();
   });
 });

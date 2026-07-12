@@ -2,6 +2,11 @@ import type { WLipSyncAudioNode, Profile as WLipSyncProfile } from 'wlipsync';
 import type { LipSyncData, WordBoundary } from './piper';
 import { synthesizePiperChunk } from './piper';
 import {
+  shouldUploadPiperOutput,
+  type PiperOutputRouting,
+  uploadPiperWav,
+} from './piper-output';
+import {
   createRemoteTtsStream,
   type RemoteTtsAudioChunk,
   type RemoteTtsProxyOptions,
@@ -285,9 +290,9 @@ export class TtsManager {
     }
   }
 
-  async speakPiperText(text: string, voiceId: string) {
+  async speakPiperText(text: string, voiceId: string, routing?: PiperOutputRouting) {
     this.resetSpeechQueue();
-    await this.queuePiperText(text, voiceId);
+    await this.queuePiperText(text, voiceId, routing);
   }
 
   async speakRemoteText(options: RemoteTtsRequest, proxyOptions?: RemoteTtsProxyOptions) {
@@ -359,7 +364,7 @@ export class TtsManager {
     };
   }
 
-  queuePiperText(text: string, voiceId: string) {
+  queuePiperText(text: string, voiceId: string, routing?: PiperOutputRouting) {
     if (!this.enableTts) {
       return Promise.resolve();
     }
@@ -371,6 +376,18 @@ export class TtsManager {
 
     const generation = this.queueGeneration;
     const chunkPromise = synthesizePiperChunk(cleaned, voiceId);
+    if (routing && shouldUploadPiperOutput(routing.outputMode)) {
+      void chunkPromise
+        .then((chunk) => {
+          if (generation !== this.queueGeneration) {
+            return;
+          }
+          return uploadPiperWav(chunk.audioBlob, routing);
+        })
+        .catch((error) => {
+          console.warn('[TtsManager] Piper output fanout failed:', error);
+        });
+    }
 
     const playbackPromise = this.playbackQueue
       .catch(() => {

@@ -815,12 +815,6 @@ function shouldChunkTtsRequests(settings: AiSettings) {
 }
 
 function getEffectiveTtsOutputMode(settings: AiSettings) {
-  if (
-    settings.ttsProvider === 'piper' &&
-    (settings.ttsOutputMode === 'discord-only' || settings.ttsOutputMode === 'local+discord')
-  ) {
-    return 'local-only' as const;
-  }
   return settings.ttsOutputMode;
 }
 
@@ -3083,7 +3077,12 @@ function App() {
       try {
         ttsManager.enableTts = ttsRuntimeSettings.ttsEnabled;
         if (ttsRuntimeSettings.ttsProvider === 'piper') {
-          await ttsManager.speakPiperText(content, selectedTtsVoice!.key);
+          await ttsManager.speakPiperText(content, selectedTtsVoice!.key, {
+            outputMode: getEffectiveTtsOutputMode(ttsRuntimeSettings),
+            segmentIndex: 0,
+            ttsSessionId: createTtsRoutingId(),
+            utteranceId: createTtsRoutingId(),
+          });
           setTtsActiveVoiceKey(selectedTtsVoice!.key);
           await refreshStoredTtsVoices();
         } else {
@@ -3318,7 +3317,12 @@ function App() {
         queuedSpeech = true;
         const task =
           ttsProvider === 'piper'
-            ? ttsManager.queuePiperText(chunk, voice!.key)
+            ? ttsManager.queuePiperText(chunk, voice!.key, {
+                outputMode: ttsRuntimeSettings.ttsOutputMode,
+                segmentIndex: ttsSegmentIndex++,
+                ttsSessionId,
+                utteranceId: createTtsRoutingId(),
+              })
             : (async () => {
                 const providerApiKey = await getBrowserRemoteTtsApiKey(
                   ttsProvider,
@@ -3629,7 +3633,12 @@ function App() {
         queuedSpeech = true;
         const task =
           ttsProvider === 'piper'
-            ? ttsManager.queuePiperText(chunk, voice!.key)
+            ? ttsManager.queuePiperText(chunk, voice!.key, {
+                outputMode: getEffectiveTtsOutputMode(ttsRuntimeSettings),
+                segmentIndex: ttsSegmentIndex++,
+                ttsSessionId,
+                utteranceId: createTtsRoutingId(),
+              })
             : (async () => {
                 const providerApiKey = await getBrowserRemoteTtsApiKey(
                   ttsProvider,

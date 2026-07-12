@@ -233,8 +233,8 @@ export function TtsTab({
             value={aiSettings.ttsOutputMode}
           >
             <option value="local-only">Local only</option>
-            <option disabled={aiSettings.ttsProvider === 'piper'} value="discord-only">Discord only</option>
-            <option disabled={aiSettings.ttsProvider === 'piper'} value="local+discord">Local + Discord</option>
+            <option value="discord-only">Discord only</option>
+            <option value="local+discord">Local + Discord</option>
             <option value="external">External (virtual output)</option>
           </select>
         </label>

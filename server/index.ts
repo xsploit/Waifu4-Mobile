@@ -7,6 +7,7 @@ import { handleChat } from './ai/chat';
 import { handleEmbeddings } from './ai/embeddings';
 import { handleModels } from './ai/models';
 import { renderYourWifeyPomlResponse } from './ai/PomlRenderer';
+import { handlePiperOutput } from './tts/piperOutput';
 import { handleTtsStream } from './tts/stream';
 import {
   handleCreateTtsVoice,
@@ -111,6 +112,11 @@ backendRouter.post('/ai/poml/render', (req, res) => {
 // POST /tts/stream — NDJSON audio stream (audio / done / error).
 backendRouter.post('/tts/stream', (req, res) => {
   void handleTtsStream(req, res, ttsOutputFanout);
+});
+
+// POST /tts/piper-output -- browser-synthesized WAV sidecar for Discord voice output.
+backendRouter.post('/tts/piper-output', express.raw({ limit: '16mb', type: 'audio/wav' }), (req, res) => {
+  handlePiperOutput(req, res, ttsOutputFanout);
 });
 
 // GET /tts/voices — provider voice registry for TTS and Voice Lab.

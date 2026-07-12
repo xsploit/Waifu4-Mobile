@@ -175,7 +175,7 @@ export function parseRemoteTtsStreamEvent(line: string): RemoteTtsStreamEvent {
 const TTS_PROXY_URL = (import.meta.env['VITE_TTS_PROXY_URL'] || '').trim();
 const TTS_PROVIDER_KEY_HEADER = 'x-yourwifey-tts-provider-key';
 
-function getTtsProxyUrl(path = '/tts/stream') {
+export function getTtsProxyUrl(path = '/tts/stream') {
   const desktopUrl = getDesktopBackendUrl(path);
   if (desktopUrl) {
     return desktopUrl;
