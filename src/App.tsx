@@ -2274,6 +2274,7 @@ function App() {
   const discordSettingsRef = useRef<DiscordSettings>(createDefaultDiscordSettings());
   const availableModelsRef = useRef<string[]>([]);
   const availableModelMetadataRef = useRef<Map<string, AppModelMetadata>>(new Map());
+  const modelCatalogRequestRef = useRef(0);
   const sequencerSettingsRef = useRef(createDefaultSequencerSettings());
   const recentReactionAnimationIdsRef = useRef<string[]>([]);
   const directTwitchClientRef = useRef<DirectTwitchIrcClient | null>(null);
@@ -2799,6 +2800,7 @@ function App() {
   }, [activePersonaScenePreset, renderedVisualSettings, safeArea]);
 
   const loadAvailableModels = useCallback(async () => {
+    const requestId = ++modelCatalogRequestRef.current;
     setModelsLoading(true);
     setModelsError(null);
 
@@ -2827,6 +2829,12 @@ function App() {
           : getModelIdsFromResponse(data),
       );
       const providerModelMetadata = new Map(modelMetadata.map((model) => [model.id, model] as const));
+      if (
+        modelCatalogRequestRef.current !== requestId ||
+        aiSettingsRef.current.llmProvider !== llmProvider
+      ) {
+        return;
+      }
       setAvailableModels(providerModels);
       setAvailableModelMetadata(providerModelMetadata);
       setAiSettings((current) =>
@@ -2835,10 +2843,14 @@ function App() {
           : current,
       );
     } catch (error) {
-      const message = getAiErrorMessage(error, 'models');
-      setModelsError(message);
+      if (modelCatalogRequestRef.current === requestId) {
+        const message = getAiErrorMessage(error, 'models');
+        setModelsError(message);
+      }
     } finally {
-      setModelsLoading(false);
+      if (modelCatalogRequestRef.current === requestId) {
+        setModelsLoading(false);
+      }
     }
   }, [providerKeyVaultWorkspaceId]);
 
