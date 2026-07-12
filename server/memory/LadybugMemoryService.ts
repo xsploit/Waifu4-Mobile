@@ -491,6 +491,8 @@ export class LadybugMemoryService {
     );
   }
 
+  // Called through the Express singleton getter; Fallow does not resolve that chain.
+  // fallow-ignore-next-line unused-class-member
   async mergeRelationshipProfiles(profiles: Record<string, unknown>) {
     const incoming = normalizeRelationshipProfiles(profiles);
     await this.enqueueMemoryMutation('relationships', async () => {
