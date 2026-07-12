@@ -53,6 +53,7 @@ describe('resolveScopedConversationSnapshot', () => {
     };
 
     const snapshot = resolveScopedConversationSnapshot({
+      allowLegacyFallback: true,
       chatHistories: {},
       fallbackChatHistory: fallbackHistory,
       fallbackRelationshipMemory: fallbackMemory,
@@ -62,5 +63,21 @@ describe('resolveScopedConversationSnapshot', () => {
 
     expect(snapshot.chatHistory).toBe(fallbackHistory);
     expect(snapshot.relationshipMemory).toBe(fallbackMemory);
+  });
+
+  it('does not leak fallback history or memory into a new source scope', () => {
+    const snapshot = resolveScopedConversationSnapshot({
+      chatHistories: {},
+      fallbackChatHistory: fallbackHistory,
+      fallbackRelationshipMemory: {
+        ...createDefaultRelationshipMemory(),
+        summary: 'local-only memory',
+      },
+      relationshipMemories: {},
+      stateKey: 'twitch:somebody-else:persona:hikari',
+    });
+
+    expect(snapshot.chatHistory).toEqual([]);
+    expect(snapshot.relationshipMemory.summary).toBe('');
   });
 });

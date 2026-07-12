@@ -1,4 +1,5 @@
 import type { ChatMessage, RelationshipMemory } from './types';
+import { createDefaultRelationshipMemory } from './defaults';
 
 export type ScopedConversationSnapshot = {
   chatHistory: ChatMessage[];
@@ -11,7 +12,9 @@ export function resolveScopedConversationSnapshot({
   chatHistories,
   relationshipMemories,
   stateKey,
+  allowLegacyFallback = false,
 }: {
+  allowLegacyFallback?: boolean;
   fallbackChatHistory: ChatMessage[];
   fallbackRelationshipMemory: RelationshipMemory;
   chatHistories: Record<string, ChatMessage[]>;
@@ -19,7 +22,9 @@ export function resolveScopedConversationSnapshot({
   stateKey: string;
 }): ScopedConversationSnapshot {
   return {
-    chatHistory: chatHistories[stateKey] ?? fallbackChatHistory,
-    relationshipMemory: relationshipMemories[stateKey] ?? fallbackRelationshipMemory,
+    chatHistory: chatHistories[stateKey] ?? (allowLegacyFallback ? fallbackChatHistory : []),
+    relationshipMemory:
+      relationshipMemories[stateKey] ??
+      (allowLegacyFallback ? fallbackRelationshipMemory : createDefaultRelationshipMemory()),
   };
 }

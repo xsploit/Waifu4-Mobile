@@ -2261,6 +2261,7 @@ function App() {
   const assistantRenderRunRef = useRef(0);
   const assistantReplyLockedRef = useRef(false);
   const chatRequestRunRef = useRef(0);
+  const activeChatAbortControllerRef = useRef<AbortController | null>(null);
   const chatHistoryRef = useRef<ChatMessage[]>([]);
   const chatHistoriesRef = useRef<Record<string, ChatMessage[]>>({});
   const activeChatHistoryStateKeyRef = useRef('');
@@ -2454,25 +2455,6 @@ function App() {
   useEffect(() => {
     chatHistoriesRef.current = chatHistories;
   }, [chatHistories]);
-
-  useEffect(() => {
-    if (!hydrated) {
-      return;
-    }
-
-    const stateKey = activeChatHistoryStateKeyRef.current || activeRelationshipStateKey;
-    setChatHistories((current) => {
-      if (current[stateKey] === chatHistory) {
-        return current;
-      }
-      const next = {
-        ...current,
-        [stateKey]: chatHistory,
-      };
-      chatHistoriesRef.current = next;
-      return next;
-    });
-  }, [chatHistory, activeRelationshipStateKey, hydrated]);
 
   useEffect(() => {
     relationshipMemoryRef.current = relationshipMemory;
@@ -2912,6 +2894,8 @@ function App() {
     (stopAudio = false) => {
       assistantRenderRunRef.current += 1;
       chatRequestRunRef.current += 1;
+      activeChatAbortControllerRef.current?.abort();
+      activeChatAbortControllerRef.current = null;
       memoryAgentRunRef.current += 1;
       setAssistantReplyLock(false);
       if (memoryAgentTimeoutRef.current !== null) {
@@ -4381,17 +4365,12 @@ function App() {
           return;
         }
 
-        const stateKey = activeChatHistoryStateKeyRef.current || activeRelationshipStateKey;
-        const nextChatHistories = {
-          ...chatHistories,
-          [stateKey]: chatHistory,
-        };
         const nextPersistedState = {
           personas,
           activePersonaId: activePersona?.id ?? DEFAULT_PERSONA.id,
           aiSettings,
           chatHistory,
-          chatHistories: nextChatHistories,
+          chatHistories,
           relationshipMemory,
           relationshipMemories,
           personaVoiceBindings,
@@ -5607,12 +5586,25 @@ function App() {
       }
 
       recordRawChatMemoryTurns(getLocalConversationStateKey(persona), [turn]);
+      const stateKey = getLocalConversationStateKey(persona);
+      const userMessage = chatTurnToChatMessage(turn);
       setChatHistory((current) => {
-        const userMessage = chatTurnToChatMessage(turn);
         if (current.some((entry) => entry.id === userMessage.id)) {
           return current;
         }
         return trimChatHistory([...current, userMessage]);
+      });
+      setChatHistories((current) => {
+        const scopedHistory = current[stateKey] ?? [];
+        if (scopedHistory.some((entry) => entry.id === userMessage.id)) {
+          return current;
+        }
+        const next = {
+          ...current,
+          [stateKey]: trimChatHistory([...scopedHistory, userMessage]),
+        };
+        chatHistoriesRef.current = next;
+        return next;
       });
       const activeChatterCount = Math.max(
         1,
@@ -6214,6 +6206,10 @@ function App() {
 
   const runChatAiJob = useCallback(
     async (job: ChatAiJob) => {
+      const requestRun = ++chatRequestRunRef.current;
+      activeChatAbortControllerRef.current?.abort();
+      const chatAbortController = new AbortController();
+      activeChatAbortControllerRef.current = chatAbortController;
       const settings = aiSettingsRef.current;
       const currentTwitchSettings = twitchSettingsRef.current;
       const persona = activePersona ?? DEFAULT_PERSONA;
@@ -6303,7 +6299,9 @@ function App() {
               utteranceId: createTtsRoutingId(),
             })
           : undefined;
-      const chatAbortController = new AbortController();
+      if (chatRequestRunRef.current !== requestRun) {
+        return;
+      }
       const chatHardTimeout = window.setTimeout(() => {
         chatAbortController.abort();
       }, AI_CHAT_HARD_TIMEOUT_MS);
@@ -6315,22 +6313,14 @@ function App() {
           assistantMessage,
         ]);
       });
-      if (targetMessage?.source === 'discord') {
-        setChatHistories((current) => {
-          const scopedHistory = current[stateKey] ?? [];
-          const next = {
-            ...current,
-            [stateKey]: trimChatHistory([
-              ...scopedHistory,
-              ...(scopedHistory.some((message) => message.id === assistantMessage.id)
-                ? []
-                : [assistantMessage]),
-            ]),
-          };
-          chatHistoriesRef.current = next;
-          return next;
-        });
-      }
+      setChatHistories((current) => {
+        const next = {
+          ...current,
+          [stateKey]: trimChatHistory([...memoryHistory, assistantMessage]),
+        };
+        chatHistoriesRef.current = next;
+        return next;
+      });
 
       try {
         setAssistantReplyLock(true);
@@ -6543,6 +6533,10 @@ function App() {
           })
           .catch(() => undefined);
         const response = await responsePromise;
+        if (chatRequestRunRef.current !== requestRun) {
+          speechPlayer.cancel?.();
+          return;
+        }
         if (response.meta) {
           setAiProxyHealth((current) => ({
             ...(current ?? {}),
@@ -6556,6 +6550,10 @@ function App() {
         }
 
         const assistantReply = await speechPlayer.finish(response.choices[0]?.message.content);
+        if (chatRequestRunRef.current !== requestRun) {
+          speechPlayer.cancel?.();
+          return;
+        }
         const assistantContent = assistantReply.text;
         if (!assistantContent) {
           throw new Error('AI backend returned an empty chat reply.');
@@ -6588,13 +6586,11 @@ function App() {
             ),
           ),
         );
-        if (targetMessage?.source === 'discord') {
-          setChatHistories((current) => {
-            const next = { ...current, [stateKey]: updatedHistory };
-            chatHistoriesRef.current = next;
-            return next;
-          });
-        }
+        setChatHistories((current) => {
+          const next = { ...current, [stateKey]: updatedHistory };
+          chatHistoriesRef.current = next;
+          return next;
+        });
         const shouldRecordDurableMemory = shouldIngestChatJobToGrillo(
           job.mode,
           job.messages,
@@ -6666,6 +6662,9 @@ function App() {
         }
       } catch (error) {
         speechPlayer.cancel?.();
+        if (chatRequestRunRef.current !== requestRun) {
+          return;
+        }
         const message = getAiErrorMessage(error, 'chat');
         setChatHistory((current) =>
           trimChatHistory(
@@ -6682,8 +6681,13 @@ function App() {
         appendSystemMessage(`[Chat] AI reply failed: ${message}`);
       } finally {
         window.clearTimeout(chatHardTimeout);
-        setChatGenerating(false);
-        setAssistantReplyLock(false);
+        if (activeChatAbortControllerRef.current === chatAbortController) {
+          activeChatAbortControllerRef.current = null;
+        }
+        if (chatRequestRunRef.current === requestRun) {
+          setChatGenerating(false);
+          setAssistantReplyLock(false);
+        }
       }
     },
     [
@@ -7315,12 +7319,10 @@ function App() {
       activeTab,
       aiSettings,
       chatHistory,
-      chatHistories: {
-        ...chatHistories,
-        [activeChatHistoryStateKeyRef.current || activeRelationshipStateKey]: chatHistory,
-      },
+      chatHistories,
       currentBundledModelId,
       currentCustomVrmModelId,
+      discordSettings,
       emotionTelemetryEvents,
       personaVoiceBindings,
       personas,
@@ -7341,13 +7343,13 @@ function App() {
       activePersonaId,
       activeTab,
       aiSettings,
-      activeRelationshipStateKey,
       chatHistories,
       chatHistory,
       chatInput,
       chatLogOpen,
       currentBundledModelId,
       currentCustomVrmModelId,
+      discordSettings,
       emotionTelemetryEvents,
       menuOpen,
       personaVoiceBindings,
@@ -7437,6 +7439,7 @@ function App() {
           DEFAULT_PERSONA;
         const nextActiveStateKey = getLocalConversationStateKey(nextActivePersona);
         const scopedSnapshot = resolveScopedConversationSnapshot({
+          allowLegacyFallback: true,
           chatHistories: next.chatHistories,
           fallbackChatHistory: next.chatHistory,
           fallbackRelationshipMemory: next.relationshipMemory,
