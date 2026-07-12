@@ -691,6 +691,69 @@ describe('LadybugMemoryService', () => {
     }
   });
 
+  it('serializes same-scope semantic and relationship mutations without lost updates', async () => {
+    const service = createService();
+    const semanticScope = 'twitch:channel:collab:persona:hikari';
+    const firstRelationshipScope = 'local:persona:hikari';
+    const secondRelationshipScope = 'discord:guild:voice:persona:hikari';
+    try {
+      await Promise.all([
+        service.saveSemanticRecords(semanticScope, [
+          {
+            assistantText: 'Alice answer.',
+            createdAt: 10,
+            embedding: [1, 0],
+            id: 'semantic-alice',
+            participantKeys: ['twitch:collab:alice'],
+            personaId: 'hikari',
+            scopeKey: semanticScope,
+            text: 'Alice semantic memory.',
+            userText: 'Alice memory.',
+          },
+        ]),
+        service.saveSemanticRecords(semanticScope, [
+          {
+            assistantText: 'Bob answer.',
+            createdAt: 11,
+            embedding: [0, 1],
+            id: 'semantic-bob',
+            participantKeys: ['twitch:collab:bob'],
+            personaId: 'hikari',
+            scopeKey: semanticScope,
+            text: 'Bob semantic memory.',
+            userText: 'Bob memory.',
+          },
+        ]),
+      ]);
+      expect((await service.loadSemanticRecords(semanticScope))?.map((record) => record.id)).toEqual([
+        'semantic-bob',
+        'semantic-alice',
+      ]);
+
+      await Promise.all([
+        service.mergeRelationshipProfiles({
+          [firstRelationshipScope]: { facts: ['first fact'], summary: 'First profile.' },
+        }),
+        service.mergeRelationshipProfiles({
+          [secondRelationshipScope]: { facts: ['second fact'], summary: 'Second profile.' },
+        }),
+        service.updateRelationshipProfile(firstRelationshipScope, (profile) => ({
+          ...profile,
+          opinions: ['atomic updates matter'],
+        })),
+      ]);
+      expect(await service.loadRelationshipProfiles()).toMatchObject({
+        [firstRelationshipScope]: {
+          facts: ['first fact'],
+          opinions: ['atomic updates matter'],
+        },
+        [secondRelationshipScope]: { facts: ['second fact'] },
+      });
+    } finally {
+      await service.close();
+    }
+  });
+
   it('reuses fallback state without exposing cached objects and refreshes external writes', async () => {
     const service = createService();
     const failingService = service as unknown as { init: () => Promise<never> };

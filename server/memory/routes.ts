@@ -545,7 +545,7 @@ export function createMemoryRouter() {
         body.profiles && typeof body.profiles === 'object' && !Array.isArray(body.profiles)
           ? (body.profiles as Record<string, unknown>)
           : {};
-      await getLadybugMemoryService().saveRelationshipProfiles(profiles);
+      await getLadybugMemoryService().mergeRelationshipProfiles(profiles);
       res.json({ ok: true, backend: getLadybugMemoryService().getBackendLabel() });
     } catch (error) {
       sendError(res, error, 'Ladybug relationship profile save failed.');

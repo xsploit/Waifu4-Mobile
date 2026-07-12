@@ -130,6 +130,7 @@ type FallbackStoreCache = {
 
 const DEFAULT_MEMORY_DB_DIR = join(process.cwd(), '.webwaifu4', 'ladybug-memory.db');
 const fallbackMutationQueues = new Map<string, Promise<void>>();
+const memoryMutationQueues = new Map<string, Promise<unknown>>();
 const MAX_SCOPE_KEY_LENGTH = 180;
 const MAX_SNAPSHOT_BYTES = 8 * 1024 * 1024;
 
@@ -386,13 +387,15 @@ export class LadybugMemoryService {
   }
 
   async saveSemanticRecords(scopeKey: string, records: LadybugSemanticMemoryRecord[]) {
-    const normalized = normalizeSemanticRecords(records);
-    try {
-      await this.saveSnapshot('semantic', scopeKey, normalized);
-      await this.replaceSemanticGraph(scopeKey, normalized);
-    } catch (error) {
-      await this.saveFallbackSnapshotValue('semantic', scopeKey, normalized, error);
-    }
+    const normalizedScopeKey = normalizeScopeKey(scopeKey);
+    await this.enqueueMemoryMutation(`semantic:${normalizedScopeKey}`, async () => {
+      const current = await this.loadSemanticRecords(normalizedScopeKey);
+      const recordsById = new Map((current ?? []).map((record) => [record.id, record]));
+      for (const record of normalizeSemanticRecords(records)) {
+        recordsById.set(record.id, record);
+      }
+      await this.persistSemanticRecords(normalizedScopeKey, [...recordsById.values()]);
+    });
   }
 
   async querySemanticVectors(
@@ -454,16 +457,18 @@ export class LadybugMemoryService {
 
   async deleteSemanticRecords(scopeKey: string) {
     const normalizedScopeKey = normalizeScopeKey(scopeKey);
-    try {
-      await this.deleteSnapshot('semantic', normalizedScopeKey);
-      await this.deleteGraphRowsForScope(
-        normalizedScopeKey,
-        ['SemanticRecord', 'SemanticVector'],
-        true,
-      );
-    } catch (error) {
-      await this.deleteFallbackSnapshotValue('semantic', normalizedScopeKey, error);
-    }
+    await this.enqueueMemoryMutation(`semantic:${normalizedScopeKey}`, async () => {
+      try {
+        await this.deleteSnapshot('semantic', normalizedScopeKey);
+        await this.deleteGraphRowsForScope(
+          normalizedScopeKey,
+          ['SemanticRecord', 'SemanticVector'],
+          true,
+        );
+      } catch (error) {
+        await this.deleteFallbackSnapshotValue('semantic', normalizedScopeKey, error);
+      }
+    });
   }
 
   async loadRelationshipProfiles() {
@@ -481,24 +486,49 @@ export class LadybugMemoryService {
   }
 
   async saveRelationshipProfiles(profiles: Record<string, unknown>) {
-    const normalizedProfiles = normalizeRelationshipProfiles(profiles);
-    try {
-      await this.saveSnapshot('relationships', 'all', normalizedProfiles);
-      await this.replaceRelationshipGraph(normalizedProfiles);
-    } catch (error) {
-      await this.saveFallbackSnapshotValue('relationships', 'all', normalizedProfiles, error);
-    }
+    await this.enqueueMemoryMutation('relationships', () =>
+      this.persistRelationshipProfiles(normalizeRelationshipProfiles(profiles)),
+    );
+  }
+
+  async mergeRelationshipProfiles(profiles: Record<string, unknown>) {
+    const incoming = normalizeRelationshipProfiles(profiles);
+    await this.enqueueMemoryMutation('relationships', async () => {
+      const current = normalizeRelationshipProfiles(
+        (await this.loadRelationshipProfiles()) ?? {},
+      );
+      await this.persistRelationshipProfiles({ ...current, ...incoming });
+    });
+  }
+
+  async updateRelationshipProfile(
+    scopeKey: string,
+    update: (profile: Record<string, unknown>) => Record<string, unknown>,
+  ) {
+    const normalizedScopeKey = normalizeScopeKey(scopeKey);
+    return this.enqueueMemoryMutation('relationships', async () => {
+      const current = normalizeRelationshipProfiles(
+        (await this.loadRelationshipProfiles()) ?? {},
+      );
+      const currentProfile = current[normalizedScopeKey];
+      const nextProfile = update(isRecordObject(currentProfile) ? currentProfile : {});
+      await this.persistRelationshipProfiles({
+        ...current,
+        [normalizedScopeKey]: nextProfile,
+      });
+      return nextProfile;
+    });
   }
 
   async deleteRelationshipProfile(scopeKey: string) {
     const normalizedScopeKey = normalizeScopeKey(scopeKey);
-    const profiles = await this.loadRelationshipProfiles();
-    const nextProfiles =
-      profiles && typeof profiles === 'object' && !Array.isArray(profiles)
-        ? { ...(profiles as Record<string, unknown>) }
-        : {};
-    delete nextProfiles[normalizedScopeKey];
-    await this.saveRelationshipProfiles(nextProfiles);
+    await this.enqueueMemoryMutation('relationships', async () => {
+      const nextProfiles = normalizeRelationshipProfiles(
+        (await this.loadRelationshipProfiles()) ?? {},
+      );
+      delete nextProfiles[normalizedScopeKey];
+      await this.persistRelationshipProfiles(nextProfiles);
+    });
     try {
       await this.deleteScopeNodeIfUnused(normalizedScopeKey);
     } catch {
@@ -1942,6 +1972,44 @@ export class LadybugMemoryService {
     await this.exec(
       `CREATE (:MemoryState {id: ${q(id)}, scopeKey: ${q(normalizedScopeKey)}, kind: ${q(kind)}, json: ${q(json)}, updatedAt: ${Date.now()}})`,
     );
+  }
+
+  private async persistSemanticRecords(
+    scopeKey: string,
+    records: LadybugSemanticMemoryRecord[],
+  ) {
+    const normalized = normalizeSemanticRecords(records);
+    try {
+      await this.saveSnapshot('semantic', scopeKey, normalized);
+      await this.replaceSemanticGraph(scopeKey, normalized);
+    } catch (error) {
+      await this.saveFallbackSnapshotValue('semantic', scopeKey, normalized, error);
+    }
+  }
+
+  private async persistRelationshipProfiles(
+    profiles: Record<string, Record<string, unknown>>,
+  ) {
+    try {
+      await this.saveSnapshot('relationships', 'all', profiles);
+      await this.replaceRelationshipGraph(profiles);
+    } catch (error) {
+      await this.saveFallbackSnapshotValue('relationships', 'all', profiles, error);
+    }
+  }
+
+  private async enqueueMemoryMutation<T>(key: string, task: () => Promise<T>) {
+    const queueKey = `${this.dbDir}:${key}`;
+    const previous = memoryMutationQueues.get(queueKey) ?? Promise.resolve();
+    const queued = previous.catch(() => undefined).then(task);
+    memoryMutationQueues.set(queueKey, queued);
+    const cleanup = () => {
+      if (memoryMutationQueues.get(queueKey) === queued) {
+        memoryMutationQueues.delete(queueKey);
+      }
+    };
+    void queued.then(cleanup, cleanup);
+    return queued;
   }
 
   private async deleteSnapshot(kind: LadybugSnapshotKind, scopeKey: string) {

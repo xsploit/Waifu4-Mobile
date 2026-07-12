@@ -2015,20 +2015,17 @@ export class GrilloWorkerService {
     if (!field || !value) {
       throw new Error('profile patch field and value are required');
     }
-    const profiles = asRecord((await this.memory.loadRelationshipProfiles()) ?? {});
-    const profile = asRecord(profiles[scopeKey]);
-    const currentValues = readStringArray(profile[field]);
-    const nextValues =
-      operation === 'remove'
-        ? currentValues.filter((item) => item !== value)
-        : dedupeStrings([...currentValues, value]);
-    await this.memory.saveRelationshipProfiles({
-      ...profiles,
-      [scopeKey]: {
+    await this.memory.updateRelationshipProfile(scopeKey, (profile) => {
+      const currentValues = readStringArray(profile[field]);
+      const nextValues =
+        operation === 'remove'
+          ? currentValues.filter((item) => item !== value)
+          : dedupeStrings([...currentValues, value]);
+      return {
         ...profile,
         [field]: nextValues,
         updatedAt: this.nowMs(),
-      },
+      };
     });
     return { field, ok: true, operation, value };
   }
