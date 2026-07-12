@@ -10,6 +10,7 @@ type FishSpeechLiveChunkingStrategy = 'app' | 'python-safe' | 'eager';
 type InworldDeliveryMode = 'STABLE' | 'BALANCED' | 'CREATIVE' | 'EXPRESSIVE';
 type InworldTimestampType = 'NONE' | 'WORD' | 'CHARACTER';
 type InworldTimestampTransportStrategy = 'SYNC' | 'ASYNC';
+export type RemoteTtsOutputMode = 'local-only' | 'discord-only' | 'local+discord' | 'external';
 
 export type RemoteTtsRequest = {
   provider: RemoteTtsProvider;
@@ -34,6 +35,10 @@ export type RemoteTtsRequest = {
   bufferCharThreshold?: number;
   maxBufferDelayMs?: number;
   autoMode?: boolean;
+  outputMode?: RemoteTtsOutputMode;
+  ttsSessionId?: string;
+  utteranceId?: string;
+  segmentIndex?: number;
 };
 
 export type RemoteTtsAudioChunk = {
@@ -133,6 +138,10 @@ export type RemoteTtsProxyRequest = {
   timestampType?: InworldTimestampType;
   voiceId?: string;
   autoMode?: boolean;
+  outputMode?: RemoteTtsOutputMode;
+  ttsSessionId?: string;
+  utteranceId?: string;
+  segmentIndex?: number;
 };
 
 export type RemoteTtsStreamEvent =
@@ -244,6 +253,10 @@ export function createRemoteTtsProxyRequest(request: RemoteTtsRequest): RemoteTt
       bufferCharThreshold: clampInteger(request.bufferCharThreshold, 1, 1000),
       maxBufferDelayMs: clampInteger(request.maxBufferDelayMs, 0, 10000),
       autoMode: request.autoMode,
+      outputMode: request.outputMode,
+      ttsSessionId: request.ttsSessionId,
+      utteranceId: request.utteranceId,
+      segmentIndex: request.segmentIndex,
     };
   }
 
@@ -258,6 +271,10 @@ export function createRemoteTtsProxyRequest(request: RemoteTtsRequest): RemoteTt
     latency: request.latency,
     conditionOnPreviousChunks: request.conditionOnPreviousChunks,
     chunkLength: clampInteger(request.chunkLength, 100, 300),
+    outputMode: request.outputMode,
+    ttsSessionId: request.ttsSessionId,
+    utteranceId: request.utteranceId,
+    segmentIndex: request.segmentIndex,
   };
 }
 

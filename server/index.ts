@@ -26,6 +26,7 @@ import {
   isDesktopShutdownAuthorized,
 } from './desktop';
 import { getLadybugMemoryService } from './memory/LadybugMemoryService';
+import { TtsOutputFanout } from './tts/outputFanout';
 
 const PORT = Number(process.env.PORT ?? 8797);
 const HOST = process.env.HOST?.trim() || '127.0.0.1';
@@ -34,6 +35,7 @@ const DIST_INDEX = path.join(DIST_DIR, 'index.html');
 
 const app = express();
 const backendRouter = express.Router();
+const ttsOutputFanout = new TtsOutputFanout();
 app.use((req, res, next) => {
   const origin = typeof req.headers.origin === 'string' ? req.headers.origin : undefined;
   const allowedOrigin = getAllowedDesktopCorsOrigin(origin);
@@ -91,7 +93,7 @@ backendRouter.get('/ai/models', (req, res) => {
 
 // POST /ai/chat — SSE reply stream (delta / done / error).
 backendRouter.post('/ai/chat', (req, res) => {
-  void handleChat(req, res);
+  void handleChat(req, res, ttsOutputFanout);
 });
 
 // POST /ai/embeddings — provider fallback for semantic-memory embeddings.
@@ -108,7 +110,7 @@ backendRouter.post('/ai/poml/render', (req, res) => {
 
 // POST /tts/stream — NDJSON audio stream (audio / done / error).
 backendRouter.post('/tts/stream', (req, res) => {
-  void handleTtsStream(req, res);
+  void handleTtsStream(req, res, ttsOutputFanout);
 });
 
 // GET /tts/voices — provider voice registry for TTS and Voice Lab.
@@ -136,6 +138,9 @@ const overlaySocket = new OverlaySocket(server, (event) => {
 const twitchRuntime = createTwitchRuntime({ overlaySocket });
 const discordController = new DiscordVoiceController({
   onEvent: (event) => overlaySocket.broadcast(event),
+});
+ttsOutputFanout.setDiscordSink({
+  tryEnqueue: (chunk) => discordController.tryEnqueueOutput(chunk),
 });
 
 backendRouter.use('/memory', createMemoryRouter());

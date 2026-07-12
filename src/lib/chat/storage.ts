@@ -401,6 +401,13 @@ function normalizeAiSettings(value: unknown): AiSettings {
     typeof source.ttsVolume === 'number' && Number.isFinite(source.ttsVolume)
       ? Math.max(0, Math.min(2, source.ttsVolume))
       : defaults.ttsVolume;
+  const ttsOutputMode =
+    source.ttsOutputMode === 'local-only' ||
+    source.ttsOutputMode === 'discord-only' ||
+    source.ttsOutputMode === 'local+discord' ||
+    source.ttsOutputMode === 'external'
+      ? source.ttsOutputMode
+      : defaults.ttsOutputMode;
   const ttsProvider =
     source.ttsProvider === 'fish-speech' || source.ttsProvider === 'inworld'
       ? source.ttsProvider
@@ -538,6 +545,12 @@ function normalizeAiSettings(value: unknown): AiSettings {
     ttsEnabled: typeof source.ttsEnabled === 'boolean' ? source.ttsEnabled : defaults.ttsEnabled,
     ttsAutoSpeak:
       typeof source.ttsAutoSpeak === 'boolean' ? source.ttsAutoSpeak : defaults.ttsAutoSpeak,
+    ttsOutputMode,
+    ttsExternalOutputDeviceId: normalizeBoundedString(
+      source.ttsExternalOutputDeviceId,
+      defaults.ttsExternalOutputDeviceId,
+      512,
+    ),
     ttsSimulatedStreaming:
       typeof source.ttsSimulatedStreaming === 'boolean'
         ? source.ttsSimulatedStreaming

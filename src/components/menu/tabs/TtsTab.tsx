@@ -1,4 +1,4 @@
-import { useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import type { Dispatch, SetStateAction } from 'react';
 import type { AiSettings } from '../../../lib/chat/types';
 import {
@@ -83,6 +83,22 @@ export function TtsTab({
   voicesError,
   voicesLoading,
 }: TtsTabProps) {
+  const [audioOutputs, setAudioOutputs] = useState<MediaDeviceInfo[]>([]);
+
+  useEffect(() => {
+    if (aiSettings.ttsOutputMode !== 'external' || !navigator.mediaDevices?.enumerateDevices) {
+      return;
+    }
+    let cancelled = false;
+    void navigator.mediaDevices.enumerateDevices().then((devices) => {
+      if (!cancelled) {
+        setAudioOutputs(devices.filter((device) => device.kind === 'audiooutput'));
+      }
+    }).catch(() => undefined);
+    return () => {
+      cancelled = true;
+    };
+  }, [aiSettings.ttsOutputMode]);
   const benchmarkAbortRef = useRef<AbortController | null>(null);
   const [benchmarkText, setBenchmarkText] = useState(DEFAULT_TTS_BENCHMARK_TEXT);
   const [benchmarkRounds, setBenchmarkRounds] = useState(2);
@@ -203,6 +219,48 @@ export function TtsTab({
             onChange={(checked) => updateAiSettings(setAiSettings, { ttsAutoSpeak: checked })}
           />
         </div>
+        <label className="setting-row">
+          <span>Output Mode</span>
+          <select
+            aria-label="TTS output mode"
+            className="select-tech"
+            onChange={(event) =>
+              updateAiSettings(setAiSettings, {
+                ttsOutputMode: event.target.value as AiSettings['ttsOutputMode'],
+              })
+            }
+            style={{ flex: '0 1 220px', minWidth: 0, width: 'auto' }}
+            value={aiSettings.ttsOutputMode}
+          >
+            <option value="local-only">Local only</option>
+            <option disabled={aiSettings.ttsProvider === 'piper'} value="discord-only">Discord only</option>
+            <option disabled={aiSettings.ttsProvider === 'piper'} value="local+discord">Local + Discord</option>
+            <option value="external">External (virtual output)</option>
+          </select>
+        </label>
+        {aiSettings.ttsOutputMode === 'external' ? (
+          <label className="setting-row">
+            <span>Output Device</span>
+            <select
+              aria-label="External TTS output device"
+              className="select-tech"
+              onChange={(event) =>
+                updateAiSettings(setAiSettings, {
+                  ttsExternalOutputDeviceId: event.target.value,
+                })
+              }
+              style={{ flex: '0 1 280px', minWidth: 0, width: 'auto' }}
+              value={aiSettings.ttsExternalOutputDeviceId}
+            >
+              <option value="">System default</option>
+              {audioOutputs.map((device, index) => (
+                <option key={device.deviceId} value={device.deviceId}>
+                  {device.label || `Audio output ${index + 1}`}
+                </option>
+              ))}
+            </select>
+          </label>
+        ) : null}
         <div className="toggle-row">
           <span>Chunk Text Into TTS</span>
           <Toggle

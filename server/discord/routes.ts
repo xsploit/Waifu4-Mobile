@@ -7,6 +7,8 @@ import {
   type DiscordVoiceRuntimeStatus,
 } from './DiscordVoiceRuntime';
 import type { DiscordVoiceTranscript } from './DiscordTranscriber';
+import { createDiscordVoiceOutput } from './DiscordVoiceOutput';
+import type { TtsOutputChunk } from '../tts/outputFanout';
 
 const DEFAULT_ASR_MODEL = 'openai/gpt-4o-mini-transcribe';
 const DEFAULT_VAD = {
@@ -34,7 +36,7 @@ const connectBodySchema = z
 export type DiscordConnectConfig = z.infer<typeof connectBodySchema>;
 export type DiscordVoiceRuntimeLike = Pick<
   ReturnType<typeof createDiscordVoiceRuntime>,
-  'start' | 'status' | 'stop'
+  'start' | 'status' | 'stop' | 'tryEnqueueOutput'
 >;
 
 export type DiscordVoiceControllerStatus = {
@@ -119,6 +121,9 @@ export class DiscordVoiceController {
           provider: mapAsrProvider(resolved.asrProvider),
         },
         vad: resolved.vad,
+        voiceOutput: createDiscordVoiceOutput({
+          onError: (error) => this.handleRuntimeError(generation, error, credentials),
+        }),
       });
       this.runtime = runtime;
 
@@ -152,6 +157,19 @@ export class DiscordVoiceController {
       this.emitStatus();
       return this.status();
     });
+  }
+
+  public tryEnqueueOutput(chunk: TtsOutputChunk): boolean {
+    if (chunk.format !== 'pcm' || !chunk.sampleRate) return false;
+    return this.runtime?.tryEnqueueOutput({
+      audio: chunk.audio,
+      cancel: chunk.cancel,
+      chunkIndex: chunk.chunkIndex,
+      isFinal: chunk.isFinal,
+      sampleRate: chunk.sampleRate,
+      sessionId: chunk.sessionId,
+      utteranceId: chunk.utteranceId,
+    }) ?? false;
   }
 
   private enqueue<T>(work: () => Promise<T> | T): Promise<T> {

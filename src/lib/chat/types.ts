@@ -28,6 +28,7 @@ export type TtsProvider = 'piper' | 'fish-speech' | 'inworld';
 export type VoiceCreationProvider = 'fish-speech' | 'inworld';
 export type PersonaVoiceProvider = TtsProvider | VoiceCreationProvider;
 export type RemoteTtsMode = 'live-bridge' | 'full-response' | 'early-chunks' | 'sentence-chunks';
+export type TtsOutputMode = 'local-only' | 'discord-only' | 'local+discord' | 'external';
 export type FishSpeechVoiceScope = 'all' | 'mine' | 'public';
 export type FishSpeechLatency = 'balanced' | 'normal';
 export type FishSpeechTransport = 'websocket' | 'timestamp-sse';
@@ -70,6 +71,8 @@ export type AiSettings = {
   maxTokens: number;
   ttsEnabled: boolean;
   ttsAutoSpeak: boolean;
+  ttsOutputMode: TtsOutputMode;
+  ttsExternalOutputDeviceId: string;
   ttsSimulatedStreaming: boolean;
   ttsExpressionTagsEnabled: boolean;
   ttsProvider: TtsProvider;

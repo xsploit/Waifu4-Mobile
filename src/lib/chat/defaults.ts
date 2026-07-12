@@ -119,6 +119,8 @@ export function createDefaultAiSettings(): AiSettings {
     maxTokens: 300,
     ttsEnabled: true,
     ttsAutoSpeak: true,
+    ttsOutputMode: 'local-only',
+    ttsExternalOutputDeviceId: '',
     ttsSimulatedStreaming: true,
     ttsExpressionTagsEnabled: false,
     ttsProvider: 'fish-speech',

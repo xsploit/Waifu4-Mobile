@@ -8,6 +8,7 @@ import {
 } from '@discordjs/voice';
 import { DiscordTranscriber, createDiscordAudioTranscriber, type DiscordTranscriptionConfig, type DiscordVoiceTranscript } from './DiscordTranscriber';
 import { DiscordVoiceReceive, type DiscordVoiceUser } from './DiscordVoiceReceive';
+import type { DiscordVoiceOutputChunk, DiscordVoiceOutputLike } from './DiscordVoiceOutput';
 import type { VoiceActivityDetectorConfig, VoiceUtterance } from './VoiceActivityDetector';
 
 type DiscordClientLike = {
@@ -59,6 +60,7 @@ export type DiscordVoiceRuntimeOptions = {
   transcription?: DiscordTranscriptionConfig;
   transcriber?: DiscordTranscriber;
   vad?: Partial<Omit<VoiceActivityDetectorConfig, 'sampleRate'>>;
+  voiceOutput?: DiscordVoiceOutputLike;
 } & DiscordVoiceRuntimeDependencies;
 
 const DEFAULT_READY_TIMEOUT_MS = 15_000;
@@ -126,10 +128,16 @@ export class DiscordVoiceRuntime {
     if (this.reconnectTimer) clearTimeout(this.reconnectTimer);
     this.reconnectTimer = undefined;
     this.client.off('voiceStateUpdate', this.handleVoiceStateUpdate);
-    this.teardownConnection();
+    this.options.voiceOutput?.stop();
+    this.teardownConnection(false);
     this.transcriber.close();
     this.reportStatus();
     void this.client.destroy();
+  }
+
+  /** Attempts optional Discord playback without coupling the receive runtime to a TTS provider. */
+  public tryEnqueueOutput(chunk: DiscordVoiceOutputChunk): boolean {
+    return this.options.voiceOutput?.tryEnqueue(chunk) ?? false;
   }
 
   private async join(): Promise<void> {
@@ -152,6 +160,7 @@ export class DiscordVoiceRuntime {
       connection.on('stateChange', this.handleConnectionStateChange);
       await (this.options.entersReady ?? ((target, timeoutMs) => entersState(target, VoiceConnectionStatus.Ready, timeoutMs)))(connection, this.readyTimeoutMs);
       if (!this.started || this.connection !== connection) return;
+      this.options.voiceOutput?.attach(connection);
       if (this.options.listen === false) {
         this.reportStatus();
         return;
@@ -191,6 +200,7 @@ export class DiscordVoiceRuntime {
     if (newState.status === VoiceConnectionStatus.Disconnected || newState.status === VoiceConnectionStatus.Destroyed) {
       this.receive?.detach();
       this.receive = undefined;
+      this.options.voiceOutput?.detach();
       this.reportStatus();
       this.scheduleReconnect();
     }
@@ -210,9 +220,10 @@ export class DiscordVoiceRuntime {
     }, this.reconnectDelayMs);
   }
 
-  private teardownConnection(): void {
+  private teardownConnection(detachOutput = true): void {
     this.receive?.detach();
     this.receive = undefined;
+    if (detachOutput) this.options.voiceOutput?.detach();
     const connection = this.connection;
     this.connection = undefined;
     if (!connection) return;

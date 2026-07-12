@@ -71,6 +71,24 @@ describe('remote TTS proxy compatibility', () => {
     });
   });
 
+  it('carries synth-once output routing identity to the backend', () => {
+    expect(
+      createRemoteTtsProxyRequest({
+        outputMode: 'local+discord',
+        provider: 'fish-speech',
+        segmentIndex: 2,
+        text: 'hello',
+        ttsSessionId: 'session-1',
+        utteranceId: 'utterance-1',
+      }),
+    ).toMatchObject({
+      outputMode: 'local+discord',
+      segmentIndex: 2,
+      ttsSessionId: 'session-1',
+      utteranceId: 'utterance-1',
+    });
+  });
+
   it('clamps Fish chunk length to the rebuilt backend range', () => {
     expect(
       createRemoteTtsProxyRequest({

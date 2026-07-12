@@ -29,8 +29,31 @@ describe('live TTS bridge', () => {
       latency: 'balanced',
       maxBufferChars: undefined,
       minBufferChars: undefined,
+      outputMode: 'local-only',
+      sampleRate: undefined,
+      segmentIndex: undefined,
       softBufferChars: undefined,
+      ttsSessionId: undefined,
+      utteranceId: undefined,
       voiceId: 'voice-1',
+    });
+  });
+
+  it('preserves output routing identity without changing bridge chunking', () => {
+    expect(
+      normalizeLiveTtsBridge({
+        outputMode: 'local+discord',
+        provider: 'fish-speech',
+        segmentIndex: 3,
+        streamingMode: 'live-bridge',
+        ttsSessionId: 'session-1',
+        utteranceId: 'utterance-1',
+      }),
+    ).toMatchObject({
+      outputMode: 'local+discord',
+      segmentIndex: 3,
+      ttsSessionId: 'session-1',
+      utteranceId: 'utterance-1',
     });
   });
 

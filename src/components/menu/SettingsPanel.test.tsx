@@ -466,6 +466,9 @@ describe('SettingsPanel tab smoke', () => {
     const html = renderToStaticMarkup(<SettingsPanel {...createProps('tts')} />);
 
     expect(html).toContain('Speech Output');
+    expect(html).toContain('Output Mode');
+    expect(html).toContain('Local + Discord');
+    expect(html).toContain('External (virtual output)');
     expect(html).toContain('Fish Speech Live Bridge');
     expect(html).toContain('Fish Speech Live');
     expect(html).toContain('WebSocket realtime');

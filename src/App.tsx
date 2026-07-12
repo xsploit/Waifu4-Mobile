@@ -797,8 +797,24 @@ function shouldChunkTtsRequests(settings: AiSettings) {
   return settings.ttsProvider === 'piper' || mode === 'early-chunks' || mode === 'sentence-chunks';
 }
 
-function createRemoteTtsRequest(text: string, settings: AiSettings): RemoteTtsRequest {
+function getEffectiveTtsOutputMode(settings: AiSettings) {
+  if (
+    settings.ttsProvider === 'piper' &&
+    (settings.ttsOutputMode === 'discord-only' || settings.ttsOutputMode === 'local+discord')
+  ) {
+    return 'local-only' as const;
+  }
+  return settings.ttsOutputMode;
+}
+
+function createRemoteTtsRequest(
+  text: string,
+  settings: AiSettings,
+  output?: Pick<RemoteTtsRequest, 'outputMode' | 'segmentIndex' | 'ttsSessionId' | 'utteranceId'>,
+): RemoteTtsRequest {
   const streamingMode = getEffectiveRemoteTtsMode(settings);
+  const outputMode = output?.outputMode ?? getEffectiveTtsOutputMode(settings);
+  const discordOutput = outputMode === 'discord-only' || outputMode === 'local+discord';
   const fishLiveChunkingStrategy =
     settings.fishSpeechLiveChunkingStrategy === 'safe-phrase'
       ? 'python-safe'
@@ -821,6 +837,8 @@ function createRemoteTtsRequest(text: string, settings: AiSettings): RemoteTtsRe
       maxBufferDelayMs:
         settings.inworldMaxBufferDelayMs > 0 ? settings.inworldMaxBufferDelayMs : undefined,
       autoMode: settings.inworldAutoMode,
+      ...output,
+      outputMode,
     };
   }
 
@@ -831,13 +849,21 @@ function createRemoteTtsRequest(text: string, settings: AiSettings): RemoteTtsRe
     voiceId: settings.fishSpeechVoiceId.trim() || undefined,
     modelId: settings.fishSpeechModel.trim() || undefined,
     fishTransport: settings.fishSpeechTransport,
-    format: settings.fishSpeechFormat,
+    format: discordOutput ? 'pcm' : settings.fishSpeechFormat,
     sampleRate: settings.fishSpeechSampleRate,
     latency: settings.fishSpeechLatency,
     conditionOnPreviousChunks: settings.fishSpeechConditionOnPreviousChunks,
     chunkLength: settings.fishSpeechChunkLength,
     chunkingStrategy: fishLiveChunkingStrategy,
+    ...output,
+    outputMode,
   };
+}
+
+function createTtsRoutingId() {
+  return typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function'
+    ? crypto.randomUUID()
+    : `tts-${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}`;
 }
 
 async function getBrowserProviderApiKey({
@@ -2310,28 +2336,7 @@ function App() {
     () => ttsVoices.find((voice) => voice.key === ttsActiveVoiceKey) ?? null,
     [ttsActiveVoiceKey, ttsVoices],
   );
-  const ttsRuntimeSettings = useMemo(
-    () => aiSettings,
-    [
-      aiSettings.fishSpeechChunkLength,
-      aiSettings.fishSpeechConditionOnPreviousChunks,
-      aiSettings.fishSpeechLatency,
-      aiSettings.fishSpeechModel,
-      aiSettings.fishSpeechVoiceId,
-      aiSettings.inworldBufferCharThreshold,
-      aiSettings.inworldDeliveryMode,
-      aiSettings.inworldModelId,
-      aiSettings.inworldVoiceId,
-      aiSettings.remoteTtsMode,
-      aiSettings.ttsEnabled,
-      aiSettings.ttsExpressionTagsEnabled,
-      aiSettings.ttsPlaybackRate,
-      aiSettings.ttsProvider,
-      aiSettings.ttsSimulatedStreaming,
-      aiSettings.ttsVoice,
-      aiSettings.ttsVolume,
-    ],
-  );
+  const ttsRuntimeSettings = aiSettings;
   const activeRemoteTtsVoices =
     ttsRuntimeSettings.ttsProvider === 'piper'
       ? []
@@ -3069,7 +3074,12 @@ function App() {
             ttsRuntimeSettings.ttsProvider,
             providerKeyVaultWorkspaceId,
           );
-          await ttsManager.speakRemoteText(createRemoteTtsRequest(content, ttsRuntimeSettings), {
+          await ttsManager.speakRemoteText(createRemoteTtsRequest(content, ttsRuntimeSettings, {
+            outputMode: getEffectiveTtsOutputMode(ttsRuntimeSettings),
+            segmentIndex: 0,
+            ttsSessionId: createTtsRoutingId(),
+            utteranceId: createTtsRoutingId(),
+          }), {
             providerApiKey,
           });
           setTtsActiveVoiceKey(null);
@@ -3109,7 +3119,12 @@ function App() {
   }, []);
 
   const createStreamingAssistantPlayer = useCallback(
-    (assistantMessage: ChatMessage, shouldSpeak: boolean, label: string) => {
+    (
+      assistantMessage: ChatMessage,
+      shouldSpeak: boolean,
+      label: string,
+      ttsSessionId = createTtsRoutingId(),
+    ) => {
       const thisRun = ++assistantRenderRunRef.current;
       const voice = selectedTtsVoice;
       const ttsProvider = ttsRuntimeSettings.ttsProvider;
@@ -3141,6 +3156,7 @@ function App() {
       let sawDelta = false;
       let queuedSpeech = false;
       let liveBridgeSink: RemotePcmPushStream | null = null;
+      let ttsSegmentIndex = 0;
       const speechPromises: Promise<void>[] = [];
       const displaySettledResolvers: Array<() => void> = [];
 
@@ -3292,7 +3308,12 @@ function App() {
                   providerKeyVaultWorkspaceId,
                 );
                 return ttsManager.queueRemoteText(
-                  createRemoteTtsRequest(chunk, ttsRuntimeSettings),
+                  createRemoteTtsRequest(chunk, ttsRuntimeSettings, {
+                    outputMode: ttsRuntimeSettings.ttsOutputMode,
+                    segmentIndex: ttsSegmentIndex++,
+                    ttsSessionId,
+                    utteranceId: createTtsRoutingId(),
+                  }),
                   {
                     providerApiKey,
                   },
@@ -3568,6 +3589,8 @@ function App() {
       let pendingText = '';
       let sawDelta = false;
       let queuedSpeech = false;
+      const ttsSessionId = createTtsRoutingId();
+      let ttsSegmentIndex = 0;
       const speechPromises: Promise<void>[] = [];
 
       if (canSpeak) {
@@ -3596,7 +3619,12 @@ function App() {
                   providerKeyVaultWorkspaceId,
                 );
                 return ttsManager.queueRemoteText(
-                  createRemoteTtsRequest(chunk, ttsRuntimeSettings),
+                  createRemoteTtsRequest(chunk, ttsRuntimeSettings, {
+                    outputMode: getEffectiveTtsOutputMode(ttsRuntimeSettings),
+                    segmentIndex: ttsSegmentIndex++,
+                    ttsSessionId,
+                    utteranceId: createTtsRoutingId(),
+                  }),
                   {
                     providerApiKey,
                   },
@@ -3890,11 +3918,13 @@ function App() {
         ttsProvider: 'fish-speech',
         fishSpeechFormat: 'pcm',
         remoteTtsMode: 'full-response',
+        ttsOutputMode: 'local-only',
       };
       const inworldSettings: AiSettings = {
         ...settings,
         ttsProvider: 'inworld',
         remoteTtsMode: 'full-response',
+        ttsOutputMode: 'local-only',
       };
       const candidates: TtsBenchmarkCandidate[] = [
         {
@@ -4456,7 +4486,17 @@ function App() {
   useEffect(() => {
     ttsManager.setPlaybackRate(aiSettings.ttsPlaybackRate);
     ttsManager.setVolume(aiSettings.ttsVolume);
-  }, [aiSettings.ttsPlaybackRate, aiSettings.ttsVolume, ttsManager]);
+    ttsManager.setOutputRoute(
+      getEffectiveTtsOutputMode(aiSettings),
+      aiSettings.ttsExternalOutputDeviceId,
+    );
+  }, [
+    aiSettings.ttsExternalOutputDeviceId,
+    aiSettings.ttsOutputMode,
+    aiSettings.ttsPlaybackRate,
+    aiSettings.ttsVolume,
+    ttsManager,
+  ]);
 
   useEffect(() => {
     if (
@@ -6213,6 +6253,7 @@ function App() {
           : [...requestHistory, userMessage],
       );
       const assistantMessage = createChatMessage('assistant', '');
+      const ttsSessionId = createTtsRoutingId();
       const speechPlayer = createStreamingAssistantPlayer(
         assistantMessage,
         settings.ttsEnabled && settings.ttsAutoSpeak,
@@ -6223,12 +6264,18 @@ function App() {
               ? 'Discord'
               : 'Twitch'
         } reply`,
+        ttsSessionId,
       );
       const ttsBridge =
         settings.ttsEnabled &&
         settings.ttsAutoSpeak &&
         canUseFishLiveBridge(settings)
-          ? createRemoteTtsRequest('', settings)
+          ? createRemoteTtsRequest('', settings, {
+              outputMode: settings.ttsOutputMode,
+              segmentIndex: 0,
+              ttsSessionId,
+              utteranceId: createTtsRoutingId(),
+            })
           : undefined;
       const chatAbortController = new AbortController();
       const chatHardTimeout = window.setTimeout(() => {

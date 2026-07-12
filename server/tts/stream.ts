@@ -4,6 +4,7 @@ import { readFishTtsEnvKey } from '../ai/providerKeys';
 import { streamFishTimestampTts, streamFishTts } from './FishTtsStream';
 import { streamInworldTts } from './InworldTtsStream';
 import { buildSpeechTiming, createSpeechTimingAccumulator } from './SpeechTiming';
+import { TtsOutputFanout, type TtsOutputMode } from './outputFanout';
 
 const ttsRequestSchema = z.object({
   text: z.string().min(1),
@@ -25,6 +26,10 @@ const ttsRequestSchema = z.object({
   bufferCharThreshold: z.number().int().min(1).max(1000).optional(),
   maxBufferDelayMs: z.number().int().min(0).max(10000).optional(),
   autoMode: z.boolean().optional(),
+  outputMode: z.enum(['local-only', 'discord-only', 'local+discord', 'external']).optional(),
+  ttsSessionId: z.string().trim().min(1).max(128).optional(),
+  utteranceId: z.string().trim().min(1).max(128).optional(),
+  segmentIndex: z.number().int().min(0).max(10000).optional(),
 });
 
 function header(req: Request, name: string): string | undefined {
@@ -45,7 +50,11 @@ export function readTtsStreamProviderKey(req: Request, provider: 'fish' | 'inwor
  * POST /tts/stream — NDJSON audio stream.
  * Lines: {type:'audio', audio:base64, format, sampleRate} ... {type:'done', stats} | {type:'error', error}.
  */
-export async function handleTtsStream(req: Request, res: Response): Promise<void> {
+export async function handleTtsStream(
+  req: Request,
+  res: Response,
+  outputFanout?: TtsOutputFanout,
+): Promise<void> {
   const parsed = ttsRequestSchema.safeParse(req.body);
   if (!parsed.success) {
     res.status(400).json({ ok: false, error: parsed.error.message });
@@ -74,6 +83,11 @@ export async function handleTtsStream(req: Request, res: Response): Promise<void
   const controller = new AbortController();
   res.on('close', () => controller.abort());
   const timing = createSpeechTimingAccumulator();
+  const outputMode: TtsOutputMode = parsed.data.outputMode ?? 'local-only';
+  const sessionId = parsed.data.ttsSessionId ?? crypto.randomUUID();
+  const utteranceId = parsed.data.utteranceId ?? crypto.randomUUID();
+  const segmentIndex = parsed.data.segmentIndex ?? 0;
+  let chunkIndex = 0;
   const sendAudio = (
     chunk: Uint8Array,
     meta: { format: string; sampleRate?: number; timestamps?: unknown },
@@ -81,14 +95,25 @@ export async function handleTtsStream(req: Request, res: Response): Promise<void
     const timestamps = meta.timestamps && typeof meta.timestamps === 'object' ? meta.timestamps : undefined;
     const speechTiming = buildSpeechTiming(timestamps);
     timing.add(speechTiming, timestamps);
-    send({
+    const browserEvent = {
       type: 'audio',
       audio: Buffer.from(chunk).toString('base64'),
       format: meta.format,
       sampleRate: meta.sampleRate,
       timestamps,
       speechTiming,
+    };
+    send(browserEvent);
+    outputFanout?.tryEnqueue(outputMode, {
+      audio: chunk,
+      chunkIndex,
+      format: meta.format,
+      sampleRate: meta.sampleRate,
+      segmentIndex,
+      sessionId,
+      utteranceId,
     });
+    chunkIndex += 1;
   };
 
   try {
@@ -124,6 +149,16 @@ export async function handleTtsStream(req: Request, res: Response): Promise<void
               (chunk) => sendAudio(chunk, { format, sampleRate }),
             );
     const timingSummary = timing.summary();
+    outputFanout?.tryEnqueue(outputMode, {
+      audio: new Uint8Array(),
+      chunkIndex,
+      format,
+      isFinal: true,
+      sampleRate,
+      segmentIndex,
+      sessionId,
+      utteranceId,
+    });
     send({
       type: 'done',
       ok: true,
@@ -142,6 +177,16 @@ export async function handleTtsStream(req: Request, res: Response): Promise<void
         : stats,
     });
   } catch (err) {
+    outputFanout?.tryEnqueue(outputMode, {
+      audio: new Uint8Array(),
+      cancel: true,
+      chunkIndex,
+      format,
+      sampleRate,
+      segmentIndex,
+      sessionId,
+      utteranceId,
+    });
     send({ type: 'error', ok: false, error: err instanceof Error ? err.message : String(err) });
   } finally {
     res.end();

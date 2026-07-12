@@ -10,6 +10,7 @@ import { completeChat, streamChat } from './llmGateway';
 import type { StreamChatResult } from './llmGateway';
 import { readProviderKeys } from './providerKeys';
 import { streamFishTtsTextStream } from '../tts/FishTtsStream';
+import { TtsOutputFanout } from '../tts/outputFanout';
 
 const providerSchema = z.enum(['vercel-gateway', 'openrouter-responses']);
 const replyFormatSchema = z.enum(['structured', 'text']);
@@ -97,7 +98,11 @@ export function buildChatDoneEventPayload(
 }
 
 /** POST /ai/chat — SSE stream. Events: `delta` (visible text), `done`, `error`. */
-export async function handleChat(req: Request, res: Response): Promise<void> {
+export async function handleChat(
+  req: Request,
+  res: Response,
+  outputFanout?: TtsOutputFanout,
+): Promise<void> {
   const parsed = chatRequestInputSchema.safeParse(req.body);
   if (!parsed.success) {
     res.status(400).json({ ok: false, error: parsed.error.message });
@@ -161,6 +166,9 @@ export async function handleChat(req: Request, res: Response): Promise<void> {
     });
   }
   let bridgeFinalizationTimedOut = false;
+  let bridgeChunkIndex = 0;
+  const bridgeSessionId = bridgeRequest?.ttsSessionId ?? crypto.randomUUID();
+  const bridgeUtteranceId = bridgeRequest?.utteranceId ?? crypto.randomUUID();
   const bridgeDone = bridge
     ? streamFishTtsTextStream(
         {
@@ -176,15 +184,47 @@ export async function handleChat(req: Request, res: Response): Promise<void> {
           signal: controller.signal,
         },
         bridge.stream,
-        (chunk) =>
+        (chunk) => {
           send('audio', {
             audio: Buffer.from(chunk).toString('base64'),
             mimeType: 'audio/pcm',
             sampleRate: bridgeRequest?.sampleRate ?? 44100,
-          }),
+          });
+          outputFanout?.tryEnqueue(bridgeRequest?.outputMode ?? 'local-only', {
+            audio: chunk,
+            chunkIndex: bridgeChunkIndex,
+            format: 'pcm',
+            sampleRate: bridgeRequest?.sampleRate ?? 44100,
+            segmentIndex: bridgeRequest?.segmentIndex ?? 0,
+            sessionId: bridgeSessionId,
+            utteranceId: bridgeUtteranceId,
+          });
+          bridgeChunkIndex += 1;
+        },
       ).then(
-        () => undefined,
+        () => {
+          outputFanout?.tryEnqueue(bridgeRequest?.outputMode ?? 'local-only', {
+            audio: new Uint8Array(),
+            chunkIndex: bridgeChunkIndex,
+            format: 'pcm',
+            isFinal: true,
+            sampleRate: bridgeRequest?.sampleRate ?? 44100,
+            segmentIndex: bridgeRequest?.segmentIndex ?? 0,
+            sessionId: bridgeSessionId,
+            utteranceId: bridgeUtteranceId,
+          });
+        },
         (err) => {
+          outputFanout?.tryEnqueue(bridgeRequest?.outputMode ?? 'local-only', {
+            audio: new Uint8Array(),
+            cancel: true,
+            chunkIndex: bridgeChunkIndex,
+            format: 'pcm',
+            sampleRate: bridgeRequest?.sampleRate ?? 44100,
+            segmentIndex: bridgeRequest?.segmentIndex ?? 0,
+            sessionId: bridgeSessionId,
+            utteranceId: bridgeUtteranceId,
+          });
           const message = err instanceof Error ? err.message : String(err);
           if (bridgeFinalizationTimedOut && message === 'Live TTS bridge finalization timed out.') {
             return;

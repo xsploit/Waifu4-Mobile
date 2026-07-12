@@ -58,6 +58,10 @@ class FakeRuntime {
     return this.statusValue;
   }
 
+  public tryEnqueueOutput(): boolean {
+    return true;
+  }
+
   public emitTranscript(): void {
     void this.options.onTranscript?.({
       identity: {

@@ -1,5 +1,6 @@
 import type { FishBackend, FishStreamRequest, FishTextStream } from '../tts/FishTtsStream';
 import { clampInteger } from '../../src/shared/number';
+import type { TtsOutputMode } from '../tts/outputFanout';
 
 const LIVE_TTS_BRIDGE_FINAL_WAIT_MS = 15_000;
 
@@ -14,6 +15,10 @@ export type LiveTtsBridgeRequest = {
   sampleRate?: number;
   softBufferChars?: number;
   voiceId?: string;
+  outputMode?: TtsOutputMode;
+  segmentIndex?: number;
+  ttsSessionId?: string;
+  utteranceId?: string;
 };
 
 type TextQueue = {
@@ -84,6 +89,21 @@ export function normalizeLiveTtsBridge(value: unknown): LiveTtsBridgeRequest | n
     sampleRate: clampInteger(source['sampleRate'], 8000, 96000),
     softBufferChars: clampInteger(source['softBufferChars'], 8, 1000),
     voiceId: typeof source['voiceId'] === 'string' ? source['voiceId'] : undefined,
+    outputMode:
+      source['outputMode'] === 'discord-only' || source['outputMode'] === 'local+discord'
+        ? source['outputMode']
+        : source['outputMode'] === 'external'
+          ? 'external'
+          : 'local-only',
+    segmentIndex: clampInteger(source['segmentIndex'], 0, 10000),
+    ttsSessionId:
+      typeof source['ttsSessionId'] === 'string' && source['ttsSessionId'].trim()
+        ? source['ttsSessionId'].trim().slice(0, 128)
+        : undefined,
+    utteranceId:
+      typeof source['utteranceId'] === 'string' && source['utteranceId'].trim()
+        ? source['utteranceId'].trim().slice(0, 128)
+        : undefined,
   };
 }
 

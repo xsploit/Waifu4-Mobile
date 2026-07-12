@@ -7,6 +7,7 @@ import {
   type RemoteTtsProxyOptions,
   type RemoteTtsRequest,
 } from './remote';
+import type { TtsOutputMode } from '../chat/types';
 import type { SpeechTiming } from '../../tts/SpeechTimingTypes';
 
 const LIP_SYNC_PROFILE_URL =
@@ -117,7 +118,11 @@ export class TtsManager {
   audioDataArray: Uint8Array<ArrayBuffer> | null = null;
   lipsyncNode: WLipSyncAudioNode | null = null;
   masterGain: GainNode | null = null;
+  private streamGain: GainNode | null = null;
   streamDestination: MediaStreamAudioDestinationNode | null = null;
+  private externalOutputAudio: HTMLAudioElement | null = null;
+  private outputMode: TtsOutputMode = 'local-only';
+  private externalOutputDeviceId = '';
   private analyserConnected = false;
 
   onSpeechStarted: (() => void) | null = null;
@@ -234,6 +239,7 @@ export class TtsManager {
     this.audioSource = null;
     this.lipsyncNode = null;
     this.masterGain = null;
+    this.streamGain = null;
     this.streamDestination = null;
     this.audioContext = new (
       window.AudioContext ||
@@ -244,8 +250,10 @@ export class TtsManager {
     this.audioAnalyser.fftSize = 256;
     this.audioAnalyser.smoothingTimeConstant = 0.08;
     this.masterGain = this.audioContext.createGain();
+    this.streamGain = this.audioContext.createGain();
     this.streamDestination = this.audioContext.createMediaStreamDestination();
-    this.masterGain.gain.value = Math.max(0, Math.min(2, this.volume));
+    this.applyOutputGains();
+    this.ensureExternalOutputAudio();
     this.analyserConnected = false;
     this.audioDataArray = new Uint8Array(
       this.audioAnalyser.frequencyBinCount,
@@ -684,7 +692,9 @@ export class TtsManager {
     this.audioDataArray = null;
     this.lipsyncNode = null;
     this.masterGain = null;
+    this.streamGain = null;
     this.streamDestination = null;
+    this.teardownExternalOutputAudio();
     this.analyserConnected = false;
   }
 
@@ -711,13 +721,18 @@ export class TtsManager {
 
   setVolume(value: number) {
     this.volume = Math.max(0, Math.min(2, value));
-    if (this.masterGain) {
-      this.masterGain.gain.value = this.volume;
-    }
+    this.applyOutputGains();
+  }
+
+  setOutputRoute(mode: TtsOutputMode, externalDeviceId = '') {
+    this.outputMode = mode;
+    this.externalOutputDeviceId = externalDeviceId;
+    this.applyOutputGains();
+    this.ensureExternalOutputAudio();
   }
 
   private ensureAnalyserConnected() {
-    if (!this.audioContext || !this.audioAnalyser || !this.masterGain || this.analyserConnected) {
+    if (!this.audioContext || !this.audioAnalyser || !this.masterGain || !this.streamGain || this.analyserConnected) {
       return;
     }
 
@@ -725,7 +740,8 @@ export class TtsManager {
       this.audioAnalyser.connect(this.masterGain);
       this.masterGain.connect(this.audioContext.destination);
       if (this.streamDestination) {
-        this.masterGain.connect(this.streamDestination);
+        this.audioAnalyser.connect(this.streamGain);
+        this.streamGain.connect(this.streamDestination);
       }
       this.analyserConnected = true;
     } catch {
@@ -741,6 +757,7 @@ export class TtsManager {
     if (this.audioContext?.state === 'suspended') {
       await this.audioContext.resume();
     }
+    this.ensureExternalOutputAudio();
 
     return this.audioContext?.state ?? 'closed';
   }
@@ -751,6 +768,42 @@ export class TtsManager {
 
   getOutputStream() {
     return this.streamDestination?.stream ?? null;
+  }
+
+  private applyOutputGains() {
+    if (this.masterGain) {
+      this.masterGain.gain.value =
+        this.outputMode === 'discord-only' || this.outputMode === 'external' ? 0 : this.volume;
+    }
+    if (this.streamGain) {
+      this.streamGain.gain.value = this.volume;
+    }
+  }
+
+  private ensureExternalOutputAudio() {
+    if (!this.streamDestination) return;
+    if (!this.externalOutputAudio) {
+      this.externalOutputAudio = new Audio();
+      this.externalOutputAudio.autoplay = false;
+      this.externalOutputAudio.srcObject = this.streamDestination.stream;
+    }
+    const audio = this.externalOutputAudio;
+    const sinkAudio = audio as HTMLAudioElement & { setSinkId?: (sinkId: string) => Promise<void> };
+    if (sinkAudio.setSinkId) {
+      void sinkAudio.setSinkId(this.externalOutputDeviceId).catch(() => undefined);
+    }
+    if (this.outputMode === 'external') {
+      void audio.play().catch(() => undefined);
+    } else {
+      audio.pause();
+    }
+  }
+
+  private teardownExternalOutputAudio() {
+    if (!this.externalOutputAudio) return;
+    this.externalOutputAudio.pause();
+    this.externalOutputAudio.srcObject = null;
+    this.externalOutputAudio = null;
   }
 
   private async playAudioChunk(chunkData: ChunkData) {
@@ -792,9 +845,7 @@ export class TtsManager {
       if ('mozPreservesPitch' in audioWithPitch) {
         audioWithPitch.mozPreservesPitch = true;
       }
-      if (this.masterGain) {
-        this.masterGain.gain.value = this.volume;
-      }
+      this.applyOutputGains();
 
       try {
         this.disconnectAudioSource();

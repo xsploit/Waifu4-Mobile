@@ -29,6 +29,15 @@ describe('DiscordVoiceRuntime', () => {
     connection.receiver = {};
     let destroyed = false;
     connection.destroy = () => { destroyed = true; };
+    const output = {
+      attached: [] as unknown[],
+      detached: 0,
+      stopped: 0,
+      attach(target: unknown) { this.attached.push(target); },
+      detach() { this.detached += 1; },
+      stop() { this.stopped += 1; },
+      tryEnqueue: () => true,
+    };
     const transcriber = new DiscordTranscriber({ transcribe: async () => ({ model: 'test', text: 'ok' }) });
     const runtime = createDiscordVoiceRuntime({
       channelId: 'channel',
@@ -42,6 +51,7 @@ describe('DiscordVoiceRuntime', () => {
       },
       token: 'test-token',
       transcriber,
+      voiceOutput: output as never,
     });
 
     await runtime.start();
@@ -53,6 +63,8 @@ describe('DiscordVoiceRuntime', () => {
       selfMute: false,
     });
     expect(runtime.status()).toMatchObject({ connected: true, started: true });
+    expect(output.attached).toEqual([connection]);
+    expect(runtime.tryEnqueueOutput({ audio: Buffer.alloc(0), chunkIndex: 0, sampleRate: 48_000, sessionId: 'session', utteranceId: 'utterance' })).toBe(true);
     connection.emit('stateChange', { status: VoiceConnectionStatus.Ready }, { status: VoiceConnectionStatus.Disconnected });
     await new Promise((resolve) => setTimeout(resolve, 0));
     expect(joined).toHaveLength(1);
@@ -60,6 +72,8 @@ describe('DiscordVoiceRuntime', () => {
     runtime.stop();
     expect(destroyed).toBe(true);
     expect(client.destroyed).toBe(true);
+    expect(output.detached).toBeGreaterThan(0);
+    expect(output.stopped).toBe(1);
   });
 
   it('joins without attaching receive subscriptions when listening is disabled', async () => {

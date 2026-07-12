@@ -78,6 +78,7 @@ describe('chat settings persistence', () => {
       ttsAutoSpeak: false,
       ttsEnabled: true,
       ttsExpressionTagsEnabled: true,
+      ttsOutputMode: 'local+discord',
       ttsPlaybackRate: 1.15,
       ttsProvider: 'fish-speech',
       ttsSimulatedStreaming: false,
@@ -410,6 +411,27 @@ describe('chat settings persistence', () => {
     const loaded = await loadPersistedChatState();
 
     expect(loaded.twitchSettings.streamTranscriptionModel).toBe('openai/whisper-large-v3');
+  });
+
+  it('defaults invalid TTS output modes and keeps valid modes in backup snapshots', async () => {
+    window.localStorage.setItem(
+      STORAGE_KEYS.aiSettings,
+      JSON.stringify({
+        ...createDefaultAiSettings(),
+        ttsOutputMode: 'speaker-and-Discord',
+      }),
+    );
+
+    const loaded = await loadPersistedChatState();
+    const snapshot = normalizePersistedChatStateSnapshot({
+      aiSettings: {
+        ...createDefaultAiSettings(),
+        ttsOutputMode: 'external',
+      },
+    });
+
+    expect(loaded.aiSettings.ttsOutputMode).toBe('local-only');
+    expect(snapshot.aiSettings.ttsOutputMode).toBe('external');
   });
 
   it('persists Discord settings and clamps imported voice controls defensively', async () => {
