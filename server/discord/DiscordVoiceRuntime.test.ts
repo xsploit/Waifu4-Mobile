@@ -61,4 +61,33 @@ describe('DiscordVoiceRuntime', () => {
     expect(destroyed).toBe(true);
     expect(client.destroyed).toBe(true);
   });
+
+  it('joins without attaching receive subscriptions when listening is disabled', async () => {
+    const client = new TestClient();
+    const connection = new EventEmitter() as EventEmitter & { destroy: () => void; receiver: object; state: { status: VoiceConnectionStatus } };
+    connection.state = { status: VoiceConnectionStatus.Ready };
+    connection.receiver = {};
+    connection.destroy = () => {};
+    let receiveCreated = 0;
+    const runtime = createDiscordVoiceRuntime({
+      channelId: 'channel',
+      createClient: () => client,
+      createReceive: () => {
+        receiveCreated += 1;
+        return { attach() {}, detach() {}, stopUser() {}, subscriptionCount: 0 } as never;
+      },
+      entersReady: async (target) => target,
+      guildId: 'guild',
+      join: () => connection as never,
+      listen: false,
+      token: 'test-token',
+      transcriber: new DiscordTranscriber({ transcribe: async () => ({ model: 'test', text: 'ok' }) }),
+    });
+
+    await runtime.start();
+
+    expect(receiveCreated).toBe(0);
+    expect(runtime.status()).toMatchObject({ connected: true, listening: false, subscriptions: 0 });
+    runtime.stop();
+  });
 });

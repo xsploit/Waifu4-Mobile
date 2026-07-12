@@ -12,6 +12,7 @@ import {
   DEFAULT_OPENROUTER_MODEL,
   DEFAULT_PERSONA,
   createDefaultAiSettings,
+  createDefaultDiscordSettings,
   createDefaultPersonaVoiceBindings,
   createDefaultRelationshipMemory,
   createDefaultPersonas,
@@ -97,6 +98,7 @@ import {
 import {
   buildChatTurnMemoryMessage,
   chatTurnToChatMessage,
+  createDiscordChatTurn,
   createLocalChatTurn,
   createTwitchChatTurn,
   formatChatTurns,
@@ -130,6 +132,8 @@ import type {
   AiSettings,
   AiProxyHealth,
   ChatMessage,
+  DiscordConnectionStatus,
+  DiscordSettings,
   PersistedChatState,
   PersonaDraft,
   PersonaProfile,
@@ -201,7 +205,9 @@ import {
   getOverlaySocketProtocols,
   getOverlaySocketUrl,
   parseOverlayServerEvent,
+  parseDiscordStatus,
   shouldConnectOverlaySocket,
+  type OverlayDiscordTranscript,
   type OverlayServerEvent,
 } from './lib/stream/overlay-events';
 import { DirectTwitchIrcClient, type DirectTwitchChatMessage } from './lib/twitch/direct-irc';
@@ -748,6 +754,11 @@ function decodeAiProxyAudioEvent(event: AiProxyStreamEvent): RemoteTtsAudioChunk
   };
 }
 
+function getDiscordApiUrl(pathname: '/api/discord/status' | '/api/discord/connect' | '/api/discord/disconnect') {
+  const desktopUrl = getDesktopBackendUrl(pathname);
+  return desktopUrl || new URL(pathname, window.location.href).toString();
+}
+
 function isAssistantReplyMetadata(value: unknown): value is AssistantReplyMetadata {
   if (!value || typeof value !== 'object') {
     return false;
@@ -1041,6 +1052,49 @@ async function readAiProxyStream(
     replyMetadata: finalReplyMetadata,
     text: finalText || streamedText.trim(),
   };
+}
+
+async function getBrowserDiscordAsrApiKey(
+  provider: DiscordSettings['asrProvider'],
+  providerKeyVaultWorkspaceId?: string,
+) {
+  if (provider === 'fish') {
+    return getBrowserProviderApiKey({
+      keyName: 'fishSpeech.apiKey',
+      provider: 'fish_speech',
+      providerKeyVaultWorkspaceId,
+    });
+  }
+  if (provider === 'openrouter') {
+    return getBrowserProviderApiKey({
+      keyName: 'openrouter.apiKey',
+      provider: 'openrouter',
+      providerKeyVaultWorkspaceId,
+    });
+  }
+  return getBrowserProviderApiKey({
+    keyName: 'aiGateway.apiKey',
+    provider: 'custom',
+    providerKeyVaultWorkspaceId,
+  });
+}
+
+async function buildDiscordConnectHeaders(
+  settings: DiscordSettings,
+  providerKeyVaultWorkspaceId?: string,
+) {
+  const headers: Record<string, string> = {
+    'Content-Type': 'application/json',
+    'x-yourwifey-discord-token': settings.botToken,
+  };
+  const providerApiKey = await getBrowserDiscordAsrApiKey(
+    settings.asrProvider,
+    providerKeyVaultWorkspaceId,
+  );
+  if (providerApiKey) {
+    headers['x-yourwifey-asr-provider-key'] = providerApiKey;
+  }
+  return headers;
 }
 
 function buildOpenRouterRouting(settings: Pick<AiSettings, 'llmProvider' | 'openRouterAllowFallbacks' | 'openRouterProviderSlugs' | 'openRouterRoutingMode'>) {
@@ -1760,6 +1814,14 @@ function getTwitchConversationStateKey(channel: string, persona: PersonaProfile 
   return `twitch:${normalizeStateKeyPart(channel, DIRECT_TWITCH_CHANNEL || 'subsect')}:persona:${getPersonaStateKey(persona)}`;
 }
 
+function getDiscordConversationStateKey(
+  guildId: string,
+  voiceChannelId: string,
+  persona: PersonaProfile | null,
+) {
+  return `discord:guild:${normalizeStateKeyPart(guildId, 'unknown')}:voice:${normalizeStateKeyPart(voiceChannelId, 'unknown')}:persona:${getPersonaStateKey(persona)}`;
+}
+
 function getLocalConversationStateKey(persona: PersonaProfile | null) {
   return `local:persona:${getPersonaStateKey(persona)}`;
 }
@@ -1847,15 +1909,22 @@ function buildChatAiPrompt(
     .join(', ');
   const localControllerNickname = persona?.userNickname.trim();
   const isTwitchTurn = job.messages.some((turn) => turn.source === 'twitch');
+  const isDiscordTurn = job.messages.some((turn) => turn.source === 'discord');
   const identityContext = [
-    `Current chat room: ${isTwitchTurn ? `#${channelName}` : 'local chat box'}.`,
+    `Current chat room: ${
+      isTwitchTurn ? `#${channelName}` : isDiscordTurn ? `Discord voice channel ${channelName}` : 'local chat box'
+    }.`,
     isTwitchTurn
       ? `You are ${personaName}, the stream avatar/bot. Viewers mention you as ${mentionTags}.`
-      : `You are ${personaName}, the local desktop avatar. The local chat box is a direct one-on-one conversation.`,
+      : isDiscordTurn
+        ? `You are ${personaName}, participating in a Discord guild voice conversation.`
+        : `You are ${personaName}, the local desktop avatar. The local chat box is a direct one-on-one conversation.`,
     localControllerNickname
       ? isTwitchTurn
         ? `The local controller/stream owner nickname is "${localControllerNickname}", but Twitch messages can come from other participants.`
-        : `The local controller nickname is "${localControllerNickname}". Talk to them directly in second person.`
+        : isDiscordTurn
+          ? `The local controller nickname is "${localControllerNickname}", but Discord members can be other participants.`
+          : `The local controller nickname is "${localControllerNickname}". Talk to them directly in second person.`
       : null,
     'Do not assume the current speaker is the local controller unless speaker context says they are local, trusted, the broadcaster, or a moderator.',
   ]
@@ -1864,7 +1933,12 @@ function buildChatAiPrompt(
 
   if (job.mode === 'direct') {
     const [target] = job.messages;
-    const sourceLabel = target?.source === 'local' ? 'Local chat' : 'Live Twitch chat';
+    const sourceLabel =
+      target?.source === 'local'
+        ? 'Local chat'
+        : target?.source === 'discord'
+          ? 'Discord guild voice chat'
+          : 'Live Twitch chat';
     return [
       `${sourceLabel}: direct message for ${personaName}.`,
       identityContext,
@@ -1876,7 +1950,11 @@ function buildChatAiPrompt(
           ? 'Speaker context: the target is the local chat box participant/controller. Reply directly to them, not to an audience.'
           : target?.isMod
             ? 'Speaker context: the target is a Twitch moderator; reply to that display name, not the local controller nickname.'
-            : 'Speaker context: the target is a Twitch chatter; reply to that display name, not the local controller nickname.',
+            : target?.source === 'discord'
+              ? target.isTrustedController
+                ? 'Speaker context: the target is a trusted Discord controller. Reply to that display name, not the local controller nickname.'
+                : 'Speaker context: the target is a Discord member. Reply to that display name, not the local controller nickname.'
+              : 'Speaker context: the target is a Twitch chatter; reply to that display name, not the local controller nickname.',
       job.firstTimeChatter
         ? 'This is the first message seen from this viewer in this browser session; greet them naturally.'
         : null,
@@ -2048,6 +2126,12 @@ function App() {
   const [chatDisplayOverrides, setChatDisplayOverrides] = useState<Record<string, string>>({});
   const [twitchChannel, setTwitchChannel] = useState(DIRECT_TWITCH_CHANNEL);
   const [twitchSettings, setTwitchSettings] = useState<TwitchSettings>(createDefaultTwitchSettings);
+  const [discordSettings, setDiscordSettings] = useState<DiscordSettings>(
+    createDefaultDiscordSettings,
+  );
+  const [discordConnectionStatus, setDiscordConnectionStatus] =
+    useState<DiscordConnectionStatus>('disconnected');
+  const [discordStatusDetail, setDiscordStatusDetail] = useState('Discord bridge idle.');
   const [twitchConnectionLabel, setTwitchConnectionLabel] = useState(
     DIRECT_TWITCH_CHAT_ENABLED ? 'Connecting' : 'Offline',
   );
@@ -2139,6 +2223,7 @@ function App() {
   const relationshipMemoriesRef = useRef<Record<string, RelationshipMemory>>({});
   const aiSettingsRef = useRef<AiSettings>(createDefaultAiSettings());
   const twitchSettingsRef = useRef<TwitchSettings>(createDefaultTwitchSettings());
+  const discordSettingsRef = useRef<DiscordSettings>(createDefaultDiscordSettings());
   const availableModelsRef = useRef<string[]>([]);
   const availableModelMetadataRef = useRef<Map<string, AppModelMetadata>>(new Map());
   const sequencerSettingsRef = useRef(createDefaultSequencerSettings());
@@ -2151,6 +2236,9 @@ function App() {
   const twitchActiveChattersRef = useRef<Map<string, number>>(new Map());
   const twitchKnownUsersRef = useRef<Set<string>>(new Set());
   const twitchContextRef = useRef<ChatTurn[]>([]);
+  const discordContextByVoiceRef = useRef<Record<string, ChatTurn[]>>({});
+  const discordTranscriptIdsRef = useRef<Set<string>>(new Set());
+  const didDiscordAutoConnectRef = useRef(false);
   const twitchBatchRef = useRef<ChatTurn[]>([]);
   const twitchAiQueueRef = useRef<ChatAiJob[]>([]);
   const enqueueChatAiJobRef = useRef<(job: ChatAiJob) => void>(() => {});
@@ -2591,6 +2679,10 @@ function App() {
   useEffect(() => {
     twitchSettingsRef.current = twitchSettings;
   }, [twitchSettings]);
+
+  useEffect(() => {
+    discordSettingsRef.current = discordSettings;
+  }, [discordSettings]);
 
   useEffect(() => {
     twitchStreamTranscriptsRef.current = twitchStreamTranscripts;
@@ -4171,6 +4263,7 @@ function App() {
       setActiveTab(persistedState.activeTab);
       setTwitchChannel(hydratedTwitchChannel);
       setTwitchSettings(persistedState.twitchSettings);
+      setDiscordSettings(persistedState.discordSettings ?? createDefaultDiscordSettings());
       setEmotionTelemetryEvents(persistedState.emotionTelemetryEvents);
       setCurrentBundledModelId(persistedState.currentBundledModelId || DEFAULT_BUNDLED_MODEL_ID);
       setCurrentCustomVrmModelId(persistedState.currentCustomVrmModelId);
@@ -4258,6 +4351,7 @@ function App() {
           emotionTelemetryEvents,
           twitchChannel,
           twitchSettings,
+          discordSettings,
           sequencerSettings,
           visualSettings,
         };
@@ -4313,6 +4407,7 @@ function App() {
     sequencerSettings,
     twitchChannel,
     twitchSettings,
+    discordSettings,
     visualSettings,
     voiceLabVoices,
   ]);
@@ -6056,7 +6151,10 @@ function App() {
       const settings = aiSettingsRef.current;
       const currentTwitchSettings = twitchSettingsRef.current;
       const persona = activePersona ?? DEFAULT_PERSONA;
+      const targetMessage = job.messages[0];
       const channel = directTwitchClientRef.current?.channel ?? twitchChannel;
+      const conversationChannel =
+        targetMessage?.source === 'discord' ? targetMessage.voiceChannelId : channel;
       const providerModels = getProviderModelPool(settings.llmProvider, availableModelsRef.current);
       const selectedModel = pickAvailableModel(
         settings.model,
@@ -6072,17 +6170,19 @@ function App() {
       const assistantResponseFormat = replyFormat === 'structured'
         ? ASSISTANT_REPLY_JSON_FORMAT
         : undefined;
-      const targetMessage = job.messages[0];
       const prompt = buildChatAiPrompt(
         job,
         persona,
-        channel,
+        conversationChannel,
         settings.replyLength,
       );
-      const streamTranscriptContext = formatTwitchStreamTranscriptContext(
-        twitchStreamTranscriptsRef.current,
-        currentTwitchSettings.streamTranscriptionContextLimit,
-      );
+      const streamTranscriptContext =
+        targetMessage?.source === 'discord'
+          ? ''
+          : formatTwitchStreamTranscriptContext(
+              twitchStreamTranscriptsRef.current,
+              currentTwitchSettings.streamTranscriptionContextLimit,
+            );
       const currentTurnContext = [prompt, streamTranscriptContext].filter(Boolean).join('\n\n');
       const userContent = buildChatTurnMemoryMessage(job.mode, job.messages);
       const userMessage = targetMessage
@@ -6091,15 +6191,38 @@ function App() {
       const stateKey =
         targetMessage?.source === 'local'
           ? getLocalConversationStateKey(persona)
-          : getTwitchConversationStateKey(channel, persona);
-      const memorySnapshot = getScopedRelationshipMemory(stateKey);
-      const requestHistory = trimChatHistory([...chatHistoryRef.current]);
-      const memoryHistory = trimChatHistory([...chatHistoryRef.current, userMessage]);
+          : targetMessage?.source === 'discord'
+            ? getDiscordConversationStateKey(
+                targetMessage.guildId,
+                targetMessage.voiceChannelId,
+                persona,
+              )
+            : getTwitchConversationStateKey(channel, persona);
+      const scopedConversation = resolveScopedConversationSnapshot({
+        chatHistories: chatHistoriesRef.current,
+        fallbackChatHistory: chatHistoryRef.current,
+        fallbackRelationshipMemory: relationshipMemoryRef.current,
+        relationshipMemories: relationshipMemoriesRef.current,
+        stateKey,
+      });
+      const memorySnapshot = scopedConversation.relationshipMemory;
+      const requestHistory = trimChatHistory([...scopedConversation.chatHistory]);
+      const memoryHistory = trimChatHistory(
+        targetMessage?.source === 'discord'
+          ? requestHistory
+          : [...requestHistory, userMessage],
+      );
       const assistantMessage = createChatMessage('assistant', '');
       const speechPlayer = createStreamingAssistantPlayer(
         assistantMessage,
         settings.ttsEnabled && settings.ttsAutoSpeak,
-        `${persona.name} ${targetMessage?.source === 'local' ? 'local chat' : 'Twitch'} reply`,
+        `${persona.name} ${
+          targetMessage?.source === 'local'
+            ? 'local chat'
+            : targetMessage?.source === 'discord'
+              ? 'Discord'
+              : 'Twitch'
+        } reply`,
       );
       const ttsBridge =
         settings.ttsEnabled &&
@@ -6119,6 +6242,22 @@ function App() {
           assistantMessage,
         ]);
       });
+      if (targetMessage?.source === 'discord') {
+        setChatHistories((current) => {
+          const scopedHistory = current[stateKey] ?? [];
+          const next = {
+            ...current,
+            [stateKey]: trimChatHistory([
+              ...scopedHistory,
+              ...(scopedHistory.some((message) => message.id === assistantMessage.id)
+                ? []
+                : [assistantMessage]),
+            ]),
+          };
+          chatHistoriesRef.current = next;
+          return next;
+        });
+      }
 
       try {
         setAssistantReplyLock(true);
@@ -6211,14 +6350,17 @@ function App() {
           turnText: userContent.slice(0, 600),
           updatedAt: memoryPromptUpdatedAt,
         });
-        const promptVisionFrame = getFreshTwitchStreamFrameForPrompt({
-          frame: twitchStreamFrameRef.current,
-          llmProvider: settings.llmProvider,
-          maxAgeSeconds: currentTwitchSettings.streamVisionMaxAgeSeconds,
-          model: selectedModel,
-          modelMetadata: availableModelMetadataRef.current.get(selectedModel) ?? null,
-          visionEnabled: currentTwitchSettings.streamVisionContextEnabled,
-        });
+        const promptVisionFrame =
+          targetMessage?.source === 'discord'
+            ? null
+            : getFreshTwitchStreamFrameForPrompt({
+                frame: twitchStreamFrameRef.current,
+                llmProvider: settings.llmProvider,
+                maxAgeSeconds: currentTwitchSettings.streamVisionMaxAgeSeconds,
+                model: selectedModel,
+                modelMetadata: availableModelMetadataRef.current.get(selectedModel) ?? null,
+                visionEnabled: currentTwitchSettings.streamVisionContextEnabled,
+              });
         const promptBuild = await buildChatCompletionMessagesWithReceipt({
             animationCatalogContext: buildAnimationCatalogInstruction(
               sequencerSettingsRef.current.playlist,
@@ -6240,8 +6382,13 @@ function App() {
                 .map((tag) => `@${tag}`)
                 .join(', '),
               chatterThreshold: currentTwitchSettings.directChatterLimit,
-              channel,
-              conversationScope: targetMessage?.source === 'local' ? 'local-chat' : 'twitch-chat',
+              channel: conversationChannel,
+              conversationScope:
+                targetMessage?.source === 'local'
+                  ? 'local-chat'
+                  : targetMessage?.source === 'discord'
+                    ? 'discord-guild-voice-chat'
+                    : 'twitch-chat',
               currentTurnText: userContent,
               displayName: targetMessage?.displayName ?? '',
               firstTimeChatter: job.firstTimeChatter ?? false,
@@ -6257,6 +6404,10 @@ function App() {
               targetIsMod: targetMessage?.isMod ?? false,
               targetTwitchDisplayName: targetMessage?.displayName ?? '',
               targetTwitchLogin: targetMessage?.login ?? '',
+              guildId: targetMessage?.source === 'discord' ? targetMessage.guildId : '',
+              voiceChannelId:
+                targetMessage?.source === 'discord' ? targetMessage.voiceChannelId : '',
+              userId: targetMessage?.source === 'discord' ? targetMessage.userId : '',
               turnKind: job.mode,
             },
             ttsExpressionTagsEnabled: settings.ttsExpressionTagsEnabled,
@@ -6352,6 +6503,13 @@ function App() {
             ),
           ),
         );
+        if (targetMessage?.source === 'discord') {
+          setChatHistories((current) => {
+            const next = { ...current, [stateKey]: updatedHistory };
+            chatHistoriesRef.current = next;
+            return next;
+          });
+        }
         const shouldRecordDurableMemory = shouldIngestChatJobToGrillo(
           job.mode,
           job.messages,
@@ -6508,6 +6666,194 @@ function App() {
   useEffect(() => {
     enqueueChatAiJobRef.current = enqueueTwitchAiJob;
   }, [enqueueTwitchAiJob]);
+
+  const refreshDiscordStatus = useCallback(async () => {
+    try {
+      const response = await fetch(getDiscordApiUrl('/api/discord/status'), {
+        cache: 'no-store',
+      });
+      if (!response.ok) {
+        throw new Error(`Discord status request failed (${response.status}).`);
+      }
+      const status = parseDiscordStatus(await response.json());
+      if (!status) {
+        throw new Error('Discord status response was invalid.');
+      }
+      setDiscordConnectionStatus(status.status);
+      setDiscordStatusDetail(status.detail || 'Discord bridge status updated.');
+    } catch (error) {
+      setDiscordConnectionStatus('error');
+      setDiscordStatusDetail(
+        error instanceof Error ? error.message : 'Could not read Discord bridge status.',
+      );
+    }
+  }, []);
+
+  const handleConnectDiscord = useCallback(async () => {
+    const settings = discordSettingsRef.current;
+    if (!settings.botToken.trim()) {
+      setDiscordConnectionStatus('error');
+      setDiscordStatusDetail('A Discord bot token is required to connect.');
+      return;
+    }
+
+    setDiscordConnectionStatus('connecting');
+    setDiscordStatusDetail('Connecting Discord voice bridge...');
+    try {
+      const {
+        botToken: _botToken,
+        connectOnStart: _connectOnStart,
+        enabled: _enabled,
+        interruptionPolicy: _interruptionPolicy,
+        speakEnabled: _speakEnabled,
+        trustedControllerUserIds: _trustedControllerUserIds,
+        ...configuration
+      } = settings;
+      const response = await fetch(getDiscordApiUrl('/api/discord/connect'), {
+        body: JSON.stringify(configuration),
+        headers: await buildDiscordConnectHeaders(settings, providerKeyVaultWorkspaceId),
+        method: 'POST',
+      });
+      if (!response.ok) {
+        throw new Error(`Discord connect request failed (${response.status}).`);
+      }
+      const status = parseDiscordStatus(await response.json().catch(() => null));
+      setDiscordConnectionStatus(status?.status ?? 'connected');
+      setDiscordStatusDetail(status?.detail || 'Discord voice bridge connected.');
+    } catch (error) {
+      setDiscordConnectionStatus('error');
+      setDiscordStatusDetail(
+        error instanceof Error ? error.message : 'Could not connect the Discord voice bridge.',
+      );
+    }
+  }, [providerKeyVaultWorkspaceId]);
+
+  const handleDisconnectDiscord = useCallback(
+    async ({ keepalive = false, silent = false }: { keepalive?: boolean; silent?: boolean } = {}) => {
+      try {
+        const response = await fetch(getDiscordApiUrl('/api/discord/disconnect'), {
+          headers: { 'Content-Type': 'application/json' },
+          keepalive,
+          method: 'POST',
+        });
+        if (!response.ok) {
+          throw new Error(`Discord disconnect request failed (${response.status}).`);
+        }
+        if (!silent) {
+          const status = parseDiscordStatus(await response.json().catch(() => null));
+          setDiscordConnectionStatus(status?.status ?? 'disconnected');
+          setDiscordStatusDetail(status?.detail || 'Discord voice bridge disconnected.');
+        }
+      } catch (error) {
+        if (!silent) {
+          setDiscordConnectionStatus('error');
+          setDiscordStatusDetail(
+            error instanceof Error ? error.message : 'Could not disconnect the Discord voice bridge.',
+          );
+        }
+      }
+    },
+    [],
+  );
+
+  const handleDiscordTranscript = useCallback(
+    (transcript: OverlayDiscordTranscript) => {
+      const settings = discordSettingsRef.current;
+      if (!settings.enabled || !settings.listenEnabled || discordTranscriptIdsRef.current.has(transcript.id)) {
+        return;
+      }
+      discordTranscriptIdsRef.current.add(transcript.id);
+      if (discordTranscriptIdsRef.current.size > 512) {
+        const oldestId = discordTranscriptIdsRef.current.values().next().value;
+        if (oldestId) {
+          discordTranscriptIdsRef.current.delete(oldestId);
+        }
+      }
+
+      const persona = activePersonaRef.current ?? DEFAULT_PERSONA;
+      const stateKey = getDiscordConversationStateKey(
+        transcript.guildId,
+        transcript.voiceChannelId,
+        persona,
+      );
+      const turn = createDiscordChatTurn({
+        displayName: transcript.displayName,
+        guildId: transcript.guildId,
+        id: transcript.id,
+        login: transcript.login,
+        text: transcript.text,
+        timestamp: transcript.timestamp,
+        trustedController: settings.trustedControllerUserIds.includes(transcript.userId),
+        userId: transcript.userId,
+        voiceChannelId: transcript.voiceChannelId,
+      });
+      const contextLimit = Math.max(1, Math.min(twitchSettingsRef.current.contextLimit, 120));
+      const recentContext = [
+        ...(discordContextByVoiceRef.current[stateKey] ?? []),
+        turn,
+      ].slice(-contextLimit);
+      discordContextByVoiceRef.current[stateKey] = recentContext;
+      const contextStateKeys = Object.keys(discordContextByVoiceRef.current);
+      if (contextStateKeys.length > 24) {
+        delete discordContextByVoiceRef.current[contextStateKeys[0]!];
+      }
+
+      recordRawChatMemoryTurns(stateKey, [turn]);
+      const userMessage = chatTurnToChatMessage(turn);
+      setChatHistory((current) =>
+        current.some((message) => message.id === userMessage.id)
+          ? current
+          : trimChatHistory([...current, userMessage]),
+      );
+      setChatHistories((current) => {
+        const scopedHistory = current[stateKey] ?? [];
+        const next = {
+          ...current,
+          [stateKey]: scopedHistory.some((message) => message.id === userMessage.id)
+            ? scopedHistory
+            : trimChatHistory([...scopedHistory, userMessage]),
+        };
+        chatHistoriesRef.current = next;
+        return next;
+      });
+      enqueueTwitchAiJob({
+        activeChatterCount: 1,
+        context: recentContext,
+        id: `discord-direct-${turn.id}`,
+        messages: [turn],
+        mode: 'direct',
+      });
+    },
+    [enqueueTwitchAiJob, recordRawChatMemoryTurns],
+  );
+
+  useEffect(() => {
+    if (!hydrated) {
+      return;
+    }
+    void refreshDiscordStatus();
+  }, [hydrated, refreshDiscordStatus]);
+
+  useEffect(() => {
+    if (
+      !hydrated ||
+      didDiscordAutoConnectRef.current ||
+      !discordSettings.enabled ||
+      !discordSettings.connectOnStart
+    ) {
+      return;
+    }
+    didDiscordAutoConnectRef.current = true;
+    void handleConnectDiscord();
+  }, [discordSettings.connectOnStart, discordSettings.enabled, handleConnectDiscord, hydrated]);
+
+  useEffect(() => {
+    const disconnectOnUnload = () => {
+      void handleDisconnectDiscord({ keepalive: true, silent: true });
+    };
+    window.addEventListener('pagehide', disconnectOnUnload);
+    return () => window.removeEventListener('pagehide', disconnectOnUnload);
+  }, [handleDisconnectDiscord]);
 
   const flushTwitchBatch = useCallback(
     (reason: 'count' | 'timer') => {
@@ -6747,6 +7093,17 @@ function App() {
           return;
         }
 
+        if (parsed.type === 'discord-transcript') {
+          handleDiscordTranscript(parsed.payload);
+          return;
+        }
+
+        if (parsed.type === 'discord-status') {
+          setDiscordConnectionStatus(parsed.payload.status);
+          setDiscordStatusDetail(parsed.payload.detail || 'Discord bridge status updated.');
+          return;
+        }
+
         if (parsed.type === 'chat:message') {
           const content = `[Twitch] ${parsed.payload.displayName}: ${parsed.payload.text}`;
           setChatHistory((current) =>
@@ -6852,6 +7209,7 @@ function App() {
     activePersona?.name,
     appendSystemMessage,
     createStreamingSpeechPlayer,
+    handleDiscordTranscript,
     handleOverlayCommand,
     playAssistantMetadataAnimation,
     playAssistantResponse,
@@ -7016,6 +7374,7 @@ function App() {
         setCurrentCustomVrmModelId(next.currentCustomVrmModelId);
         setTwitchChannel(next.twitchChannel);
         setTwitchSettings(next.twitchSettings);
+        setDiscordSettings(next.discordSettings ?? createDefaultDiscordSettings());
         setSequencerSettings(next.sequencerSettings);
         setVisualSettings(next.visualSettings);
 
@@ -7233,6 +7592,9 @@ function App() {
               messageCount={chatHistory.length}
               currentBundledModelId={currentBundledModelId}
               currentCustomVrmModelId={currentCustomVrmModelId}
+              discordConnectionStatus={discordConnectionStatus}
+              discordSettings={discordSettings}
+              discordStatusDetail={discordStatusDetail}
               emotionTelemetryEvents={emotionTelemetryEvents}
               vrmTelemetry={vrmTelemetry}
               localTransferStatus={localTransferStatus}
@@ -7326,6 +7688,12 @@ function App() {
               onApplyPersonaVoice={handleApplyPersonaVoice}
               onCreateVoiceLabProviderVoice={handleCreateVoiceLabProviderVoice}
               onDeleteVoiceLabVoice={handleDeleteVoiceLabVoice}
+              onConnectDiscord={() => {
+                void handleConnectDiscord();
+              }}
+              onDisconnectDiscord={() => {
+                void handleDisconnectDiscord();
+              }}
               onDesignVoiceLabProviderVoice={handleDesignVoiceLabProviderVoice}
               onPublishDesignedVoiceLabProviderVoice={handlePublishDesignedVoiceLabProviderVoice}
               onRefreshRemoteVoices={(provider) => {
@@ -7395,6 +7763,7 @@ function App() {
               memoryAgentPendingCounts={memoryAgentPendingCounts}
               sequencerSettings={sequencerSettings}
               setAiSettings={setAiSettings}
+              setDiscordSettings={setDiscordSettings}
               setSequencerSettings={setSequencerSettings}
               setTwitchSettings={setTwitchSettings}
               setVisualSettings={setVisualSettings}

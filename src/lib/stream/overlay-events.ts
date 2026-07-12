@@ -1,11 +1,46 @@
 import { getDesktopOverlaySocketUrl } from '../desktop/runtime';
 import type { StreamBotEvent, StreamTwitchChatMessage, StreamTwitchMembershipEvent } from '../../shared/streamEvents';
+import type { DiscordConnectionStatus } from '../chat/types';
 
 export type OverlayTwitchChatMessage = StreamTwitchChatMessage;
 
 export type OverlayTwitchMembershipEvent = StreamTwitchMembershipEvent;
 
-export type OverlayServerEvent = StreamBotEvent<OverlayTwitchChatMessage, OverlayTwitchMembershipEvent>;
+export type OverlayDiscordTranscript = {
+  displayName: string;
+  guildId: string;
+  id: string;
+  login: string;
+  text: string;
+  timestamp: number;
+  userId: string;
+  voiceChannelId: string;
+};
+
+export type OverlayDiscordStatus = {
+  detail: string;
+  status: DiscordConnectionStatus;
+};
+
+type DiscordTranscriptServerEvent = {
+  type: 'discord-transcript';
+  payload: OverlayDiscordTranscript;
+};
+
+type DiscordStatusServerEvent = {
+  type: 'discord-status';
+  payload: OverlayDiscordStatus;
+};
+
+type BaseOverlayServerEvent = Exclude<
+  StreamBotEvent<OverlayTwitchChatMessage, OverlayTwitchMembershipEvent>,
+  { type: 'discord-transcript' | 'discord-status' | 'discord-error' }
+>;
+
+export type OverlayServerEvent =
+  | BaseOverlayServerEvent
+  | DiscordTranscriptServerEvent
+  | DiscordStatusServerEvent;
 
 function getConfiguredOverlaySocketUrl() {
   return (
@@ -116,8 +151,95 @@ export function getOverlaySocketUrl() {
 export function parseOverlayServerEvent(raw: string): OverlayServerEvent | null {
   try {
     const parsed = JSON.parse(raw) as Partial<OverlayServerEvent>;
+    if (parsed.type === 'discord-transcript') {
+      const transcript = parseDiscordTranscript(parsed.payload);
+      return transcript ? { type: parsed.type, payload: transcript } : null;
+    }
+    if (parsed.type === 'discord-status') {
+      const status = parseDiscordStatus(parsed.payload);
+      return status ? { type: parsed.type, payload: status } : null;
+    }
     return typeof parsed.type === 'string' ? (parsed as OverlayServerEvent) : null;
   } catch {
     return null;
   }
+}
+
+export function parseDiscordStatus(value: unknown): OverlayDiscordStatus | null {
+  if (!isRecord(value)) {
+    return null;
+  }
+
+  const statusSource = isRecord(value.status) ? value.status : value;
+
+  const status = normalizeDiscordConnectionStatus(statusSource.status, statusSource.connected);
+  if (!status) {
+    return null;
+  }
+
+  return {
+    detail:
+      readString(statusSource.detail) ??
+      readString(statusSource.message) ??
+      readString(statusSource.error) ??
+      readString(value.error) ??
+      '',
+    status,
+  };
+}
+
+function parseDiscordTranscript(value: unknown): OverlayDiscordTranscript | null {
+  if (!isRecord(value)) {
+    return null;
+  }
+
+  const identity = isRecord(value.identity) ? value.identity : value;
+  const guildId = readString(value.guildId) ?? readString(identity.guildId);
+  const voiceChannelId =
+    readString(value.voiceChannelId) ??
+    readString(value.channelId) ??
+    readString(identity.voiceChannelId) ??
+    readString(identity.channelId);
+  const userId = readString(value.userId) ?? readString(identity.userId);
+  const text = readString(value.text);
+  const timestamp = readTimestamp(value.timestamp);
+
+  if (!guildId || !voiceChannelId || !userId || !text || timestamp === null) {
+    return null;
+  }
+
+  const id =
+    readString(value.id) ??
+    readString(value.transcriptId) ??
+    `discord-${guildId}-${voiceChannelId}-${userId}-${timestamp}`;
+  const login = readString(value.login) ?? readString(identity.username) ?? userId;
+  const displayName =
+    readString(value.displayName) ?? readString(identity.displayName) ?? login;
+
+  return { displayName, guildId, id, login, text, timestamp, userId, voiceChannelId };
+}
+
+function normalizeDiscordConnectionStatus(
+  value: unknown,
+  connected: unknown,
+): DiscordConnectionStatus | null {
+  if (value === 'connecting' || value === 'connected' || value === 'disconnected' || value === 'error') {
+    return value;
+  }
+  if (typeof connected === 'boolean') {
+    return connected ? 'connected' : 'disconnected';
+  }
+  return null;
+}
+
+function readString(value: unknown) {
+  return typeof value === 'string' && value.trim() ? value.trim() : null;
+}
+
+function readTimestamp(value: unknown) {
+  return typeof value === 'number' && Number.isFinite(value) ? value : null;
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null;
 }

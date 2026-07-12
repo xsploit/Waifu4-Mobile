@@ -75,6 +75,38 @@ export type StreamBotEvent<
         target?: TMessage;
       };
     }
+  | {
+      type: 'discord-transcript';
+      payload: {
+        guildId: string;
+        channelId: string;
+        userId: string;
+        displayName?: string;
+        username?: string;
+        text: string;
+        model: string;
+        timestamp: number;
+      };
+    }
+  | {
+      type: 'discord-status';
+      payload: {
+        status: 'disconnected' | 'connecting' | 'connected' | 'error';
+        guildId?: string;
+        channelId?: string;
+        subscriptions?: number;
+        listen?: boolean;
+        message?: string;
+      };
+    }
+  | {
+      type: 'discord-error';
+      payload: {
+        message: string;
+        guildId?: string;
+        channelId?: string;
+      };
+    }
   | { type: 'overlay:command'; payload: StreamOverlayCommand }
   | { type: 'command:response'; payload: { text: string; sendToChat: boolean } }
   | { type: 'system:status'; payload: { level: 'info' | 'warning' | 'error'; message: string } };

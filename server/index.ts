@@ -19,6 +19,7 @@ import { createMemoryRouter } from './memory/routes';
 import { OverlaySocket } from './overlay/OverlaySocket';
 import { createTwitchRouter } from './twitch/routes';
 import { createTwitchRuntime } from './twitch/runtime';
+import { createDiscordRouter, DiscordVoiceController } from './discord/routes';
 import {
   getAllowedDesktopCorsOrigin,
   getDesktopBackendIdentity,
@@ -50,7 +51,7 @@ app.use((req, res, next) => {
       'Access-Control-Allow-Headers',
       typeof req.headers['access-control-request-headers'] === 'string'
         ? req.headers['access-control-request-headers']
-        : 'Content-Type, Authorization, x-yourwifey-llm-key, x-yourwifey-tts-key',
+        : 'Content-Type, Authorization, x-yourwifey-llm-key, x-yourwifey-tts-key, x-yourwifey-discord-token, x-yourwifey-asr-provider-key',
     );
     res.setHeader('Access-Control-Allow-Methods', 'GET,POST,PUT,DELETE,OPTIONS');
     res.setHeader('Access-Control-Max-Age', '86400');
@@ -133,9 +134,13 @@ const overlaySocket = new OverlaySocket(server, (event) => {
   console.log(`[INFO] (${SERVICE_NAME}) overlay client event: ${event.type}`);
 });
 const twitchRuntime = createTwitchRuntime({ overlaySocket });
+const discordController = new DiscordVoiceController({
+  onEvent: (event) => overlaySocket.broadcast(event),
+});
 
 backendRouter.use('/memory', createMemoryRouter());
 backendRouter.use('/twitch', createTwitchRouter(twitchRuntime));
+backendRouter.use('/discord', createDiscordRouter(discordController));
 
 app.use('/', backendRouter);
 app.use('/api', backendRouter);
@@ -169,6 +174,7 @@ async function shutdownBackend() {
   const forceExit = setTimeout(() => process.exit(0), 2500);
   forceExit.unref();
   twitchRuntime.stop();
+  await discordController.disconnect();
   overlaySocket.close();
   await getLadybugMemoryService().close().catch(() => undefined);
   await new Promise<void>((resolve) => server.close(() => resolve()));
@@ -179,5 +185,5 @@ process.once('SIGINT', () => void shutdownBackend());
 process.once('SIGTERM', () => void shutdownBackend());
 
 function isBackendRoute(pathname: string) {
-  return /^\/(?:api|health|desktop|local|ai|tts|memory|twitch|ws)(?:\/|$)/.test(pathname);
+  return /^\/(?:api|health|desktop|local|ai|tts|memory|twitch|discord|ws)(?:\/|$)/.test(pathname);
 }

@@ -8,6 +8,7 @@ export type TranscribeAudioOptions = {
   apiKey: string;
   audio: Uint8Array;
   fetch?: typeof globalThis.fetch;
+  language?: string;
   model: string;
   provider: AudioTranscriptionProvider;
 };
@@ -80,6 +81,7 @@ async function transcribeWithOpenRouter(options: TranscribeAudioOptions): Promis
           data: Buffer.from(options.audio).toString('base64'),
           format: 'wav',
         },
+        ...(options.language?.trim() ? { language: options.language.trim() } : {}),
         model: resolveOpenRouterModel(options.model),
       }),
       headers: {
@@ -107,6 +109,7 @@ async function transcribeWithFish(options: TranscribeAudioOptions): Promise<Audi
     body: JSON.stringify({
       audio: Buffer.from(options.audio).toString('base64'),
       ignore_timestamps: true,
+      ...(options.language?.trim() ? { language: options.language.trim() } : {}),
     }),
     headers: {
       Authorization: `Bearer ${options.apiKey}`,
@@ -138,6 +141,9 @@ async function transcribeWithVercelGateway(options: TranscribeAudioOptions): Pro
     audio: options.audio,
     maxRetries: 0,
     model: gateway.transcription(model),
+    ...(options.language?.trim()
+      ? { providerOptions: { openai: { language: options.language.trim() } } }
+      : {}),
   });
   return {
     model,

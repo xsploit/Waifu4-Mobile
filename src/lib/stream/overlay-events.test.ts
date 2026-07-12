@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { parseOverlayServerEvent, shouldConnectOverlaySocket } from './overlay-events';
+import { parseDiscordStatus, parseOverlayServerEvent, shouldConnectOverlaySocket } from './overlay-events';
 
 describe('overlay socket activation', () => {
   it('listens by default so backend runtime commands can reach the active frontend', () => {
@@ -70,6 +70,59 @@ describe('overlay server events', () => {
         user: 'viewer',
       },
       type: 'twitch:membership',
+    });
+  });
+
+  it('normalizes Discord transcript identity before it reaches the chat pipeline', () => {
+    expect(
+      parseOverlayServerEvent(
+        JSON.stringify({
+          type: 'discord-transcript',
+          payload: {
+            id: 'transcript-1',
+            identity: {
+              channelId: 'voice-7',
+              displayName: 'Server Nickname',
+              guildId: 'guild-42',
+              userId: 'user-99',
+              username: 'subsect',
+            },
+            text: 'hello from voice',
+            timestamp: 1700000000000,
+          },
+        }),
+      ),
+    ).toMatchObject({
+      payload: {
+        displayName: 'Server Nickname',
+        guildId: 'guild-42',
+        login: 'subsect',
+        userId: 'user-99',
+        voiceChannelId: 'voice-7',
+      },
+      type: 'discord-transcript',
+    });
+  });
+
+  it('rejects Discord transcripts without their guild, voice channel, or speaker identity', () => {
+    expect(
+      parseOverlayServerEvent(
+        JSON.stringify({
+          type: 'discord-transcript',
+          payload: { text: 'missing identity', timestamp: 1700000000000 },
+        }),
+      ),
+    ).toBeNull();
+  });
+
+  it('normalizes Discord status payloads from HTTP and websocket runtime updates', () => {
+    expect(parseDiscordStatus({ connected: true, message: 'Voice bridge ready.' })).toEqual({
+      detail: 'Voice bridge ready.',
+      status: 'connected',
+    });
+    expect(parseDiscordStatus({ ok: true, status: { error: 'Voice bridge failed.', status: 'error' } })).toEqual({
+      detail: 'Voice bridge failed.',
+      status: 'error',
     });
   });
 });

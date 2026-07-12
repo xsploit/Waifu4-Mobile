@@ -8,7 +8,7 @@ import {
 } from '@discordjs/voice';
 import { DiscordTranscriber, createDiscordAudioTranscriber, type DiscordTranscriptionConfig, type DiscordVoiceTranscript } from './DiscordTranscriber';
 import { DiscordVoiceReceive, type DiscordVoiceUser } from './DiscordVoiceReceive';
-import type { VoiceUtterance } from './VoiceActivityDetector';
+import type { VoiceActivityDetectorConfig, VoiceUtterance } from './VoiceActivityDetector';
 
 type DiscordClientLike = {
   destroy: () => void | Promise<void>;
@@ -32,6 +32,7 @@ export type DiscordVoiceRuntimeStatus = {
   channelId: string;
   connected: boolean;
   guildId: string;
+  listening: boolean;
   started: boolean;
   subscriptions: number;
 };
@@ -48,13 +49,16 @@ export type DiscordVoiceRuntimeDependencies = {
 export type DiscordVoiceRuntimeOptions = {
   channelId: string;
   guildId: string;
+  listen?: boolean;
   onError?: (error: Error) => void;
+  onStatusChange?: (status: DiscordVoiceRuntimeStatus) => void;
   onTranscript?: (transcript: DiscordVoiceTranscript) => void | Promise<void>;
   readyTimeoutMs?: number;
   reconnectDelayMs?: number;
   token: string;
   transcription?: DiscordTranscriptionConfig;
   transcriber?: DiscordTranscriber;
+  vad?: Partial<Omit<VoiceActivityDetectorConfig, 'sampleRate'>>;
 } & DiscordVoiceRuntimeDependencies;
 
 const DEFAULT_READY_TIMEOUT_MS = 15_000;
@@ -99,6 +103,7 @@ export class DiscordVoiceRuntime {
       channelId: this.options.channelId,
       connected: this.connection?.state.status === VoiceConnectionStatus.Ready,
       guildId: this.options.guildId,
+      listening: this.options.listen ?? true,
       started: this.started,
       subscriptions: this.receive?.subscriptionCount ?? 0,
     };
@@ -111,6 +116,7 @@ export class DiscordVoiceRuntime {
     await this.waitForClientReady();
     this.client.on('voiceStateUpdate', this.handleVoiceStateUpdate);
     this.started = true;
+    this.reportStatus();
     await this.join();
   }
 
@@ -122,6 +128,7 @@ export class DiscordVoiceRuntime {
     this.client.off('voiceStateUpdate', this.handleVoiceStateUpdate);
     this.teardownConnection();
     this.transcriber.close();
+    this.reportStatus();
     void this.client.destroy();
   }
 
@@ -145,18 +152,25 @@ export class DiscordVoiceRuntime {
       connection.on('stateChange', this.handleConnectionStateChange);
       await (this.options.entersReady ?? ((target, timeoutMs) => entersState(target, VoiceConnectionStatus.Ready, timeoutMs)))(connection, this.readyTimeoutMs);
       if (!this.started || this.connection !== connection) return;
+      if (this.options.listen === false) {
+        this.reportStatus();
+        return;
+      }
       const receiveOptions: ConstructorParameters<typeof DiscordVoiceReceive>[1] = {
         getUser: (userId) => this.resolveUser(userId),
         identity: { channelId: this.options.channelId, guildId: this.options.guildId },
         isSelf: (userId) => userId === this.client.user?.id,
         onError: (error) => this.report(error),
         onUtterance: (identity, utterance) => this.enqueueUtterance(identity, utterance),
+        vad: this.options.vad,
       };
       this.receive = (this.options.createReceive ?? ((target, options) => new DiscordVoiceReceive(target.receiver, options)))(connection, receiveOptions);
       this.receive.attach();
+      this.reportStatus();
     } catch (error) {
       this.teardownConnection();
       this.report(error instanceof Error ? error : new Error('Discord voice connection failed.'));
+      this.reportStatus();
       this.scheduleReconnect();
     }
   }
@@ -177,6 +191,7 @@ export class DiscordVoiceRuntime {
     if (newState.status === VoiceConnectionStatus.Disconnected || newState.status === VoiceConnectionStatus.Destroyed) {
       this.receive?.detach();
       this.receive = undefined;
+      this.reportStatus();
       this.scheduleReconnect();
     }
   };
@@ -190,6 +205,7 @@ export class DiscordVoiceRuntime {
     if (!this.started || this.stopping || this.reconnectTimer) return;
     this.reconnectTimer = (this.options.setTimeout ?? globalThis.setTimeout)(() => {
       this.reconnectTimer = undefined;
+      this.reportStatus();
       void this.join();
     }, this.reconnectDelayMs);
   }
@@ -222,6 +238,10 @@ export class DiscordVoiceRuntime {
   private readonly report = (error: Error): void => {
     this.options.onError?.(error);
   };
+
+  private reportStatus(): void {
+    this.options.onStatusChange?.(this.status());
+  }
 }
 
 export function createDiscordVoiceRuntime(options: DiscordVoiceRuntimeOptions): DiscordVoiceRuntime {

@@ -17,6 +17,7 @@ describe('transcribeAudio', () => {
         apiKey: 'openrouter-key',
         audio,
         fetch,
+        language: 'en',
         model: '',
         provider: 'openrouter',
       }),
@@ -33,6 +34,7 @@ describe('transcribeAudio', () => {
     });
     expect(JSON.parse(String(init.body))).toEqual({
       input_audio: { data: audio.toString('base64'), format: 'wav' },
+      language: 'en',
       model: 'openai/whisper-large-v3',
     });
   });
@@ -46,6 +48,7 @@ describe('transcribeAudio', () => {
         apiKey: 'fish-key',
         audio,
         fetch,
+        language: 'ja',
         model: 'ignored',
         provider: 'fish-speech',
       }),
@@ -63,6 +66,7 @@ describe('transcribeAudio', () => {
     expect(JSON.parse(String(init.body))).toEqual({
       audio: audio.toString('base64'),
       ignore_timestamps: true,
+      language: 'ja',
     });
   });
 
