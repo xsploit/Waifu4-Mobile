@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import type { ChatTurn } from './chat-turn';
+import { createDiscordChatTurn, type ChatTurn } from './chat-turn';
 import { createDefaultRelationshipMemory } from './defaults';
 import {
   buildGrilloContextPromptBlock,
@@ -145,6 +145,28 @@ describe('GRILLO client context provenance', () => {
     expect(second.lanes.thoughts.requestedOccurrences).toEqual(
       first.lanes.thoughts.requestedOccurrences,
     );
+  });
+
+  it('derives Discord context scope from the guild and voice channel', () => {
+    const material = buildGrilloContextPromptMaterial({
+      channelHistory: [
+        createDiscordChatTurn({
+          displayName: 'Viewer',
+          guildId: 'guild-42',
+          id: 'discord-msg-1',
+          login: 'viewer',
+          text: 'hello',
+          userId: 'user-99',
+          voiceChannelId: 'voice-7',
+        }),
+      ],
+      persona: null,
+      relationshipMemory: createDefaultRelationshipMemory(),
+      turnContext: { source: 'discord' },
+    });
+
+    expect(material.text).toContain('interface_path: discord/guild-42:voice-7');
+    expect(material.text).toContain('conversation_scope: discord:guild-42:voice-7');
   });
 });
 

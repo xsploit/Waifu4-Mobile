@@ -52,6 +52,32 @@ describe('buildChatCompletionMessages', () => {
     expect(promptText).toContain('runtime_situation');
   });
 
+  it('keeps a trusted Discord controller distinct from the local controller', async () => {
+    const messages = await buildChatCompletionMessages({
+      history: [],
+      persona: HIKARI_PERSONA,
+      relationshipMemory: createDefaultRelationshipMemory(),
+      turnContext: {
+        displayName: 'Subsect Server Nickname',
+        guildId: 'guild-42',
+        isLocal: false,
+        isTrustedController: true,
+        source: 'discord',
+        turnKind: 'direct',
+        userId: 'user-99',
+        voiceChannelId: 'voice-7',
+      },
+    });
+
+    const promptText = messages.map((message) => message.content).join('\n');
+
+    expect(promptText).toContain('Discord trusted controller');
+    expect(promptText).toContain('Discord guild voice chat');
+    expect(promptText).toContain('guild-42');
+    expect(promptText).toContain('voice-7');
+    expect(promptText).toContain('Discord mode is active');
+  });
+
   it('returns byte-identical messages from the receipt-aware builder', async () => {
     const options = {
       history: [],

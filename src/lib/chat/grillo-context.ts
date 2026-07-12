@@ -120,13 +120,17 @@ function buildGrilloContextSections({
   turnContext,
 }: BuildGrilloContextSectionsOptions): GrilloContextSections {
   const turnSource = readTurnContextValue(turnContext, 'source') || inferSource(channelHistory);
-  const conversationScope =
-    readTurnContextValue(turnContext, 'conversationScope') ||
-    (turnSource === 'local' ? 'local-chat' : 'twitch-chat');
   const channel =
     readTurnContextValue(turnContext, 'channel') ||
     channelHistory.find((turn) => turn.channel)?.channel ||
     (turnSource === 'local' ? 'local' : 'unknown');
+  const conversationScope =
+    readTurnContextValue(turnContext, 'conversationScope') ||
+    (turnSource === 'local'
+      ? 'local-chat'
+      : turnSource === 'discord'
+        ? `discord:${normalizePathPart(channel)}`
+        : 'twitch-chat');
   const currentSpeaker =
     readTurnContextValue(turnContext, 'displayName') ||
     channelHistory[channelHistory.length - 1]?.displayName ||
@@ -134,6 +138,8 @@ function buildGrilloContextSections({
   const interfacePath =
     turnSource === 'twitch'
       ? `twitch/${normalizePathPart(channel)}`
+      : turnSource === 'discord'
+        ? `discord/${normalizePathPart(channel)}`
       : `local/${normalizePathPart(currentSpeaker)}`;
   const packet = memoryAdditions?.contextPacket ?? null;
   const useNativePacket = packet !== null;

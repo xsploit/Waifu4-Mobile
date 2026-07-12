@@ -69,20 +69,29 @@ function serializeTurnMetadataContext({
     persona?.userNickname.trim() ||
     'current user';
   const isLocal = readTurnContextBoolean(turnContext, 'isLocal') || source === 'local';
+  const isDiscord = source === 'discord';
   const isTrustedController = readTurnContextBoolean(turnContext, 'isTrustedController');
   const isBroadcaster = readTurnContextBoolean(turnContext, 'targetIsBroadcaster');
   const isMod = readTurnContextBoolean(turnContext, 'targetIsMod');
   const firstTimeChatter = readTurnContextBoolean(turnContext, 'firstTimeChatter');
   const runtimeSituation = readTurnContextValue(turnContext, 'runtimeSituation');
   const targetRole =
-    isLocal || isTrustedController
+    isLocal
       ? 'local controller'
+      : isTrustedController
+        ? isDiscord
+          ? 'Discord trusted controller'
+          : source === 'twitch'
+            ? 'Twitch trusted controller'
+            : 'trusted controller'
       : isBroadcaster
         ? 'broadcaster'
         : isMod
           ? 'moderator'
           : source === 'twitch'
             ? 'Twitch viewer'
+            : isDiscord
+              ? 'Discord member'
             : 'speaker';
   const localTime = now.toLocaleString(undefined, {
       dateStyle: 'medium',
@@ -96,7 +105,15 @@ function serializeTurnMetadataContext({
     formatSceneLine('active persona', persona?.name || 'Web Waifu 4'),
     formatSceneLine('speaker', speaker),
     formatSceneLine('speaker role', targetRole),
-    formatSceneLine('conversation source', source === 'local' ? 'local one-on-one chat' : source),
+    formatSceneLine(
+      'conversation source',
+      source === 'local' ? 'local one-on-one chat' : isDiscord ? 'Discord guild voice chat' : source,
+    ),
+    isDiscord ? formatSceneLine('Discord guild', readTurnContextValue(turnContext, 'guildId')) : '',
+    isDiscord
+      ? formatSceneLine('Discord voice channel', readTurnContextValue(turnContext, 'voiceChannelId'))
+      : '',
+    isDiscord ? formatSceneLine('Discord user ID', readTurnContextValue(turnContext, 'userId')) : '',
     formatSceneLine('runtime situation', runtimeSituation),
     formatSceneLine('response shape', turnKind === 'batch' ? 'busy chat batch' : 'direct reply'),
     firstTimeChatter ? '- speaker note: first message seen from this chatter this session' : '',
@@ -189,6 +206,7 @@ function buildDynamicPromptState({
   const conversationScope = readTurnContextValue(turnContext, 'conversationScope');
   const isLocalTurn = turnSource === 'local';
   const isTwitchTurn = turnSource === 'twitch';
+  const isDiscordTurn = turnSource === 'discord';
   const isBatchTurn = turnKind === 'batch';
   const isTrustedController = readTurnContextBoolean(turnContext, 'isTrustedController');
   const targetIsBroadcaster = readTurnContextBoolean(turnContext, 'targetIsBroadcaster');
@@ -239,6 +257,7 @@ function buildDynamicPromptState({
     is_direct_turn: turnKind === 'direct',
     is_local_turn: isLocalTurn,
     is_twitch_turn: isTwitchTurn,
+    is_discord_turn: isDiscordTurn,
     jealous_state: relationshipMemory.jealousy >= 8,
     jealousy_score: relationshipMemory.jealousy,
     last_action_tag: relationshipMemory.lastActionTag,
@@ -260,14 +279,22 @@ function buildDynamicPromptState({
     target_is_mod: targetIsMod,
     target_is_trusted_controller: isTrustedController,
     target_role:
-      isLocalTurn || isTrustedController
+      isLocalTurn
         ? 'local controller'
+        : isTrustedController
+          ? isDiscordTurn
+            ? 'Discord trusted controller'
+            : isTwitchTurn
+              ? 'Twitch trusted controller'
+              : 'trusted controller'
         : targetIsBroadcaster
           ? 'broadcaster'
           : targetIsMod
             ? 'moderator'
             : isTwitchTurn
               ? 'viewer'
+              : isDiscordTurn
+                ? 'Discord member'
               : 'speaker',
     turn_kind: turnKind || 'unknown',
     turn_source: turnSource || 'unknown',
@@ -429,7 +456,7 @@ export async function buildChatCompletionMessagesWithReceipt({
 
     if (persona.userNickname.trim()) {
       personaBlocks.push(
-        `The local controller nickname is "${persona.userNickname.trim()}". In local/manual chat, talk directly to that person in second person. In Twitch chat, do not assume every chatter is the local controller; address the target viewer by their Twitch display name when provided.`,
+        `The local controller nickname is "${persona.userNickname.trim()}". In local/manual chat, talk directly to that person in second person. In Twitch or Discord chat, do not assume every chatter is the local controller; address the target person by their platform display name when provided.`,
       );
     }
   }

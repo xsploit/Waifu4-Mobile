@@ -148,7 +148,8 @@ const OPPOSITE_EMOTIONS: Partial<Record<CanonicalEmotion, CanonicalEmotion>> = {
 };
 
 export function getGrilloParticipantKey(turn: ChatTurn) {
-  return `${turn.source}:${turn.channel || 'local'}:${turn.login || 'unknown'}`
+  const participantId = turn.source === 'discord' ? turn.userId : turn.login || 'unknown';
+  return `${turn.source}:${turn.channel || 'local'}:${participantId}`
     .toLowerCase()
     .replace(/[^a-z0-9:_-]+/g, '-')
     .slice(0, 160);
@@ -778,7 +779,8 @@ function normalizeCandidate(value: unknown): GrilloMemoryCandidate | null {
     createdAt: normalizeTimestamp(source.createdAt),
     participantKey: String(source.participantKey),
     scopeKey: String(source.scopeKey),
-    source: source.source === 'local' ? 'local' : 'twitch',
+    source:
+      source.source === 'local' || source.source === 'discord' ? source.source : 'twitch',
     sourceTurnIds: Array.isArray(source.sourceTurnIds)
       ? source.sourceTurnIds.map(String).filter(Boolean)
       : [],

@@ -5,7 +5,7 @@ export type ChatJobMemoryMode = 'direct' | 'batch';
 
 type GrilloIntakeSignal =
   | 'local_turn'
-  | 'trusted_twitch_role'
+  | 'trusted_chat_role'
   | 'direct_persona_mention'
   | 'explicit_memory_cue'
   | 'emotional_relationship_signal'
@@ -18,7 +18,7 @@ type GrilloIntakeScore = {
   signals: GrilloIntakeSignal[];
 };
 
-const DIRECT_TWITCH_MEMORY_THRESHOLD = 45;
+const DIRECT_CHAT_MEMORY_THRESHOLD = 45;
 const STOPWORDS = new Set([
   'about',
   'after',
@@ -116,10 +116,10 @@ function topicTokens(text: string) {
 function hasRepeatedTopicThread(turns: ChatTurn[]) {
   const tokenSources = new Map<string, Set<string>>();
   for (const turn of turns) {
-    if (turn.source !== 'twitch') {
+    if (turn.source !== 'twitch' && turn.source !== 'discord') {
       continue;
     }
-    const source = turn.login || turn.id;
+    const source = turn.source === 'discord' ? turn.userId : turn.login || turn.id;
     for (const token of topicTokens(turn.text)) {
       const sources = tokenSources.get(token) ?? new Set<string>();
       sources.add(source);
@@ -137,7 +137,7 @@ function scoreChatTurnForGrilloIntake(
   if (turn.source === 'local') {
     return { score: 100, shouldIngest: true, signals: ['local_turn'] };
   }
-  if (!twitchSettings.streamModeEnabled) {
+  if (turn.source === 'twitch' && !twitchSettings.streamModeEnabled) {
     return { score: 0, shouldIngest: false, signals: [] };
   }
 
@@ -151,7 +151,7 @@ function scoreChatTurnForGrilloIntake(
   };
 
   if (turn.isTrustedController || turn.isBroadcaster || turn.isMod) {
-    addSignal('trusted_twitch_role', 80);
+    addSignal('trusted_chat_role', 80);
   }
   if (chatTextMentionsPersona(turn.text, persona)) {
     addSignal('direct_persona_mention', 55);
@@ -168,7 +168,7 @@ function scoreChatTurnForGrilloIntake(
 
   return {
     score,
-    shouldIngest: score >= DIRECT_TWITCH_MEMORY_THRESHOLD,
+    shouldIngest: score >= DIRECT_CHAT_MEMORY_THRESHOLD,
     signals,
   };
 }
@@ -185,7 +185,7 @@ function scoreChatJobForGrilloIntake(
   if (turns.some((turn) => turn.source === 'local')) {
     return { score: 100, shouldIngest: true, signals: ['local_turn'] };
   }
-  if (!twitchSettings.streamModeEnabled) {
+  if (turns.every((turn) => turn.source === 'twitch') && !twitchSettings.streamModeEnabled) {
     return { score: 0, shouldIngest: false, signals: [] };
   }
 
@@ -202,7 +202,7 @@ function scoreChatJobForGrilloIntake(
 
   if (hasRepeatedTopicThread(turns)) {
     return {
-      score: Math.max(bestTurnScore.score, DIRECT_TWITCH_MEMORY_THRESHOLD),
+      score: Math.max(bestTurnScore.score, DIRECT_CHAT_MEMORY_THRESHOLD),
       shouldIngest: true,
       signals: Array.from(new Set([...bestTurnScore.signals, 'repeated_topic_thread'])),
     };

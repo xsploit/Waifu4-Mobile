@@ -1,9 +1,9 @@
 import type { ChatMessage, PersonaProfile } from './types';
 import type { DirectTwitchChatMessage } from '../twitch/direct-irc';
 
-export type ChatTurnSource = 'local' | 'twitch';
+export type ChatTurnSource = 'local' | 'twitch' | 'discord';
 
-export type ChatTurn = {
+type BaseChatTurn = {
   id: string;
   source: ChatTurnSource;
   channel: string;
@@ -19,6 +19,17 @@ export type ChatTurn = {
   firstTimeChatter?: boolean;
 };
 
+export type DiscordChatTurn = BaseChatTurn & {
+  source: 'discord';
+  guildId: string;
+  voiceChannelId: string;
+  userId: string;
+};
+
+export type ChatTurn =
+  | (Omit<BaseChatTurn, 'source'> & { source: 'local' | 'twitch' })
+  | DiscordChatTurn;
+
 type CreateLocalChatTurnOptions = {
   displayName?: string;
   id?: string;
@@ -26,6 +37,20 @@ type CreateLocalChatTurnOptions = {
   text: string;
   timestamp?: number;
   trustedController?: boolean;
+};
+
+export type CreateDiscordChatTurnOptions = {
+  badges?: string[];
+  displayName: string;
+  firstTimeChatter?: boolean;
+  guildId: string;
+  id: string;
+  login: string;
+  text: string;
+  timestamp?: number;
+  trustedController?: boolean;
+  userId: string;
+  voiceChannelId: string;
 };
 
 export function createLocalChatTurn({
@@ -77,8 +102,48 @@ export function createTwitchChatTurn(
   };
 }
 
+export function createDiscordChatTurn({
+  badges = [],
+  displayName: requestedDisplayName,
+  firstTimeChatter = false,
+  guildId: requestedGuildId,
+  id,
+  login: requestedLogin,
+  text,
+  timestamp = Date.now(),
+  trustedController = false,
+  userId: requestedUserId,
+  voiceChannelId: requestedVoiceChannelId,
+}: CreateDiscordChatTurnOptions): DiscordChatTurn {
+  const guildId = requiredDiscordIdentity(requestedGuildId, 'guildId');
+  const voiceChannelId = requiredDiscordIdentity(requestedVoiceChannelId, 'voiceChannelId');
+  const userId = requiredDiscordIdentity(requestedUserId, 'userId');
+  const login = requestedLogin.trim() || userId;
+  const displayName = requestedDisplayName.trim() || login;
+
+  return {
+    id,
+    source: 'discord',
+    channel: `${guildId}:${voiceChannelId}`,
+    guildId,
+    voiceChannelId,
+    userId,
+    login,
+    displayName,
+    text,
+    timestamp,
+    badges: trustedController ? [...badges, 'discord-controller'] : badges,
+    isMod: false,
+    isBroadcaster: false,
+    isLocal: false,
+    isTrustedController: trustedController,
+    firstTimeChatter,
+  };
+}
+
 export function chatTurnToChatMessage(turn: ChatTurn): ChatMessage {
-  const prefix = turn.source === 'twitch' ? 'Twitch' : 'Local';
+  const prefix =
+    turn.source === 'twitch' ? 'Twitch' : turn.source === 'discord' ? 'Discord' : 'Local';
   return {
     id: `chat-turn-${turn.id}`,
     role: 'user',
@@ -101,6 +166,9 @@ export function formatChatTurnMetadata(turn: ChatTurn) {
   return [
     `source=${turn.source}`,
     `channel=${turn.channel || 'local'}`,
+    turn.source === 'discord' ? `guild=${turn.guildId}` : null,
+    turn.source === 'discord' ? `voiceChannel=${turn.voiceChannelId}` : null,
+    turn.source === 'discord' ? `userId=${turn.userId}` : null,
     `login=${turn.login}`,
     `display=${turn.displayName}`,
     `local=${turn.isLocal}`,
@@ -123,10 +191,28 @@ export function buildChatTurnMemoryMessage(mode: 'direct' | 'batch', turns: Chat
     }
 
     return [
-      `${target.source === 'twitch' ? 'Twitch viewer' : 'Local controller'} ${target.displayName}: ${target.text}`.trim(),
+      `${chatTurnSpeakerLabel(target)} ${target.displayName}: ${target.text}`.trim(),
       `metadata: ${formatChatTurnMetadata(target)}`,
     ].join('\n');
   }
 
   return `Chat batch:\n${formatChatTurns(turns, 30)}`;
+}
+
+function requiredDiscordIdentity(value: string, field: string) {
+  const normalized = value.trim();
+  if (!normalized) {
+    throw new Error(`Discord chat turn requires ${field}.`);
+  }
+  return normalized;
+}
+
+function chatTurnSpeakerLabel(turn: ChatTurn) {
+  if (turn.source === 'local') {
+    return 'Local controller';
+  }
+  if (turn.source === 'twitch') {
+    return 'Twitch viewer';
+  }
+  return turn.isTrustedController ? 'Discord trusted controller' : 'Discord member';
 }

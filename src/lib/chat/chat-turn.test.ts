@@ -3,6 +3,7 @@ import { DEFAULT_PERSONA } from './defaults';
 import {
   buildChatTurnMemoryMessage,
   chatTurnToChatMessage,
+  createDiscordChatTurn,
   createLocalChatTurn,
   createTwitchChatTurn,
   formatChatTurnMetadata,
@@ -71,5 +72,54 @@ describe('chat-turn normalization', () => {
     expect(formatChatTurnMetadata(turn)).toContain('trustedController=true');
     expect(formatChatTurns([turn], 1)).toContain('metadata: source=twitch');
     expect(buildChatTurnMemoryMessage('direct', [turn])).toContain('Twitch viewer SUBSECT');
+  });
+
+  it('normalizes Discord chat without collapsing guild, voice-channel, or user identity', () => {
+    const turn = createDiscordChatTurn({
+      displayName: 'Subsect Server Nickname',
+      guildId: 'guild-42',
+      id: 'discord-msg-1',
+      login: 'subsect',
+      text: 'remember this belongs to our voice chat',
+      timestamp: 456,
+      trustedController: true,
+      userId: 'user-99',
+      voiceChannelId: 'voice-7',
+    });
+
+    expect(turn).toMatchObject({
+      source: 'discord',
+      channel: 'guild-42:voice-7',
+      guildId: 'guild-42',
+      voiceChannelId: 'voice-7',
+      userId: 'user-99',
+      login: 'subsect',
+      displayName: 'Subsect Server Nickname',
+      isLocal: false,
+      isTrustedController: true,
+    });
+    expect(chatTurnToChatMessage(turn).content).toBe(
+      '[Discord] Subsect Server Nickname: remember this belongs to our voice chat',
+    );
+    expect(formatChatTurnMetadata(turn)).toContain('guild=guild-42');
+    expect(formatChatTurnMetadata(turn)).toContain('voiceChannel=voice-7');
+    expect(formatChatTurnMetadata(turn)).toContain('userId=user-99');
+    expect(buildChatTurnMemoryMessage('direct', [turn])).toContain(
+      'Discord trusted controller Subsect Server Nickname',
+    );
+  });
+
+  it('rejects Discord turns without the guild, voice channel, or user scope', () => {
+    expect(() =>
+      createDiscordChatTurn({
+        displayName: 'Viewer',
+        guildId: 'guild-42',
+        id: 'discord-msg-2',
+        login: 'viewer',
+        text: 'hello',
+        userId: 'user-99',
+        voiceChannelId: ' ',
+      }),
+    ).toThrow('voiceChannelId');
   });
 });
