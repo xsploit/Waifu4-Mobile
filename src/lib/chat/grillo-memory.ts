@@ -231,9 +231,20 @@ export async function saveGrilloMemoryStateAsync(state: GrilloMemoryState) {
 }
 
 export async function clearGrilloMemoryStateAsync(scopeKey: string) {
+  const key = normalizeScopeStorageKey(scopeKey);
+  const previous = grilloMemoryCache.get(key);
   const state = createDefaultGrilloMemoryState(scopeKey);
-  grilloMemoryCache.set(normalizeScopeStorageKey(scopeKey), state);
-  await enqueueGrilloMemoryWrite(scopeKey, () => deletePersistedGrilloMemoryState(scopeKey));
+  try {
+    await enqueueGrilloMemoryWrite(scopeKey, () => deletePersistedGrilloMemoryState(scopeKey));
+  } catch (error) {
+    if (previous) {
+      grilloMemoryCache.set(key, previous);
+    } else {
+      grilloMemoryCache.delete(key);
+    }
+    throw error;
+  }
+  grilloMemoryCache.set(key, state);
   return state;
 }
 
@@ -1032,11 +1043,12 @@ function enqueueGrilloMemoryWrite(scopeKey: string, task: () => Promise<void>) {
   const previous = grilloMemoryWriteQueues.get(key) ?? Promise.resolve();
   const queued = previous.catch(() => undefined).then(task);
   grilloMemoryWriteQueues.set(key, queued);
-  void queued.finally(() => {
+  const cleanup = () => {
     if (grilloMemoryWriteQueues.get(key) === queued) {
       grilloMemoryWriteQueues.delete(key);
     }
-  });
+  };
+  void queued.then(cleanup, cleanup);
   return queued;
 }
 
@@ -1054,7 +1066,9 @@ async function persistGrilloMemoryState(state: GrilloMemoryState) {
 }
 
 async function deletePersistedGrilloMemoryState(scopeKey: string) {
-  await deleteLadybugGrilloState(scopeKey);
+  if (!(await deleteLadybugGrilloState(scopeKey))) {
+    throw new Error('Ladybug memory delete failed; local fallback was preserved.');
+  }
 
   const db = await openGrilloMemoryDb();
   if (db) {

@@ -1,6 +1,15 @@
 import { describe, expect, it, vi } from 'vitest';
+
+const deleteLadybugGrilloState = vi.hoisted(() => vi.fn(async () => true));
+
+vi.mock('./ladybug-memory-client', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('./ladybug-memory-client')>()),
+  deleteLadybugGrilloState,
+}));
+
 import {
   buildGrilloMemoryPromptAdditionsFailClosedAsync,
+  clearGrilloMemoryStateAsync,
   createEmptyGrilloMemoryPromptAdditions,
   getGrilloParticipantKey,
   recordGrilloMemoryTurnFailClosedAsync,
@@ -38,6 +47,14 @@ describe('GRILLO memory fail-closed helpers', () => {
       ),
     ).resolves.toBeNull();
     expect(onError).toHaveBeenCalledOnce();
+  });
+
+  it('preserves local fallback memory when the canonical delete fails', async () => {
+    deleteLadybugGrilloState.mockResolvedValueOnce(false);
+
+    await expect(clearGrilloMemoryStateAsync('local:persona:hikari')).rejects.toThrow(
+      'local fallback was preserved',
+    );
   });
 
   it('keys Discord memory participants by guild, voice channel, and Discord user ID', () => {

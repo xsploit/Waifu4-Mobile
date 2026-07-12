@@ -4921,8 +4921,16 @@ function App() {
       activeRelationshipStateKey,
     );
     syncMemoryAgentPendingCounts();
-    setMemoryAgentStatus('Memory cleared for current scope, including semantic recall.');
-    void Promise.allSettled([relationshipClear, grilloClear, semanticClear]).then(() => {
+    setMemoryAgentStatus('Clearing memory for the current scope...');
+    void Promise.allSettled([relationshipClear, grilloClear, semanticClear]).then((results) => {
+      const failed = results.find((result) => result.status === 'rejected');
+      setMemoryAgentStatus(
+        failed
+          ? `Memory clear failed: ${
+              failed.reason instanceof Error ? failed.reason.message : String(failed.reason)
+            }`
+          : 'Memory cleared for current scope, including semantic recall.',
+      );
       void refreshMemoryBackendStatus();
     });
   }, [
