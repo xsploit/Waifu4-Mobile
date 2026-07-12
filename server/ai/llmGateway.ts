@@ -48,6 +48,11 @@ export type StreamChatRequest = {
     providers?: string[];
     allowFallbacks?: boolean;
   };
+  vercelRouting?: {
+    mode: 'auto' | 'latency' | 'throughput' | 'cost' | 'pinned';
+    providers?: string[];
+    allowFallbacks?: boolean;
+  };
   signal?: AbortSignal;
 };
 
@@ -64,6 +69,7 @@ export type CompleteChatRequest = {
   toolChoiceMode?: 'off' | 'auto' | 'required';
   maxToolRounds?: number;
   openRouterRouting?: StreamChatRequest['openRouterRouting'];
+  vercelRouting?: StreamChatRequest['vercelRouting'];
   signal?: AbortSignal;
   jsonMode?: boolean;
   outputName?: string;
@@ -110,7 +116,7 @@ export type StreamChatResult = {
 };
 
 export function buildProviderOptions(
-  req: Pick<StreamChatRequest, 'provider' | 'model' | 'reasoningEffort' | 'byokOpenAiKey' | 'openRouterRouting'>,
+  req: Pick<StreamChatRequest, 'provider' | 'model' | 'reasoningEffort' | 'byokOpenAiKey' | 'openRouterRouting' | 'vercelRouting'>,
   structured: boolean,
   hasTools = false,
 ): Record<string, unknown> | undefined {
@@ -124,6 +130,19 @@ export function buildProviderOptions(
           ? { order: ['baseten', 'deepseek', 'fireworks'] }
           : { sort: 'ttft' }
       : { sort: 'ttft' };
+    if (req.vercelRouting?.mode === 'latency') {
+      Object.keys(gateway).forEach((key) => delete gateway[key]);
+      gateway.sort = 'ttft';
+    } else if (req.vercelRouting?.mode === 'throughput') {
+      Object.keys(gateway).forEach((key) => delete gateway[key]);
+      gateway.sort = 'tps';
+    } else if (req.vercelRouting?.mode === 'cost') {
+      Object.keys(gateway).forEach((key) => delete gateway[key]);
+      gateway.sort = 'cost';
+    } else if (req.vercelRouting?.mode === 'pinned' && req.vercelRouting.providers?.length) {
+      Object.keys(gateway).forEach((key) => delete gateway[key]);
+      gateway[req.vercelRouting.allowFallbacks === false ? 'only' : 'order'] = req.vercelRouting.providers;
+    }
     if (req.byokOpenAiKey?.trim()) {
       gateway.byok = { openai: [{ apiKey: req.byokOpenAiKey.trim() }] };
     }

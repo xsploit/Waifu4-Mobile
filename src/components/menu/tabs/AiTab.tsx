@@ -8,6 +8,23 @@ import {
 import { getReplyLengthLabel, REPLY_LENGTH_MODES } from '../../../lib/chat/reply-length';
 import { Slider } from '../ui/Slider';
 
+const VERCEL_PROVIDER_SLUGS = [
+  'azure',
+  'baseten',
+  'deepinfra',
+  'deepseek',
+  'fireworks',
+  'novita',
+  'togetherai',
+  'openai',
+  'anthropic',
+  'google',
+  'vertex',
+  'bedrock',
+  'xai',
+  'zai',
+] as const;
+
 type AiTabProps = {
   activePersonaName: string;
   aiProxyHealth: AiProxyHealth | null;
@@ -219,6 +236,67 @@ export function AiTab({
             Auto uses OpenRouter default routing. Fastest latency sends provider.sort=latency.
             Throughput sends provider.sort=throughput. Pinned sends provider.only with the chosen
             slug list.
+          </div>
+        </div>
+      ) : null}
+
+      {aiSettings.llmProvider === 'vercel-gateway' ? (
+        <div className="control-group">
+          <div className="control-label">Vercel Provider Routing</div>
+          <select
+            className="select-tech"
+            onChange={(event) =>
+              updateAiSettings(setAiSettings, {
+                vercelRoutingMode: event.target.value as AiSettings['vercelRoutingMode'],
+              })
+            }
+            value={aiSettings.vercelRoutingMode}
+          >
+            <option value="auto">Verified auto</option>
+            <option value="latency">Fastest first token</option>
+            <option value="throughput">Highest throughput</option>
+            <option value="cost">Lowest cost</option>
+            <option value="pinned">Pinned provider order</option>
+          </select>
+          {aiSettings.vercelRoutingMode === 'pinned' ? (
+            <>
+              <select
+                className="select-tech"
+                onChange={(event) =>
+                  updateAiSettings(setAiSettings, { vercelProviderSlugs: event.target.value })
+                }
+                value={VERCEL_PROVIDER_SLUGS.includes(aiSettings.vercelProviderSlugs as never)
+                  ? aiSettings.vercelProviderSlugs
+                  : ''}
+              >
+                <option value="">Choose provider slug</option>
+                {VERCEL_PROVIDER_SLUGS.map((slug) => (
+                  <option key={slug} value={slug}>{slug}</option>
+                ))}
+              </select>
+              <input
+                className="input-tech"
+                onChange={(event) =>
+                  updateAiSettings(setAiSettings, { vercelProviderSlugs: event.target.value })
+                }
+                placeholder="provider slug or ordered comma list"
+                value={aiSettings.vercelProviderSlugs}
+              />
+              <label className="toggle-row">
+                <input
+                  checked={aiSettings.vercelAllowFallbacks}
+                  onChange={(event) =>
+                    updateAiSettings(setAiSettings, { vercelAllowFallbacks: event.target.checked })
+                  }
+                  type="checkbox"
+                />
+                <span>Allow other providers after this order</span>
+              </label>
+            </>
+          ) : null}
+          <div className="field-hint">
+            Verified auto preserves tested model-specific routes. Explicit modes use Vercel
+            gateway sort, order, or only provider controls.
           </div>
         </div>
       ) : null}

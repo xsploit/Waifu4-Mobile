@@ -183,6 +183,32 @@ describe('LLM gateway provider options', () => {
       gateway: { sort: 'ttft' },
     });
   });
+
+  it('maps explicit Vercel throughput and cost routing', () => {
+    expect(buildProviderOptions({
+      provider: 'vercel-gateway',
+      model: 'deepseek/deepseek-v4-pro',
+      vercelRouting: { mode: 'throughput' },
+    }, true)).toMatchObject({ gateway: { sort: 'tps' } });
+    expect(buildProviderOptions({
+      provider: 'vercel-gateway',
+      model: 'deepseek/deepseek-v4-pro',
+      vercelRouting: { mode: 'cost' },
+    }, true)).toMatchObject({ gateway: { sort: 'cost' } });
+  });
+
+  it('maps Vercel pinned providers to order or only based on fallback policy', () => {
+    expect(buildProviderOptions({
+      provider: 'vercel-gateway',
+      model: 'deepseek/deepseek-v4-pro',
+      vercelRouting: { mode: 'pinned', providers: ['deepseek', 'baseten'], allowFallbacks: true },
+    }, true)).toMatchObject({ gateway: { order: ['deepseek', 'baseten'] } });
+    expect(buildProviderOptions({
+      provider: 'vercel-gateway',
+      model: 'deepseek/deepseek-v4-pro',
+      vercelRouting: { mode: 'pinned', providers: ['baseten'], allowFallbacks: false },
+    }, true)).toMatchObject({ gateway: { only: ['baseten'] } });
+  });
 });
 
 describe('LLM gateway generation settings', () => {

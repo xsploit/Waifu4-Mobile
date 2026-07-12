@@ -217,6 +217,23 @@ describe('SettingsPanel tab smoke', () => {
     expect(html).toContain('tavily_search');
   });
 
+  it('renders Vercel provider routing and pinned provider controls', () => {
+    const props = createProps('ai');
+    props.aiSettings = {
+      ...props.aiSettings,
+      llmProvider: 'vercel-gateway',
+      vercelRoutingMode: 'pinned',
+      vercelProviderSlugs: 'baseten,deepseek',
+    };
+
+    const html = renderToStaticMarkup(<SettingsPanel {...props} />);
+
+    expect(html).toContain('Vercel Provider Routing');
+    expect(html).toContain('Pinned provider order');
+    expect(html).toContain('baseten,deepseek');
+    expect(html).toContain('Allow other providers after this order');
+  });
+
   it('keeps toon shader presets mounted on the avatar tab', () => {
     const html = renderToStaticMarkup(<SettingsPanel {...createProps('vrm')} />);
 

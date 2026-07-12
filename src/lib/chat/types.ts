@@ -39,6 +39,7 @@ export type InworldTimestampTransportStrategy = 'SYNC' | 'ASYNC';
 export type InworldDeliveryMode = 'STABLE' | 'BALANCED' | 'CREATIVE' | 'EXPRESSIVE';
 export type LlmProvider = 'openrouter-responses' | 'vercel-gateway';
 export type OpenRouterRoutingMode = 'auto' | 'latency' | 'throughput' | 'pinned';
+export type VercelRoutingMode = 'auto' | 'latency' | 'throughput' | 'cost' | 'pinned';
 export type AiTransportMode = 'http-stream';
 export type OpenAiStateMode = 'stateless';
 export type ReplyLengthMode = 'short' | 'balanced' | 'yap';
@@ -50,6 +51,9 @@ export type AiSettings = {
   openRouterRoutingMode: OpenRouterRoutingMode;
   openRouterProviderSlugs: string;
   openRouterAllowFallbacks: boolean;
+  vercelRoutingMode: VercelRoutingMode;
+  vercelProviderSlugs: string;
+  vercelAllowFallbacks: boolean;
   model: string;
   memoryAgentModel: string;
   memoryAgentIntervalMessages: number;

@@ -505,6 +505,19 @@ function normalizeAiSettings(value: unknown): AiSettings {
       typeof source.openRouterAllowFallbacks === 'boolean'
         ? source.openRouterAllowFallbacks
         : defaults.openRouterAllowFallbacks,
+    vercelRoutingMode:
+      source.vercelRoutingMode === 'auto' ||
+      source.vercelRoutingMode === 'latency' ||
+      source.vercelRoutingMode === 'throughput' ||
+      source.vercelRoutingMode === 'cost' ||
+      source.vercelRoutingMode === 'pinned'
+        ? source.vercelRoutingMode
+        : defaults.vercelRoutingMode,
+    vercelProviderSlugs: String(source.vercelProviderSlugs ?? defaults.vercelProviderSlugs),
+    vercelAllowFallbacks:
+      typeof source.vercelAllowFallbacks === 'boolean'
+        ? source.vercelAllowFallbacks
+        : defaults.vercelAllowFallbacks,
     model: normalizedModel,
     memoryAgentModel: normalizedMemoryAgentModel || defaults.memoryAgentModel,
     memoryAgentIntervalMessages,

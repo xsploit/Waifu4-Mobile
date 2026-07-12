@@ -21,6 +21,13 @@ const openRouterRoutingSchema = z
     allowFallbacks: z.boolean().optional(),
   })
   .optional();
+const vercelRoutingSchema = z
+  .object({
+    mode: z.enum(['auto', 'latency', 'throughput', 'cost', 'pinned']),
+    providers: z.array(z.string().min(1)).optional(),
+    allowFallbacks: z.boolean().optional(),
+  })
+  .optional();
 const messageImageSchema = z.object({
   imageUrl: z.string().min(1),
   mediaType: z.string().min(1).optional(),
@@ -48,6 +55,7 @@ const chatRequestInputSchema = z.object({
   toolChoiceMode: toolChoiceModeSchema.optional(),
   maxToolRounds: z.number().int().min(1).max(30).optional(),
   openRouterRouting: openRouterRoutingSchema,
+  vercelRouting: vercelRoutingSchema,
   stream: z.boolean().default(true),
   ttsBridge: z.unknown().optional(),
 });
@@ -69,6 +77,7 @@ export function normalizeChatRequest(input: z.infer<typeof chatRequestInputSchem
     toolChoiceMode: input.toolChoiceMode,
     maxToolRounds: input.maxToolRounds,
     openRouterRouting: input.openRouterRouting,
+    vercelRouting: input.vercelRouting,
     stream: input.stream,
   };
 }

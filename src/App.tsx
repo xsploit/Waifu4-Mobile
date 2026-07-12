@@ -1061,6 +1061,24 @@ function buildOpenRouterRouting(settings: Pick<AiSettings, 'llmProvider' | 'open
   };
 }
 
+function buildVercelRouting(settings: Pick<AiSettings, 'llmProvider' | 'vercelAllowFallbacks' | 'vercelProviderSlugs' | 'vercelRoutingMode'>) {
+  if (settings.llmProvider !== 'vercel-gateway' || settings.vercelRoutingMode === 'auto') {
+    return undefined;
+  }
+  const providers = settings.vercelProviderSlugs
+    .split(',')
+    .map((item) => item.trim())
+    .filter(Boolean);
+  if (settings.vercelRoutingMode === 'pinned' && providers.length === 0) {
+    return undefined;
+  }
+  return {
+    allowFallbacks: settings.vercelAllowFallbacks,
+    mode: settings.vercelRoutingMode,
+    providers,
+  };
+}
+
 function readStreamChunkWithIdleTimeout(
   reader: ReadableStreamDefaultReader<Uint8Array>,
   idleTimeoutMs: number,
@@ -1116,6 +1134,7 @@ async function requestChatCompletion({
   ttsBridge,
   providerKeyVaultWorkspaceId,
   openRouterRouting,
+  vercelRouting,
   signal,
 }: {
   activeChatters?: number;
@@ -1137,6 +1156,7 @@ async function requestChatCompletion({
   ttsBridge?: RemoteTtsRequest;
   providerKeyVaultWorkspaceId?: string;
   openRouterRouting?: ReturnType<typeof buildOpenRouterRouting>;
+  vercelRouting?: ReturnType<typeof buildVercelRouting>;
   signal?: AbortSignal;
 }): Promise<AppCompletionResponse> {
   const providerDefaults = getAiProviderSwitchDefaults(llmProvider);
@@ -1159,6 +1179,7 @@ async function requestChatCompletion({
     model: safeModel,
     openAiStateMode: 'stateless',
     openRouterRouting,
+    vercelRouting,
     responseFormat,
     stateKey,
     stateScope,
@@ -6272,6 +6293,7 @@ function App() {
           ttsBridge,
           providerKeyVaultWorkspaceId,
           openRouterRouting: buildOpenRouterRouting(settings),
+          vercelRouting: buildVercelRouting(settings),
           signal: chatAbortController.signal,
         });
         void buildPromptProvenanceReceipt({

@@ -6,7 +6,7 @@ import type { AiSettings, LlmProvider } from './types';
 
 export type AiProviderSwitchDefaults = Pick<
   AiSettings,
-  'aiTransportMode' | 'memoryAgentModel' | 'model' | 'openAiStateMode' | 'openRouterAllowFallbacks' | 'openRouterProviderSlugs' | 'openRouterRoutingMode'
+  'aiTransportMode' | 'memoryAgentModel' | 'model' | 'openAiStateMode' | 'openRouterAllowFallbacks' | 'openRouterProviderSlugs' | 'openRouterRoutingMode' | 'vercelAllowFallbacks' | 'vercelProviderSlugs' | 'vercelRoutingMode'
 >;
 
 export function getAiProviderSwitchDefaults(llmProvider: LlmProvider): AiProviderSwitchDefaults {
@@ -19,6 +19,9 @@ export function getAiProviderSwitchDefaults(llmProvider: LlmProvider): AiProvide
       openRouterAllowFallbacks: true,
       openRouterProviderSlugs: '',
       openRouterRoutingMode: 'latency',
+      vercelAllowFallbacks: true,
+      vercelProviderSlugs: '',
+      vercelRoutingMode: 'auto',
     };
   }
   return {
@@ -29,6 +32,9 @@ export function getAiProviderSwitchDefaults(llmProvider: LlmProvider): AiProvide
     openRouterAllowFallbacks: true,
     openRouterProviderSlugs: '',
     openRouterRoutingMode: 'latency',
+    vercelAllowFallbacks: true,
+    vercelProviderSlugs: '',
+    vercelRoutingMode: 'auto',
   };
 }
 
