@@ -2408,6 +2408,16 @@ const WORKER_TOOL_NAME_VALUES = [
 
 const WorkerToolNameSchema = z.enum(WORKER_TOOL_NAME_VALUES);
 const TextishSchema = z.union([z.string(), z.number(), z.boolean()]);
+export const BackendGrilloWorkerResponseSchema = z
+  .object({
+    done: z.boolean(),
+    notes: z.string(),
+    toolCalls: z.array(z.object({
+      args: z.string().describe('A JSON-encoded object containing the tool arguments.'),
+      name: WorkerToolNameSchema,
+    })),
+  })
+  .strict();
 const WorkerResponseSchema = z
   .object({
     candidate: z.unknown().optional(),
@@ -2422,7 +2432,7 @@ const WorkerResponseSchema = z
   .passthrough();
 const WorkerToolCallSchema = z
   .object({
-    args: z.record(z.string(), z.unknown()).optional(),
+    args: z.union([z.record(z.string(), z.unknown()), z.string()]).optional(),
     name: WorkerToolNameSchema,
   })
   .passthrough();
@@ -2554,6 +2564,7 @@ function buildBackendWorkerSystemPrompt() {
     'You are not writing a user-facing chat reply.',
     'Return only JSON matching the schema.',
     'Use worker tools by returning toolCalls. Do not claim a write happened unless you call a write tool.',
+    'For every toolCalls item, encode args as a JSON object string. The backend parses and validates it before execution.',
     'Extract durable memory only when the transcript contains a preference, fact, goal, boundary, bond signal, or ongoing thread.',
     'Write diary entries only when the exchange meaningfully changes mood, relationship, goals, or stream context.',
     'Diary personal_thought is private first-person avatar reflection, not a mechanical receipt.',
@@ -2787,7 +2798,11 @@ function normalizeWorkerToolCalls(
       continue;
     }
     const name = parsedCall.data.name;
-    const args = validateWorkerToolArgs(name, parsedCall.data.args ?? {});
+    const rawArgs = parsedCall.data.args;
+    const args = validateWorkerToolArgs(
+      name,
+      typeof rawArgs === 'string' ? asRecord(safeJsonParse(rawArgs)) : rawArgs ?? {},
+    );
     if (!args) continue;
     calls.push({
       args: withSourceTurnIds(name, args, sourceTurnIds),

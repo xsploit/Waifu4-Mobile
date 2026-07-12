@@ -3,7 +3,11 @@ import { z } from 'zod';
 import type { GatewayId, LlmMessage } from '../../src/brain/BrainTypes';
 import { completeChat } from '../ai/llmGateway';
 import { readProviderKeys } from '../ai/providerKeys';
-import { GrilloWorkerService, type GrilloWorkerCompletionRequest } from './GrilloWorkerService';
+import {
+  BackendGrilloWorkerResponseSchema,
+  GrilloWorkerService,
+  type GrilloWorkerCompletionRequest,
+} from './GrilloWorkerService';
 import {
   getLadybugMemoryService,
   type LadybugSemanticMemoryRecord,
@@ -123,6 +127,8 @@ function createGrilloCompletion(req: Request, body: z.infer<typeof runtimeBodySc
         maxTokens: workerRequest.maxTokens,
         messages: toLlmMessages(workerRequest.messages),
         model,
+        outputName: 'grillo_worker_response',
+        outputSchema: BackendGrilloWorkerResponseSchema,
         provider,
         temperature: workerRequest.temperature,
       });

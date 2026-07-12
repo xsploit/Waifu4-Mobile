@@ -11,6 +11,7 @@ import {
 } from 'ai';
 import { createGateway } from '@ai-sdk/gateway';
 import { createOpenRouter } from '@openrouter/ai-sdk-provider';
+import type { ZodType } from 'zod';
 import {
   assistantReplySchema,
   type GatewayId,
@@ -65,6 +66,8 @@ export type CompleteChatRequest = {
   openRouterRouting?: StreamChatRequest['openRouterRouting'];
   signal?: AbortSignal;
   jsonMode?: boolean;
+  outputName?: string;
+  outputSchema?: ZodType;
 };
 
 export type CompleteChatResult = {
@@ -208,8 +211,23 @@ export function toModelMessages(messages: LlmMessage[]): ModelMessage[] {
 }
 
 export async function completeChat(req: CompleteChatRequest): Promise<CompleteChatResult> {
-  const model = createModel(req, req.jsonMode === true);
-  const tools = req.toolChoiceMode === 'off' ? undefined : createTavilyTools(req.tavilyKey);
+  const strictOutputTool = req.jsonMode === true
+    && Boolean(req.outputSchema)
+    && req.provider === 'vercel-gateway'
+    && req.model === 'deepseek/deepseek-v4-pro';
+  const model = createModel(req, req.jsonMode === true && !strictOutputTool);
+  const tavilyTools = req.toolChoiceMode === 'off' ? undefined : createTavilyTools(req.tavilyKey);
+  const outputToolName = req.outputName?.trim() || 'structured_output';
+  const tools = strictOutputTool
+    ? {
+        ...tavilyTools,
+        [outputToolName]: tool({
+          description: 'Return the complete validated structured result.',
+          inputSchema: req.outputSchema!,
+          strict: true,
+        }),
+      }
+    : tavilyTools;
   const providerOptions = buildProviderOptions(req, req.jsonMode === true, !!tools);
   const started = Date.now();
 
@@ -228,14 +246,28 @@ export async function completeChat(req: CompleteChatRequest): Promise<CompleteCh
     messages: toModelMessages(req.messages),
     temperature: resolveTemperature(req),
     maxOutputTokens: req.maxTokens,
-    output: req.jsonMode ? jsonTextOutput : undefined,
+    output: req.jsonMode && req.outputSchema && !strictOutputTool
+      ? Output.object({ name: outputToolName, schema: req.outputSchema })
+      : req.jsonMode && !strictOutputTool
+        ? jsonTextOutput
+        : undefined,
     tools,
-    toolChoice: tools && req.toolChoiceMode === 'required' ? 'required' : undefined,
+    toolChoice: (strictOutputTool
+      ? { type: 'tool', toolName: outputToolName }
+      : tools && req.toolChoiceMode === 'required'
+        ? 'required'
+        : undefined) as never,
     stopWhen: tools ? stepCountIs(req.maxToolRounds ?? 10) : undefined,
     providerOptions: providerOptions as never,
   });
-  const text =
-    req.jsonMode && typeof (result as { output?: unknown }).output === 'string'
+  const structuredOutput = strictOutputTool
+    ? result.toolCalls.find((call) => call?.toolName === outputToolName)?.input
+    : req.outputSchema
+      ? (result as { output?: unknown }).output
+      : undefined;
+  const text = structuredOutput !== undefined
+    ? JSON.stringify(structuredOutput)
+    : req.jsonMode && typeof (result as { output?: unknown }).output === 'string'
       ? (result as { output: string }).output
       : result.text;
   log.info('completion done', {
