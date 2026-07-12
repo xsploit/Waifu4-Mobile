@@ -38,18 +38,18 @@
     "test:watch": "vitest"
   },
   "dependencies": {
-    "@ai-sdk/gateway": "^3.0.121",
+    "@ai-sdk/gateway": "^4.0.16",
     "@huggingface/transformers": "^4.2.0",
     "@inworld/tts": "^1.1.1",
     "@ladybugdb/core": "^0.16.1",
     "@mintplex-labs/piper-tts-web": "^1.0.4",
-    "@openrouter/ai-sdk-provider": "^2.9.0",
+    "@openrouter/ai-sdk-provider": "^3.0.0",
     "@pixiv/three-vrm": "^3.5.3",
     "@pixiv/three-vrm-animation": "^3.5.3",
     "@react-three/drei": "^9.122.0",
     "@react-three/fiber": "^8.18.0",
     "@types/three": "^0.170.0",
-    "ai": "^6.0.193",
+    "ai": "^7.0.22",
     "better-sqlite3": "^12.10.0",
     "express": "^4.21.2",
     "fish-audio": "^0.1.0",
@@ -102,7 +102,9 @@
       {
         "from": "desktop-runtime",
         "to": "desktop-runtime",
-        "filter": ["**/*"]
+        "filter": [
+          "**/*"
+        ]
       }
     ],
     "asarUnpack": [
@@ -112,7 +114,10 @@
     ],
     "npmRebuild": false,
     "win": {
-      "target": ["nsis", "portable"]
+      "target": [
+        "nsis",
+        "portable"
+      ]
     }
   }
 }
