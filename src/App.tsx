@@ -4186,16 +4186,6 @@ function App() {
       if (liveBridgeSubtitleActiveRef.current && data.wordBoundaries.length === 0) {
         return;
       }
-      const currentSubtitle = subtitleDataRef.current;
-      if (
-        subtitleIntervalRef.current !== null &&
-        currentSubtitle?.text === data.text &&
-        data.wordBoundaries.length > 0
-      ) {
-        subtitleDataRef.current = data;
-        refreshSubtitleFromAudio();
-        return;
-      }
       startSubtitleTrackingRef.current(data);
     };
     ttsManager.onError = (error) => {
@@ -4211,7 +4201,7 @@ function App() {
       ttsManager.onError = null;
       stopSubtitleTrackingRef.current(true);
     };
-  }, [refreshSubtitleFromAudio, ttsManager]);
+  }, [ttsManager]);
 
   useEffect(() => {
     let cancelled = false;
