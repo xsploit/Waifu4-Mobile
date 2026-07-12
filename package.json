@@ -1,10 +1,11 @@
 {
   "name": "webwaifu-rebuild",
   "private": true,
-  "version": "1.0.0",
+  "version": "1.0.1",
+  "author": "xsploit",
   "type": "module",
   "main": "electron/main.mjs",
-  "description": "Clean rebuild of the WebWaifu main brain. Core loop first: input -> LLM -> text -> TTS -> mouth -> avatar.",
+  "description": "Local-first VRM companion and stream co-host with live LLM, TTS, memory, Twitch, and Discord voice surfaces.",
   "scripts": {
     "dev": "concurrently -n web,server -c cyan,magenta \"npm:dev:web\" \"npm:dev:server\"",
     "dev:web": "vite",
@@ -87,6 +88,14 @@
     "vitest": "^3.0.2",
     "wait-on": "^9.0.10"
   },
+  "overrides": {
+    "@discordjs/rest": {
+      "undici": "6.27.0"
+    },
+    "discord.js": {
+      "undici": "6.27.0"
+    }
+  },
   "build": {
     "appId": "ai.webwaifu.webwaifu4",
     "productName": "WebWaifu 4",
@@ -118,10 +127,17 @@
     ],
     "npmRebuild": false,
     "win": {
+      "icon": "build/icon.png",
       "target": [
         "nsis",
         "portable"
       ]
+    },
+    "nsis": {
+      "artifactName": "WebWaifu-4-Setup-${version}-${arch}.${ext}"
+    },
+    "portable": {
+      "artifactName": "WebWaifu-4-Portable-${version}-${arch}.${ext}"
     }
   }
 }
