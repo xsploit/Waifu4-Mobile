@@ -9,7 +9,10 @@ class TestClient extends EventEmitter {
   public readonly channels = {
     fetch: async () => ({
       isTextBased: () => true,
-      send: async (text: string) => { this.sentMessages.push(text); },
+      send: async (message: { allowedMentions: { parse: [] }; content: string }) => {
+        expect(message.allowedMentions).toEqual({ parse: [] });
+        this.sentMessages.push(message.content);
+      },
     }),
   };
   public readonly guilds = { cache: { get: () => ({ voiceAdapterCreator: () => ({ destroy() {}, sendPayload: () => true }) }) } };

@@ -114,11 +114,6 @@ backendRouter.post('/tts/stream', (req, res) => {
   void handleTtsStream(req, res, ttsOutputFanout);
 });
 
-// POST /tts/piper-output -- browser-synthesized WAV sidecar for Discord voice output.
-backendRouter.post('/tts/piper-output', express.raw({ limit: '16mb', type: 'audio/wav' }), (req, res) => {
-  handlePiperOutput(req, res, ttsOutputFanout);
-});
-
 // GET /tts/voices — provider voice registry for TTS and Voice Lab.
 backendRouter.get('/tts/voices', (req, res) => {
   void handleListTtsVoices(req, res);
@@ -147,6 +142,11 @@ const discordController = new DiscordVoiceController({
 });
 ttsOutputFanout.setDiscordSink({
   tryEnqueue: (chunk) => discordController.tryEnqueueOutput(chunk),
+});
+
+// POST /tts/piper-output -- browser-synthesized WAV sidecar for Discord voice output.
+backendRouter.post('/tts/piper-output', express.raw({ limit: '16mb', type: 'audio/wav' }), (req, res) => {
+  handlePiperOutput(req, res, ttsOutputFanout, (token) => discordController.isAuthorized(token));
 });
 
 backendRouter.use('/memory', createMemoryRouter());

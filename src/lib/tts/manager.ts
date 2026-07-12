@@ -136,6 +136,7 @@ export class TtsManager {
   onLipSyncData: ((data: LipSyncData) => void) | null = null;
 
   private playbackQueue: Promise<void> = Promise.resolve();
+  private piperOutputQueue: Promise<void> = Promise.resolve();
   private remoteSynthesisQueue: Promise<void> = Promise.resolve();
   private remoteAbortControllers = new Set<AbortController>();
   private queueGeneration = 0;
@@ -377,16 +378,19 @@ export class TtsManager {
     const generation = this.queueGeneration;
     const chunkPromise = synthesizePiperChunk(cleaned, voiceId);
     if (routing && shouldUploadPiperOutput(routing.outputMode)) {
-      void chunkPromise
-        .then((chunk) => {
+      const outputPromise = this.piperOutputQueue
+        .catch(() => {})
+        .then(async () => {
+          const chunk = await chunkPromise;
           if (generation !== this.queueGeneration) {
             return;
           }
-          return uploadPiperWav(chunk.audioBlob, routing);
+          await uploadPiperWav(chunk.audioBlob, routing);
         })
         .catch((error) => {
           console.warn('[TtsManager] Piper output fanout failed:', error);
         });
+      this.piperOutputQueue = outputPromise;
     }
 
     const playbackPromise = this.playbackQueue

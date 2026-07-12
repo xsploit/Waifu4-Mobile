@@ -15,7 +15,10 @@ type DiscordClientLike = {
   channels: {
     fetch: (channelId: string) => Promise<{
       isTextBased?: () => boolean;
-      send?: (text: string) => Promise<unknown>;
+      send?: (message: {
+        allowedMentions: { parse: [] };
+        content: string;
+      }) => Promise<unknown>;
     } | null>;
   };
   destroy: () => void | Promise<void>;
@@ -154,7 +157,10 @@ class DiscordVoiceRuntime {
       throw new Error('Discord voice channel text chat is unavailable.');
     }
     for (let offset = 0; offset < content.length; offset += 2_000) {
-      await channel.send(content.slice(offset, offset + 2_000));
+      await channel.send({
+        allowedMentions: { parse: [] },
+        content: content.slice(offset, offset + 2_000),
+      });
     }
   }
 

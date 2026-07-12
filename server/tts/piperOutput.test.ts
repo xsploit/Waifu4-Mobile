@@ -52,6 +52,7 @@ function createResponse() {
 function createRequest(body: Uint8Array, outputMode = 'local+discord') {
   return {
     body,
+    header: (name: string) => name === 'x-yourwifey-discord-token' ? 'bot-secret' : undefined,
     query: {
       outputMode,
       segmentIndex: '3',
@@ -77,7 +78,12 @@ describe('Piper output fanout', () => {
     const response = createResponse();
     const audio = new Uint8Array([1, 2, 3, 4]);
 
-    handlePiperOutput(createRequest(createWav(audio, 32_000)), response as unknown as Response, fanout);
+    handlePiperOutput(
+      createRequest(createWav(audio, 32_000)),
+      response as unknown as Response,
+      fanout,
+      (token) => token === 'bot-secret',
+    );
 
     expect(response.code).toBe(202);
     expect(response.body).toEqual({ ok: true, forwarded: true });
@@ -100,9 +106,24 @@ describe('Piper output fanout', () => {
 
     for (const outputMode of ['local-only', 'external']) {
       const response = createResponse();
-      handlePiperOutput(createRequest(new Uint8Array([0]), outputMode), response as unknown as Response, fanout);
+      handlePiperOutput(
+        createRequest(new Uint8Array([0]), outputMode),
+        response as unknown as Response,
+        fanout,
+      );
       expect(response.code).toBe(204);
     }
     expect(tryEnqueue).not.toHaveBeenCalled();
+  });
+
+  it('rejects Discord output without the connected bot token', () => {
+    const response = createResponse();
+    handlePiperOutput(
+      createRequest(createWav(new Uint8Array([1, 2]))),
+      response as unknown as Response,
+      new TtsOutputFanout(),
+      () => false,
+    );
+    expect(response.code).toBe(403);
   });
 });

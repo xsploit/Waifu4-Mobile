@@ -21,6 +21,7 @@ describe('uploadPiperWav', () => {
     const wav = new Blob([new Uint8Array([1, 2, 3, 4])], { type: 'audio/wav' });
 
     await uploadPiperWav(wav, {
+      discordToken: 'bot-secret',
       outputMode: 'local+discord',
       segmentIndex: 2,
       ttsSessionId: 'session-1',
@@ -33,10 +34,18 @@ describe('uploadPiperWav', () => {
       pathname: '/tts/piper-output',
       search: '?outputMode=local%2Bdiscord&segmentIndex=2&ttsSessionId=session-1&utteranceId=utterance-1',
     });
-    expect(init).toMatchObject({ body: wav, headers: { 'content-type': 'audio/wav' }, method: 'POST' });
+    expect(init).toMatchObject({
+      body: wav,
+      headers: {
+        'content-type': 'audio/wav',
+        'x-yourwifey-discord-token': 'bot-secret',
+      },
+      method: 'POST',
+    });
 
     for (const outputMode of ['local-only', 'external'] as const) {
       await uploadPiperWav(wav, {
+        discordToken: 'bot-secret',
         outputMode,
         segmentIndex: 3,
         ttsSessionId: 'session-2',

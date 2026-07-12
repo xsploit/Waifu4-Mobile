@@ -148,6 +148,7 @@ describe('TtsManager remote PCM scheduling', () => {
     Object.assign(manager, { audioContext: {}, playAudioChunk });
 
     await manager.queuePiperText('hello', 'voice-1', {
+      discordToken: 'bot-secret',
       outputMode: 'local+discord',
       segmentIndex: 0,
       ttsSessionId: 'session-1',
@@ -157,6 +158,7 @@ describe('TtsManager remote PCM scheduling', () => {
     expect(synthesizePiperChunk).toHaveBeenCalledTimes(1);
     expect(playAudioChunk).toHaveBeenCalledWith(expect.objectContaining({ audioBlob, text: 'hello' }));
     expect(uploadPiperWav).toHaveBeenCalledWith(audioBlob, {
+      discordToken: 'bot-secret',
       outputMode: 'local+discord',
       segmentIndex: 0,
       ttsSessionId: 'session-1',
@@ -174,6 +176,7 @@ describe('TtsManager remote PCM scheduling', () => {
     const manager = new TtsManager();
     Object.assign(manager, { playAudioChunk: vi.fn().mockResolvedValue(undefined) });
     const queued = manager.queuePiperText('hello', 'voice-1', {
+      discordToken: 'bot-secret',
       outputMode: 'discord-only',
       segmentIndex: 0,
       ttsSessionId: 'session-1',
@@ -190,5 +193,39 @@ describe('TtsManager remote PCM scheduling', () => {
 
     await queued;
     expect(uploadPiperWav).not.toHaveBeenCalled();
+  });
+
+  it('keeps Piper Discord uploads in segment order when synthesis resolves out of order', async () => {
+    const resolvers: Array<(value: Awaited<ReturnType<typeof synthesizePiperChunk>>) => void> = [];
+    vi.mocked(synthesizePiperChunk).mockImplementation(
+      () => new Promise((resolve) => resolvers.push(resolve)),
+    );
+    const manager = new TtsManager();
+    Object.assign(manager, { audioContext: {}, playAudioChunk: vi.fn().mockResolvedValue(undefined) });
+    const route = (segmentIndex: number) => ({
+      discordToken: 'bot-secret',
+      outputMode: 'discord-only' as const,
+      segmentIndex,
+      ttsSessionId: 'session-1',
+      utteranceId: `utterance-${segmentIndex}`,
+    });
+    const first = manager.queuePiperText('first', 'voice-1', route(0));
+    const second = manager.queuePiperText('second', 'voice-1', route(1));
+    const chunk = (text: string) => ({
+      audioBlob: new Blob([text], { type: 'audio/wav' }),
+      phonemes: null,
+      sampleRate: null,
+      text,
+      wordBoundaries: [],
+    });
+
+    resolvers[1]!(chunk('second'));
+    await Promise.resolve();
+    expect(uploadPiperWav).not.toHaveBeenCalled();
+    resolvers[0]!(chunk('first'));
+    await Promise.all([first, second]);
+    await vi.waitFor(() => expect(uploadPiperWav).toHaveBeenCalledTimes(2));
+
+    expect(vi.mocked(uploadPiperWav).mock.calls.map((call) => call[1].segmentIndex)).toEqual([0, 1]);
   });
 });

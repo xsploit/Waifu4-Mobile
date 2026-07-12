@@ -242,7 +242,12 @@ describe('Discord control routes', () => {
       const status = await fetch(`${baseUrl}/status`);
       expect(await status.json()).toMatchObject({ ok: true, status: { status: 'connected' } });
 
-      const message = await request(baseUrl, '/message', { text: 'hello Discord' });
+      const unauthorizedMessage = await request(baseUrl, '/message', { text: 'nope' });
+      expect(unauthorizedMessage.status).toBe(403);
+
+      const message = await request(baseUrl, '/message', { text: 'hello Discord' }, {
+        'x-yourwifey-discord-token': 'bot-secret',
+      });
       expect(await message.json()).toEqual({ ok: true });
 
       const disconnected = await request(baseUrl, '/disconnect');

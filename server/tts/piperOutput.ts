@@ -83,7 +83,12 @@ export function extractMonoPcm16Wav(bytes: Uint8Array): Pcm16Wav {
   return { audio, sampleRate: fmt.sampleRate };
 }
 
-export function handlePiperOutput(req: Request, res: Response, outputFanout: TtsOutputFanout): void {
+export function handlePiperOutput(
+  req: Request,
+  res: Response,
+  outputFanout: TtsOutputFanout,
+  authorizeDiscordToken: (token: string) => boolean = () => false,
+): void {
   const parsed = routingSchema.safeParse(req.query);
   if (!parsed.success) {
     res.status(400).json({ ok: false, error: parsed.error.message });
@@ -92,6 +97,11 @@ export function handlePiperOutput(req: Request, res: Response, outputFanout: Tts
   const routing = parsed.data;
   if (!isDiscordOutputMode(routing.outputMode)) {
     res.status(204).end();
+    return;
+  }
+  const discordToken = req.header('x-yourwifey-discord-token')?.trim() ?? '';
+  if (!discordToken || !authorizeDiscordToken(discordToken)) {
+    res.status(403).json({ ok: false, error: 'Discord voice authorization failed.' });
     return;
   }
   if (!(req.body instanceof Uint8Array)) {

@@ -2,6 +2,7 @@ import type { TtsOutputMode } from '../chat/types';
 import { getTtsProxyUrl } from './remote';
 
 export type PiperOutputRouting = {
+  discordToken: string;
   outputMode: TtsOutputMode;
   segmentIndex: number;
   ttsSessionId: string;
@@ -26,7 +27,10 @@ export async function uploadPiperWav(audio: Blob, routing: PiperOutputRouting): 
   }).toString();
   const response = await fetch(url, {
     body: audio,
-    headers: { 'content-type': 'audio/wav' },
+    headers: {
+      'content-type': 'audio/wav',
+      'x-yourwifey-discord-token': routing.discordToken,
+    },
     method: 'POST',
   });
   if (!response.ok) {

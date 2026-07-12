@@ -764,10 +764,13 @@ function getDiscordApiUrl(
   return desktopUrl || new URL(pathname, window.location.href).toString();
 }
 
-async function postDiscordReplyText(text: string) {
+async function postDiscordReplyText(text: string, botToken: string) {
   const response = await fetch(getDiscordApiUrl('/api/discord/message'), {
     body: JSON.stringify({ text }),
-    headers: { 'Content-Type': 'application/json' },
+    headers: {
+      'Content-Type': 'application/json',
+      'x-yourwifey-discord-token': botToken,
+    },
     method: 'POST',
   });
   if (!response.ok) {
@@ -3078,6 +3081,7 @@ function App() {
         ttsManager.enableTts = ttsRuntimeSettings.ttsEnabled;
         if (ttsRuntimeSettings.ttsProvider === 'piper') {
           await ttsManager.speakPiperText(content, selectedTtsVoice!.key, {
+            discordToken: discordSettingsRef.current.botToken,
             outputMode: getEffectiveTtsOutputMode(ttsRuntimeSettings),
             segmentIndex: 0,
             ttsSessionId: createTtsRoutingId(),
@@ -3318,6 +3322,7 @@ function App() {
         const task =
           ttsProvider === 'piper'
             ? ttsManager.queuePiperText(chunk, voice!.key, {
+                discordToken: discordSettingsRef.current.botToken,
                 outputMode: ttsRuntimeSettings.ttsOutputMode,
                 segmentIndex: ttsSegmentIndex++,
                 ttsSessionId,
@@ -3634,6 +3639,7 @@ function App() {
         const task =
           ttsProvider === 'piper'
             ? ttsManager.queuePiperText(chunk, voice!.key, {
+                discordToken: discordSettingsRef.current.botToken,
                 outputMode: getEffectiveTtsOutputMode(ttsRuntimeSettings),
                 segmentIndex: ttsSegmentIndex++,
                 ttsSessionId,
@@ -6564,9 +6570,14 @@ function App() {
         const shouldPostDiscordReply =
           discordSettingsRef.current.enabled &&
           discordSettingsRef.current.sendReplyText &&
-          (targetMessage?.source === 'discord' || discordOutputMode !== 'local-only');
+          (targetMessage?.source === 'discord' ||
+            discordOutputMode === 'discord-only' ||
+            discordOutputMode === 'local+discord');
         if (shouldPostDiscordReply) {
-          void postDiscordReplyText(assistantContent).catch((error) => {
+          void postDiscordReplyText(
+            assistantContent,
+            discordSettingsRef.current.botToken,
+          ).catch((error) => {
             console.warn('[Discord] Reply text delivery failed:', error);
           });
         }

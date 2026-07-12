@@ -70,6 +70,7 @@ type ResolvedDiscordConnectConfig = Omit<DiscordConnectConfig, 'listenEnabled' |
 
 export class DiscordVoiceController {
   private runtime: DiscordVoiceRuntimeLike | undefined;
+  private botToken = '';
   private config: ResolvedDiscordConnectConfig | undefined;
   private connectionStatus: DiscordVoiceControllerStatus['status'] = 'disconnected';
   private error: string | undefined;
@@ -103,6 +104,7 @@ export class DiscordVoiceController {
       const generation = ++this.generation;
       this.stopRuntime();
       this.config = resolved;
+      this.botToken = credentials.botToken;
       this.error = undefined;
       this.connectionStatus = 'connecting';
       this.emitStatus();
@@ -173,6 +175,10 @@ export class DiscordVoiceController {
     }) ?? false;
   }
 
+  public isAuthorized(botToken: string): boolean {
+    return Boolean(this.botToken) && botToken === this.botToken;
+  }
+
   public async sendReplyText(text: string): Promise<void> {
     const runtime = this.runtime;
     if (!runtime || this.connectionStatus !== 'connected') {
@@ -193,6 +199,7 @@ export class DiscordVoiceController {
   private stopRuntime(): void {
     const runtime = this.runtime;
     this.runtime = undefined;
+    this.botToken = '';
     runtime?.stop();
   }
 
@@ -305,6 +312,11 @@ export function createDiscordRouter(controller = new DiscordVoiceController()) {
     const parsed = replyTextBodySchema.safeParse(req.body ?? {});
     if (!parsed.success) {
       res.status(400).json({ ok: false, error: 'Invalid Discord reply text.' });
+      return;
+    }
+    const botToken = readSecretHeader(req, 'x-yourwifey-discord-token');
+    if (!botToken || !controller.isAuthorized(botToken)) {
+      res.status(403).json({ ok: false, error: 'Discord voice authorization failed.' });
       return;
     }
     try {
