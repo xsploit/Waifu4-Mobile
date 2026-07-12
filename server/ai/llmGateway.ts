@@ -112,7 +112,9 @@ export function buildProviderOptions(
   const options: Record<string, unknown> = {};
 
   if (req.provider === 'vercel-gateway') {
-    const gateway: Record<string, unknown> = { sort: 'ttft' };
+    const gateway: Record<string, unknown> = structured && req.model === 'deepseek/deepseek-v4-flash'
+      ? { order: ['azure', 'fireworks'] }
+      : { sort: 'ttft' };
     if (req.byokOpenAiKey?.trim()) {
       gateway.byok = { openai: [{ apiKey: req.byokOpenAiKey.trim() }] };
     }

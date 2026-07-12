@@ -67,6 +67,36 @@ describe('LLM gateway provider options', () => {
     ).toEqual({ gateway: { sort: 'ttft' } });
   });
 
+  it('prefers the verified structured-output providers for DeepSeek V4 Flash', () => {
+    expect(
+      buildProviderOptions(
+        {
+          provider: 'vercel-gateway',
+          model: 'deepseek/deepseek-v4-flash',
+        },
+        true,
+        false,
+      ),
+    ).toEqual({
+      gateway: {
+        order: ['azure', 'fireworks'],
+      },
+    });
+  });
+
+  it('keeps dynamic TTFT routing for unstructured DeepSeek V4 Flash', () => {
+    expect(
+      buildProviderOptions(
+        {
+          provider: 'vercel-gateway',
+          model: 'deepseek/deepseek-v4-flash',
+        },
+        false,
+        false,
+      ),
+    ).toEqual({ gateway: { sort: 'ttft' } });
+  });
+
   it('keeps Vercel TTFT routing when request-scoped BYOK is present', () => {
     expect(
       buildProviderOptions(
