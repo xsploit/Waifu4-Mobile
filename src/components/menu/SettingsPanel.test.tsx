@@ -467,8 +467,8 @@ describe('SettingsPanel tab smoke', () => {
 
     expect(html).toContain('Speech Output');
     expect(html).toContain('Output Mode');
-    expect(html).toContain('Local + Discord');
-    expect(html).toContain('External (virtual output)');
+    expect(html).toContain('Browser / Electron + Discord (collab)');
+    expect(html).toContain('Browser / Electron + external device');
     expect(html).toContain('Fish Speech Live Bridge');
     expect(html).toContain('Fish Speech Live');
     expect(html).toContain('WebSocket realtime');

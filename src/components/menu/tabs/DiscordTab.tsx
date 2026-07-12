@@ -266,13 +266,6 @@ export function DiscordTab({
       <div className="control-group">
         <div className="control-label">Replies And Control</div>
         <div className="setting-row">
-          <span>Speak replies in channel</span>
-          <Toggle
-            checked={settings.speakEnabled}
-            onChange={(speakEnabled) => updateSettings({ speakEnabled })}
-          />
-        </div>
-        <div className="setting-row">
           <span>Post reply text in voice chat</span>
           <Toggle
             checked={settings.sendReplyText}

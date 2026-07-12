@@ -65,4 +65,37 @@ describe('DiscordVoiceReceive', () => {
     receive.detach();
     expect(receive.subscriptionCount).toBe(0);
   });
+
+  it('keeps overlapping speakers in independent receive and VAD sessions', async () => {
+    const receiver = new TestReceiver();
+    const utterances: string[] = [];
+    const receive = new DiscordVoiceReceive(receiver, {
+      createDecoder: () => new TestDecoder(),
+      createVad: () => new VoiceActivityDetector({
+        endSilenceMs: 20,
+        maxUtteranceMs: 1_000,
+        minSpeechMs: 20,
+        sampleRate: 48_000,
+        startThreshold: 0.02,
+      }),
+      getUser: (userId) => ({ bot: false, displayName: userId.toUpperCase(), id: userId }),
+      identity: { channelId: 'channel', guildId: 'guild' },
+      isSelf: () => false,
+      now: () => 100,
+      onUtterance: (identity) => utterances.push(`${identity.userId}:${identity.displayName}`),
+    });
+
+    receive.attach();
+    receiver.speaking.emit('start', 'alice');
+    receiver.speaking.emit('start', 'bob');
+    await new Promise((resolve) => setImmediate(resolve));
+    expect(receive.subscriptionCount).toBe(2);
+
+    receiver.streams.get('alice')?.write(Buffer.concat([stereoFrame(12_000), stereoFrame(0)]));
+    receiver.streams.get('bob')?.write(Buffer.concat([stereoFrame(10_000), stereoFrame(0)]));
+    expect(utterances).toEqual(['alice:ALICE', 'bob:BOB']);
+
+    receive.detach();
+    expect(receive.subscriptionCount).toBe(0);
+  });
 });

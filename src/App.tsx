@@ -6806,10 +6806,15 @@ function App() {
         headers: await buildDiscordConnectHeaders(settings, providerKeyVaultWorkspaceId),
         method: 'POST',
       });
+      const payload = await response.json().catch(() => null);
       if (!response.ok) {
-        throw new Error(`Discord connect request failed (${response.status}).`);
+        const detail =
+          payload && typeof payload === 'object' && 'error' in payload && typeof payload.error === 'string'
+            ? payload.error
+            : `Discord connect request failed (${response.status}).`;
+        throw new Error(detail);
       }
-      const status = parseDiscordStatus(await response.json().catch(() => null));
+      const status = parseDiscordStatus(payload);
       setDiscordConnectionStatus(status?.status ?? 'connected');
       setDiscordStatusDetail(status?.detail || 'Discord voice bridge connected.');
     } catch (error) {

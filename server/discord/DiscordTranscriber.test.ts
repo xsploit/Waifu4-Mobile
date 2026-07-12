@@ -80,4 +80,36 @@ describe('DiscordTranscriber', () => {
     expect(completed).toEqual([]);
     expect(errors).toEqual([]);
   });
+
+  it('serializes each speaker while transcribing different speakers concurrently', async () => {
+    const releases = new Map<string, () => void>();
+    const started: string[] = [];
+    const completed: string[] = [];
+    const transcriber = new DiscordTranscriber({
+      maxConcurrent: 2,
+      onTranscript: (item) => { completed.push(item.text); },
+      transcribe: async (_audio, item) => {
+        const occurrence = started.filter((userId) => userId === item.userId).length + 1;
+        const key = `${item.userId}-${occurrence}`;
+        started.push(item.userId);
+        await new Promise<void>((resolve) => releases.set(key, resolve));
+        return { model: 'test', text: key };
+      },
+    });
+
+    transcriber.enqueue(identity, utterance);
+    transcriber.enqueue(identity, utterance);
+    transcriber.enqueue({ ...identity, userId: 'v' }, utterance);
+    await new Promise((resolve) => setImmediate(resolve));
+    expect(started).toEqual(['u', 'v']);
+
+    releases.get('v-1')?.();
+    releases.get('u-1')?.();
+    await new Promise((resolve) => setImmediate(resolve));
+    expect(started).toEqual(['u', 'v', 'u']);
+    releases.get('u-2')?.();
+    await transcriber.drain();
+
+    expect(completed).toEqual(['v-1', 'u-1', 'u-2']);
+  });
 });

@@ -93,6 +93,7 @@ export class DiscordTranscriber {
   private readonly sampleRate: number;
   private readonly pending: PendingUtterance[] = [];
   private readonly queuedByUser = new Map<string, number>();
+  private readonly activeUsers = new Set<string>();
   private active = 0;
   private closed = false;
 
@@ -153,10 +154,13 @@ export class DiscordTranscriber {
 
   private pump(): void {
     while (!this.closed && this.active < this.maxConcurrent && this.pending.length > 0) {
-      const item = this.pending.shift();
+      const index = this.pending.findIndex((item) => !this.activeUsers.has(item.identity.userId));
+      if (index < 0) return;
+      const [item] = this.pending.splice(index, 1);
       if (!item) return;
       this.decrementQueued(item.identity.userId);
       this.active += 1;
+      this.activeUsers.add(item.identity.userId);
       void this.run(item);
     }
   }
@@ -173,6 +177,7 @@ export class DiscordTranscriber {
       }
     } finally {
       this.active -= 1;
+      this.activeUsers.delete(item.identity.userId);
       this.pump();
     }
   }

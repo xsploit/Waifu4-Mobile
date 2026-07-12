@@ -59,6 +59,7 @@ describe('DiscordVoiceRuntime', () => {
         joined.push(options);
         return connection as never;
       },
+      reconnectDelayMs: 0,
       token: 'test-token',
       transcriber,
       voiceOutput: output as never,
@@ -79,7 +80,7 @@ describe('DiscordVoiceRuntime', () => {
     expect(runtime.tryEnqueueOutput({ audio: Buffer.alloc(0), chunkIndex: 0, sampleRate: 48_000, sessionId: 'session', utteranceId: 'utterance' })).toBe(true);
     connection.emit('stateChange', { status: VoiceConnectionStatus.Ready }, { status: VoiceConnectionStatus.Disconnected });
     await new Promise((resolve) => setTimeout(resolve, 0));
-    expect(joined).toHaveLength(1);
+    expect(joined).toHaveLength(2);
     client.emit('voiceStateUpdate', { channelId: 'channel', guildId: 'guild', id: 'human' } satisfies DiscordVoiceStateLike, { channelId: null, guildId: 'guild', id: 'human' } satisfies DiscordVoiceStateLike);
     runtime.stop();
     expect(destroyed).toBe(true);
