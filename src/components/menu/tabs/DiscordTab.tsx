@@ -22,20 +22,14 @@ type DiscordTabProps = {
 const TRANSCRIPTION_MODELS: Record<DiscordAsrProvider, Array<{ label: string; value: string }>> = {
   fish: [{ label: 'Fish ASR', value: 'fish-audio/asr' }],
   openrouter: [
-    { label: 'GPT-4o mini transcribe', value: 'openai/gpt-4o-mini-transcribe' },
-    { label: 'GPT-4o transcribe', value: 'openai/gpt-4o-transcribe' },
     { label: 'Whisper large v3', value: 'openai/whisper-large-v3' },
     { label: 'Whisper 1', value: 'openai/whisper-1' },
   ],
-  vercel: [
-    { label: 'GPT-4o mini transcribe', value: 'openai/gpt-4o-mini-transcribe' },
-    { label: 'GPT-4o transcribe', value: 'openai/gpt-4o-transcribe' },
-    { label: 'Whisper 1', value: 'openai/whisper-1' },
-  ],
+  vercel: [{ label: 'Whisper 1', value: 'openai/whisper-1' }],
 };
 
 function defaultModelFor(provider: DiscordAsrProvider) {
-  return TRANSCRIPTION_MODELS[provider][0]?.value ?? 'openai/gpt-4o-mini-transcribe';
+  return TRANSCRIPTION_MODELS[provider][0]?.value ?? 'openai/whisper-1';
 }
 
 function NumberField({

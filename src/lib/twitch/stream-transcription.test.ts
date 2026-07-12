@@ -10,7 +10,7 @@ import {
 describe('stream transcription helpers', () => {
   it('keeps transcription models on explicit transcription endpoints', () => {
     expect(normalizeTwitchStreamTranscriptionModel('gpt-4o-mini-transcribe')).toBe(
-      'openai/gpt-4o-mini-transcribe',
+      'openai/whisper-large-v3',
     );
     expect(normalizeTwitchStreamTranscriptionModel('o1-pro-2025-03-19')).toBe(
       'openai/whisper-large-v3',

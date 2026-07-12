@@ -47,18 +47,12 @@ const SAFE_TWITCH_TRANSCRIPTION_MODELS = new Map([
   ['openai/whisper-1', 'openai/whisper-1'],
   ['whisper-large-v3', 'openai/whisper-large-v3'],
   ['openai/whisper-large-v3', 'openai/whisper-large-v3'],
-  ['gpt-4o-transcribe', 'openai/gpt-4o-transcribe'],
-  ['openai/gpt-4o-transcribe', 'openai/gpt-4o-transcribe'],
-  ['gpt-4o-mini-transcribe', 'openai/gpt-4o-mini-transcribe'],
-  ['openai/gpt-4o-mini-transcribe', 'openai/gpt-4o-mini-transcribe'],
   ['fish-audio/asr', 'fish-audio/asr'],
 ]);
 
 export const TWITCH_STREAM_TRANSCRIPTION_MODEL_OPTIONS = [
   { label: 'OpenRouter Whisper large v3', value: 'openai/whisper-large-v3' },
   { label: 'OpenRouter Whisper 1', value: 'openai/whisper-1' },
-  { label: 'OpenRouter GPT-4o transcribe', value: 'openai/gpt-4o-transcribe' },
-  { label: 'OpenRouter GPT-4o mini transcribe', value: 'openai/gpt-4o-mini-transcribe' },
   { label: 'Fish ASR', value: 'fish-audio/asr' },
 ] as const;
 

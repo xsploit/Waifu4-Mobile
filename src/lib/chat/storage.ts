@@ -924,9 +924,9 @@ function getDefaultDiscordTranscriptionModel(provider: DiscordAsrProvider) {
     case 'fish':
       return 'fish-audio/asr';
     case 'vercel':
-      return 'openai/gpt-4o-mini-transcribe';
+      return 'openai/whisper-1';
     default:
-      return 'openai/gpt-4o-mini-transcribe';
+      return 'openai/whisper-large-v3';
   }
 }
 
@@ -938,12 +938,10 @@ function normalizeDiscordTranscriptionModel(provider: DiscordAsrProvider, value:
 
   const permittedModels =
     provider === 'vercel'
-      ? new Set(['openai/gpt-4o-mini-transcribe', 'openai/gpt-4o-transcribe', 'openai/whisper-1'])
+      ? new Set(['openai/whisper-1'])
       : new Set([
           'openai/whisper-large-v3',
           'openai/whisper-1',
-          'openai/gpt-4o-transcribe',
-          'openai/gpt-4o-mini-transcribe',
         ]);
   return permittedModels.has(model) ? model : getDefaultDiscordTranscriptionModel(provider);
 }

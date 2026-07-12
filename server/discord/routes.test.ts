@@ -16,7 +16,7 @@ const config: DiscordConnectConfig = {
   guildId: 'guild-1',
   languageHint: 'en',
   listenEnabled: true,
-  transcriptionModel: 'openai/gpt-4o-mini-transcribe',
+  transcriptionModel: 'openai/whisper-large-v3',
   vadEndSilenceMs: 900,
   vadMaxSpeechMs: 20_000,
   vadMinSpeechMs: 300,
@@ -71,7 +71,7 @@ class FakeRuntime {
         userId: 'user-1',
         username: 'username',
       },
-      model: 'openai/gpt-4o-mini-transcribe',
+      model: 'openai/whisper-large-v3',
       text: 'hello from Discord',
       utterance: {
         endTimestampMs: 1_234,
@@ -114,7 +114,7 @@ describe('DiscordVoiceController', () => {
       listen: true,
       transcription: {
         language: 'en',
-        model: 'openai/gpt-4o-mini-transcribe',
+        model: 'openai/whisper-large-v3',
         provider: 'openrouter',
       },
       vad: {
@@ -140,7 +140,7 @@ describe('DiscordVoiceController', () => {
         channelId: 'channel-1',
         displayName: 'Display Name',
         guildId: 'guild-1',
-        model: 'openai/gpt-4o-mini-transcribe',
+        model: 'openai/whisper-large-v3',
         text: 'hello from Discord',
         timestamp: 1_234,
         userId: 'user-1',

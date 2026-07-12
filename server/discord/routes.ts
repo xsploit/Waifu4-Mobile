@@ -10,7 +10,7 @@ import type { DiscordVoiceTranscript } from './DiscordTranscriber';
 import { createDiscordVoiceOutput } from './DiscordVoiceOutput';
 import type { TtsOutputChunk } from '../tts/outputFanout';
 
-const DEFAULT_ASR_MODEL = 'openai/gpt-4o-mini-transcribe';
+const DEFAULT_ASR_MODEL = 'openai/whisper-large-v3';
 const DEFAULT_VAD = {
   endSilenceMs: 850,
   maxUtteranceMs: 30_000,
@@ -332,6 +332,7 @@ function resolveTranscriptionModel(
   requestedModel: string | undefined,
 ) {
   if (provider === 'fish') return 'fish-audio/asr';
+  if (provider === 'vercel') return requestedModel ?? 'openai/whisper-1';
   return requestedModel ?? DEFAULT_ASR_MODEL;
 }
 

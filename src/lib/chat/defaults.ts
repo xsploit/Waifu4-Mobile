@@ -233,7 +233,7 @@ export function createDefaultDiscordSettings(): DiscordSettings {
     voiceChannelId: '',
     trustedControllerUserIds: [],
     asrProvider: 'openrouter',
-    transcriptionModel: 'openai/gpt-4o-mini-transcribe',
+    transcriptionModel: 'openai/whisper-large-v3',
     languageHint: '',
     vadThreshold: 0.03,
     vadEndSilenceMs: 850,
