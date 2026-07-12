@@ -134,7 +134,7 @@ export function buildProviderOptions(
     options.openai = { reasoningEffort: req.reasoningEffort ?? 'minimal' };
   }
 
-  if (req.provider === 'vercel-gateway' && req.model === 'deepseek/deepseek-v4-pro' && structured) {
+  if (req.provider === 'vercel-gateway' && req.model.startsWith('deepseek/')) {
     options.deepseek = { thinking: { type: 'disabled' } };
   }
 
@@ -153,9 +153,10 @@ export function buildProviderOptions(
       provider.only = req.openRouterRouting.providers;
       provider.allow_fallbacks = req.openRouterRouting.allowFallbacks ?? false;
     }
-    if (Object.keys(provider).length > 0) {
-      options.openrouter = { provider };
-    }
+    options.openrouter = {
+      reasoning: { effort: 'none' },
+      ...(Object.keys(provider).length > 0 ? { provider } : {}),
+    };
   }
 
   return Object.keys(options).length > 0 ? options : undefined;

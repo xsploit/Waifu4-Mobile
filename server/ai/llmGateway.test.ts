@@ -59,7 +59,7 @@ describe('LLM gateway provider options', () => {
       buildProviderOptions(
         {
           provider: 'vercel-gateway',
-          model: 'deepseek/deepseek-v4-flash',
+          model: 'anthropic/claude-haiku-4.5',
         },
         false,
         false,
@@ -78,6 +78,7 @@ describe('LLM gateway provider options', () => {
         false,
       ),
     ).toEqual({
+      deepseek: { thinking: { type: 'disabled' } },
       gateway: {
         order: ['azure', 'fireworks'],
       },
@@ -94,7 +95,10 @@ describe('LLM gateway provider options', () => {
         false,
         false,
       ),
-    ).toEqual({ gateway: { sort: 'ttft' } });
+    ).toEqual({
+      deepseek: { thinking: { type: 'disabled' } },
+      gateway: { sort: 'ttft' },
+    });
   });
 
   it('prefers verified strict-tool providers for structured DeepSeek V4 Pro', () => {
@@ -143,10 +147,15 @@ describe('LLM gateway provider options', () => {
         false,
         true,
       ),
-    ).toEqual({ openrouter: { provider: { require_parameters: true } } });
+    ).toEqual({
+      openrouter: {
+        provider: { require_parameters: true },
+        reasoning: { effort: 'none' },
+      },
+    });
   });
 
-  it('does not add OpenRouter require_parameters for plain text without tools', () => {
+  it('disables OpenRouter reasoning without requiring structured parameters for plain text', () => {
     expect(
       buildProviderOptions(
         {
@@ -156,7 +165,23 @@ describe('LLM gateway provider options', () => {
         false,
         false,
       ),
-    ).toBeUndefined();
+    ).toEqual({ openrouter: { reasoning: { effort: 'none' } } });
+  });
+
+  it('disables DeepSeek thinking for every Vercel DeepSeek model and lane', () => {
+    expect(
+      buildProviderOptions(
+        {
+          provider: 'vercel-gateway',
+          model: 'deepseek/deepseek-v4-flash',
+        },
+        false,
+        false,
+      ),
+    ).toEqual({
+      deepseek: { thinking: { type: 'disabled' } },
+      gateway: { sort: 'ttft' },
+    });
   });
 });
 
