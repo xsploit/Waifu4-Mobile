@@ -793,8 +793,7 @@ export class TtsManager {
 
   private applyOutputGains() {
     if (this.masterGain) {
-      this.masterGain.gain.value =
-        this.outputMode === 'discord-only' || this.outputMode === 'external' ? 0 : this.volume;
+      this.masterGain.gain.value = this.volume;
     }
     if (this.streamGain) {
       this.streamGain.gain.value = this.volume;

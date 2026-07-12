@@ -232,10 +232,9 @@ export function TtsTab({
             style={{ flex: '0 1 220px', minWidth: 0, width: 'auto' }}
             value={aiSettings.ttsOutputMode}
           >
-            <option value="local-only">Local only</option>
-            <option value="discord-only">Discord only</option>
-            <option value="local+discord">Local + Discord</option>
-            <option value="external">External (virtual output)</option>
+            <option value="local-only">Browser / Electron</option>
+            <option value="local+discord">Browser / Electron + Discord (collab)</option>
+            <option value="external">Browser / Electron + external device</option>
           </select>
         </label>
         {aiSettings.ttsOutputMode === 'external' ? (

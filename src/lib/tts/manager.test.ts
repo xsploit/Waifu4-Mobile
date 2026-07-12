@@ -24,14 +24,14 @@ function createPcm16Blob(samples: number[]) {
 }
 
 describe('TtsManager remote PCM scheduling', () => {
-  it('mutes only the local destination for Discord and external output modes', () => {
+  it('keeps browser playback enabled for every additive output route', () => {
     const manager = new TtsManager();
     const localGain = { gain: { value: 1 } };
     const streamGain = { gain: { value: 1 } };
     Object.assign(manager, { masterGain: localGain, streamGain, volume: 0.8 });
 
     manager.setOutputRoute('discord-only');
-    expect(localGain.gain.value).toBe(0);
+    expect(localGain.gain.value).toBe(0.8);
     expect(streamGain.gain.value).toBe(0.8);
 
     manager.setOutputRoute('local+discord');
@@ -39,7 +39,7 @@ describe('TtsManager remote PCM scheduling', () => {
     expect(streamGain.gain.value).toBe(0.8);
 
     manager.setOutputRoute('external', 'virtual-cable');
-    expect(localGain.gain.value).toBe(0);
+    expect(localGain.gain.value).toBe(0.8);
     expect(streamGain.gain.value).toBe(0.8);
   });
 

@@ -413,7 +413,7 @@ describe('chat settings persistence', () => {
     expect(loaded.twitchSettings.streamTranscriptionModel).toBe('openai/whisper-large-v3');
   });
 
-  it('defaults invalid TTS output modes and keeps valid modes in backup snapshots', async () => {
+  it('defaults invalid TTS output modes and migrates legacy Discord-only routing', async () => {
     window.localStorage.setItem(
       STORAGE_KEYS.aiSettings,
       JSON.stringify({
@@ -426,12 +426,26 @@ describe('chat settings persistence', () => {
     const snapshot = normalizePersistedChatStateSnapshot({
       aiSettings: {
         ...createDefaultAiSettings(),
-        ttsOutputMode: 'external',
+        ttsOutputMode: 'discord-only',
       },
     });
 
     expect(loaded.aiSettings.ttsOutputMode).toBe('local-only');
-    expect(snapshot.aiSettings.ttsOutputMode).toBe('external');
+    expect(snapshot.aiSettings.ttsOutputMode).toBe('local+discord');
+  });
+
+  it('migrates a stored Discord-only route to additive browser and Discord output', async () => {
+    window.localStorage.setItem(
+      STORAGE_KEYS.aiSettings,
+      JSON.stringify({
+        ...createDefaultAiSettings(),
+        ttsOutputMode: 'discord-only',
+      }),
+    );
+
+    const loaded = await loadPersistedChatState();
+
+    expect(loaded.aiSettings.ttsOutputMode).toBe('local+discord');
   });
 
   it('persists Discord settings and clamps imported voice controls defensively', async () => {

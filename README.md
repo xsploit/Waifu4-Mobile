@@ -87,7 +87,7 @@ and local backup restore while keeping the original frontend look and tab workfl
         <li>Fish S2-oriented controls: latency, chunk length, sample rate, format, transport, and continuity.</li>
         <li>Inworld HTTP and WebSocket streaming with delivery, timestamp, and buffer controls.</li>
         <li>Browser-local Piper synthesis with cached ONNX voices.</li>
-        <li>Local, Discord, local + Discord, and external-device output routing.</li>
+        <li>Always-on browser/Electron playback with optional Discord collab or external-device mirroring.</li>
         <li>Audible browser benchmark for comparing transports and regressions.</li>
       </ul>
     </td>
@@ -232,7 +232,7 @@ looks capable but then rejects the request shape at runtime.
   </tr>
   <tr>
     <td>TTS</td>
-    <td>Fish WebSocket, Fish Timestamp SSE, Inworld HTTP, Inworld WebSocket, browser-local Piper, four output modes, and browser benchmark.</td>
+    <td>Fish WebSocket, Fish Timestamp SSE, Inworld HTTP, Inworld WebSocket, browser-local Piper, additive output routing, and browser benchmark.</td>
   </tr>
   <tr>
     <td>Captions and Mouth</td>
@@ -356,8 +356,9 @@ Notes:
 
 Discord voice requires a bot token, guild ID, voice-channel ID, and a key for
 the selected Fish, OpenRouter, or Vercel transcription provider. Speech output
-to Discord is a best-effort, nonblocking sidecar: local reply generation and
-browser playback do not wait for the Discord sink.
+to Discord is an optional collaboration mirror and a best-effort, nonblocking
+sidecar. Browser/Electron playback remains active for audio, stream capture,
+and lipsync, and never waits for the Discord sink.
 
 ---
 

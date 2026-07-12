@@ -402,12 +402,13 @@ function normalizeAiSettings(value: unknown): AiSettings {
       ? Math.max(0, Math.min(2, source.ttsVolume))
       : defaults.ttsVolume;
   const ttsOutputMode =
-    source.ttsOutputMode === 'local-only' ||
-    source.ttsOutputMode === 'discord-only' ||
-    source.ttsOutputMode === 'local+discord' ||
-    source.ttsOutputMode === 'external'
-      ? source.ttsOutputMode
-      : defaults.ttsOutputMode;
+    source.ttsOutputMode === 'discord-only'
+      ? 'local+discord'
+      : source.ttsOutputMode === 'local-only' ||
+          source.ttsOutputMode === 'local+discord' ||
+          source.ttsOutputMode === 'external'
+        ? source.ttsOutputMode
+        : defaults.ttsOutputMode;
   const ttsProvider =
     source.ttsProvider === 'fish-speech' || source.ttsProvider === 'inworld'
       ? source.ttsProvider
