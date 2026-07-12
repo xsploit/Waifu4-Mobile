@@ -6,6 +6,7 @@ import { ContextTab } from './ContextTab';
 
 describe('ContextTab', () => {
   it('renders Ladybug backend database, vector, graph, and prompt-inspection state', () => {
+    const consoleError = vi.spyOn(console, 'error').mockImplementation(() => undefined);
     const html = renderToStaticMarkup(
       <ContextTab
         aiSettings={createDefaultAiSettings()}
@@ -83,7 +84,7 @@ describe('ContextTab', () => {
           participants: [
             { channel: 'local', displayName: 'Subby', id: 'local:local:subby', source: 'local' },
           ],
-          personas: [{ id: 'hikari-context', name: 'Hikari' }],
+          personas: [{ id: 'local:persona:hikari-context', name: 'Hikari' }],
           recent: {
             activities: [
               {
@@ -352,6 +353,8 @@ describe('ContextTab', () => {
     expect(html).toContain('relationship_memory');
     expect(html).toContain('semantic_memory');
     expect(html).toContain('semantic recall');
+    expect(consoleError.mock.calls.flat().join(' ')).not.toContain('same key');
+    consoleError.mockRestore();
   });
 
   it('keeps the selected safe memory worker model visible when it is missing from the refreshed provider list', () => {

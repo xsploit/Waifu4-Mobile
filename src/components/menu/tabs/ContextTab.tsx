@@ -55,6 +55,17 @@ function stringifyContextValue(value: unknown): string {
   return String(value);
 }
 
+function uniqueGraphRows<T extends { id: string }>(rows: readonly T[]) {
+  const seen = new Set<string>();
+  return rows.filter((row) => {
+    if (seen.has(row.id)) {
+      return false;
+    }
+    seen.add(row.id);
+    return true;
+  });
+}
+
 type ContextTabProps = {
   aiSettings: AiSettings;
   availableModelMetadata: ReadonlyMap<string, ProviderModelInfo>;
@@ -594,8 +605,8 @@ export function ContextTab({
         </div>
         {memoryGraphSummary ? (
           <div className="memory-list">
-            {memoryGraphSummary.scopes.slice(0, 4).map((scope) => (
-              <div className="memory-entry" key={scope.id}>
+            {uniqueGraphRows(memoryGraphSummary.scopes).slice(0, 4).map((scope) => (
+              <div className="memory-entry" key={`scope:${scope.id}`}>
                 <div className="memory-entry-header">
                   <strong>{scope.personaId || 'unknown persona'}</strong>
                   <span>
@@ -605,8 +616,8 @@ export function ContextTab({
                 <p>{scope.id}</p>
               </div>
             ))}
-            {memoryGraphSummary.participants.slice(0, 6).map((participant) => (
-              <div className="memory-entry" key={participant.id}>
+            {uniqueGraphRows(memoryGraphSummary.participants).slice(0, 6).map((participant) => (
+              <div className="memory-entry" key={`participant:${participant.id}`}>
                 <div className="memory-entry-header">
                   <strong>{participant.displayName || participant.id}</strong>
                   <span>
@@ -616,8 +627,8 @@ export function ContextTab({
                 <p>{participant.id}</p>
               </div>
             ))}
-            {memoryGraphSummary.personas.slice(0, 6).map((persona) => (
-              <div className="memory-entry" key={persona.id}>
+            {uniqueGraphRows(memoryGraphSummary.personas).slice(0, 6).map((persona) => (
+              <div className="memory-entry" key={`persona:${persona.id}`}>
                 <div className="memory-entry-header">
                   <strong>Persona</strong>
                   <span>{persona.name || persona.id}</span>
@@ -638,8 +649,8 @@ export function ContextTab({
                 </p>
               </div>
             ) : null}
-            {(memoryGraphSummary.recent.turns ?? []).slice(0, 4).map((turn) => (
-              <div className="memory-entry" key={turn.id}>
+            {uniqueGraphRows(memoryGraphSummary.recent.turns ?? []).slice(0, 4).map((turn) => (
+              <div className="memory-entry" key={`turn:${turn.id}`}>
                 <div className="memory-entry-header">
                   <strong>Graph turn</strong>
                   <span>{turn.role || 'turn'}</span>
@@ -649,8 +660,8 @@ export function ContextTab({
                 <div className="status-copy">{turn.scopeKey || 'unknown scope'}</div>
               </div>
             ))}
-            {memoryGraphSummary.recent.candidates.slice(0, 4).map((candidate) => (
-              <div className="memory-entry" key={candidate.id}>
+            {uniqueGraphRows(memoryGraphSummary.recent.candidates).slice(0, 4).map((candidate) => (
+              <div className="memory-entry" key={`candidate:${candidate.id}`}>
                 <div className="memory-entry-header">
                   <strong>Graph candidate</strong>
                   <span>{candidate.type || 'memory'}</span>
@@ -659,8 +670,8 @@ export function ContextTab({
                 <div className="status-copy">{candidate.summary || 'No candidate summary.'}</div>
               </div>
             ))}
-            {(memoryGraphSummary.recent.slots ?? []).slice(0, 4).map((slot) => (
-              <div className="memory-entry" key={slot.id}>
+            {uniqueGraphRows(memoryGraphSummary.recent.slots ?? []).slice(0, 4).map((slot) => (
+              <div className="memory-entry" key={`slot:${slot.id}`}>
                 <div className="memory-entry-header">
                   <strong>{slot.slotName || 'Memory slot'}</strong>
                   <span>{slot.itemCount} items</span>
@@ -671,8 +682,8 @@ export function ContextTab({
                 ) : null}
               </div>
             ))}
-            {(memoryGraphSummary.recent.slotPatches ?? []).slice(0, 4).map((patch) => (
-              <div className="memory-entry" key={patch.id}>
+            {uniqueGraphRows(memoryGraphSummary.recent.slotPatches ?? []).slice(0, 4).map((patch) => (
+              <div className="memory-entry" key={`slot-patch:${patch.id}`}>
                 <div className="memory-entry-header">
                   <strong>Slot patch</strong>
                   <span>{patch.operation || 'patch'}</span>
@@ -683,8 +694,8 @@ export function ContextTab({
                 </div>
               </div>
             ))}
-            {memoryGraphSummary.recent.diary.slice(0, 4).map((entry) => (
-              <div className="memory-entry" key={entry.id}>
+            {uniqueGraphRows(memoryGraphSummary.recent.diary).slice(0, 4).map((entry) => (
+              <div className="memory-entry" key={`diary:${entry.id}`}>
                 <div className="memory-entry-header">
                   <strong>Graph diary</strong>
                   <span>{entry.beatType || 'reflection'}</span>
@@ -693,8 +704,8 @@ export function ContextTab({
                 <div className="status-copy">{entry.summary || 'No diary summary.'}</div>
               </div>
             ))}
-            {(memoryGraphSummary.recent.activities ?? []).slice(0, 4).map((activity) => (
-              <div className="memory-entry" key={activity.id}>
+            {uniqueGraphRows(memoryGraphSummary.recent.activities ?? []).slice(0, 4).map((activity) => (
+              <div className="memory-entry" key={`activity:${activity.id}`}>
                 <div className="memory-entry-header">
                   <strong>GRILLO activity</strong>
                   <span>{activity.beatType || 'beat'}</span>
@@ -708,8 +719,8 @@ export function ContextTab({
                 </div>
               </div>
             ))}
-            {(memoryGraphSummary.recent.traces ?? []).slice(0, 4).map((trace) => (
-              <div className="memory-entry" key={trace.id}>
+            {uniqueGraphRows(memoryGraphSummary.recent.traces ?? []).slice(0, 4).map((trace) => (
+              <div className="memory-entry" key={`trace:${trace.id}`}>
                 <div className="memory-entry-header">
                   <strong>Worker trace</strong>
                   <span>{trace.taskType || 'task'}</span>
@@ -722,8 +733,8 @@ export function ContextTab({
                 {trace.prompt ? <div className="status-copy">{trace.prompt}</div> : null}
               </div>
             ))}
-            {memoryGraphSummary.recent.relationships.slice(0, 4).map((profile) => (
-              <div className="memory-entry" key={profile.id}>
+            {uniqueGraphRows(memoryGraphSummary.recent.relationships).slice(0, 4).map((profile) => (
+              <div className="memory-entry" key={`relationship:${profile.id}`}>
                 <div className="memory-entry-header">
                   <strong>{profile.relationshipStage || 'relationship'}</strong>
                   <span>{profile.mood || 'mood unknown'}</span>
@@ -734,8 +745,8 @@ export function ContextTab({
                 </div>
               </div>
             ))}
-            {memoryGraphSummary.recent.relationshipFacts.slice(0, 4).map((fact) => (
-              <div className="memory-entry" key={fact.id}>
+            {uniqueGraphRows(memoryGraphSummary.recent.relationshipFacts).slice(0, 4).map((fact) => (
+              <div className="memory-entry" key={`relationship-fact:${fact.id}`}>
                 <div className="memory-entry-header">
                   <strong>Relationship fact</strong>
                   <span>{fact.scopeKey || 'unknown scope'}</span>
@@ -743,8 +754,8 @@ export function ContextTab({
                 <p>{fact.text || 'No relationship fact captured.'}</p>
               </div>
             ))}
-            {memoryGraphSummary.recent.blocks.slice(0, 4).map((block) => (
-              <div className="memory-entry" key={block.id}>
+            {uniqueGraphRows(memoryGraphSummary.recent.blocks).slice(0, 4).map((block) => (
+              <div className="memory-entry" key={`block:${block.id}`}>
                 <div className="memory-entry-header">
                   <strong>{block.blockName || 'Memory block'}</strong>
                   <span>{block.itemCount} items</span>
@@ -756,8 +767,8 @@ export function ContextTab({
                 <div className="status-copy">{block.scopeKey || 'unknown scope'}</div>
               </div>
             ))}
-            {memoryGraphSummary.recent.emotions.slice(0, 4).map((emotion) => (
-              <div className="memory-entry" key={emotion.id}>
+            {uniqueGraphRows(memoryGraphSummary.recent.emotions).slice(0, 4).map((emotion) => (
+              <div className="memory-entry" key={`emotion:${emotion.id}`}>
                 <div className="memory-entry-header">
                   <strong>Emotion state</strong>
                   <span>{emotion.lastSignalSource || 'no signal source'}</span>
@@ -769,8 +780,8 @@ export function ContextTab({
                 </div>
               </div>
             ))}
-            {memoryGraphSummary.recent.emotionIntensities.slice(0, 6).map((emotion) => (
-              <div className="memory-entry" key={emotion.id}>
+            {uniqueGraphRows(memoryGraphSummary.recent.emotionIntensities).slice(0, 6).map((emotion) => (
+              <div className="memory-entry" key={`emotion-intensity:${emotion.id}`}>
                 <div className="memory-entry-header">
                   <strong>{emotion.name || 'emotion'}</strong>
                   <span>{emotion.intensity}</span>
@@ -779,8 +790,8 @@ export function ContextTab({
                 <div className="status-copy">{emotion.emotionStateId}</div>
               </div>
             ))}
-            {memoryGraphSummary.recent.semantic.slice(0, 4).map((record) => (
-              <div className="memory-entry" key={record.id}>
+            {uniqueGraphRows(memoryGraphSummary.recent.semantic).slice(0, 4).map((record) => (
+              <div className="memory-entry" key={`semantic:${record.id}`}>
                 <div className="memory-entry-header">
                   <strong>Semantic record</strong>
                   <span>{record.personaId || 'unknown persona'}</span>
@@ -788,8 +799,8 @@ export function ContextTab({
                 <p>{record.text || 'No semantic text captured.'}</p>
               </div>
             ))}
-            {memoryGraphSummary.recent.vectors.slice(0, 4).map((record) => (
-              <div className="memory-entry" key={record.id}>
+            {uniqueGraphRows(memoryGraphSummary.recent.vectors).slice(0, 4).map((record) => (
+              <div className="memory-entry" key={`vector:${record.id}`}>
                 <div className="memory-entry-header">
                   <strong>Vector record</strong>
                   <span>{record.personaId || 'unknown persona'}</span>
