@@ -1,4 +1,9 @@
 import { spawn } from 'node:child_process';
+import {
+  normalizeTranscriptText,
+  transcribeAudio,
+  type AudioTranscriptionProvider,
+} from '../speech/transcribe';
 
 type ProcessResult = {
   stderr: Buffer;
@@ -10,7 +15,7 @@ type TranscribeTwitchStreamOptions = {
   apiKey: string;
   channel: string;
   model: string;
-  provider: 'fish-speech' | 'openrouter';
+  provider: Extract<AudioTranscriptionProvider, 'fish-speech' | 'openrouter'>;
   sampleSeconds: number;
 };
 
@@ -182,32 +187,36 @@ async function captureAudioSample(streamUrl: string, sampleSeconds: number) {
   return result.stdout;
 }
 
-function normalizeTranscriptText(value: string) {
-  return value.replace(/\s+/g, ' ').trim();
-}
-
-function looksLikePromptEcho(text: string) {
-  const normalized = text.toLowerCase();
-  return (
-    normalized.includes('preserve names') ||
-    normalized.includes('game/event terms') ||
-    normalized.includes('streamer speech') ||
-    normalized.includes('chat-relevant context') ||
-    normalized.includes('twitch livestream audio')
-  );
-}
-
 function normalizeProviderLabel(provider: TranscribeTwitchStreamOptions['provider']) {
   return provider === 'openrouter' ? 'OpenRouter' : 'Fish Speech';
 }
 
-function resolveFishAsrUrl(baseUrl: string) {
-  const raw = baseUrl.trim() || 'https://api.fish.audio';
-  const withoutTrailingSlash = raw.replace(/\/+$/, '');
-  if (withoutTrailingSlash.endsWith('/v1')) {
-    return `${withoutTrailingSlash}/asr`;
+export function validateTwitchTranscriptText(
+  value: string,
+  provider: TranscribeTwitchStreamOptions['provider'],
+) {
+  const text = normalizeTranscriptText(value);
+  const normalized = text.toLowerCase();
+  const looksLikePromptEcho =
+    normalized.includes('preserve names') ||
+    normalized.includes('game/event terms') ||
+    normalized.includes('streamer speech') ||
+    normalized.includes('chat-relevant context') ||
+    normalized.includes('twitch livestream audio');
+  if (!text || looksLikePromptEcho) {
+    throw new Error(`${normalizeProviderLabel(provider)} transcription returned no usable stream speech.`);
   }
-  return `${withoutTrailingSlash.replace(/\/v1\/.*$/i, '')}/v1/asr`;
+  return text;
+}
+
+function isSharedUnusableSpeechError(
+  error: unknown,
+  provider: TranscribeTwitchStreamOptions['provider'],
+) {
+  return (
+    error instanceof Error &&
+    error.message === `${normalizeProviderLabel(provider)} transcription returned no usable speech.`
+  );
 }
 
 export function getTwitchFrameScaleFilter(detail: TwitchStreamFrameDetail) {
@@ -263,76 +272,29 @@ export async function transcribeTwitchStreamSample(options: TranscribeTwitchStre
 
   const streamUrl = await resolveTwitchStreamUrl(channel, 'audio');
   const audio = await captureAudioSample(streamUrl, options.sampleSeconds);
-  const providerLabel = normalizeProviderLabel(options.provider);
-
-  if (options.provider === 'openrouter') {
-    const response = await fetch(`${options.apiBaseUrl.replace(/\/+$/, '')}/audio/transcriptions`, {
-      body: JSON.stringify({
-        input_audio: {
-          data: audio.toString('base64'),
-          format: 'wav',
-        },
-        model: options.model.trim() || 'openai/whisper-large-v3',
-      }),
-      headers: {
-        Authorization: `Bearer ${options.apiKey}`,
-        'Content-Type': 'application/json',
-      },
-      method: 'POST',
+  let transcript;
+  try {
+    transcript = await transcribeAudio({
+      apiBaseUrl: options.apiBaseUrl,
+      apiKey: options.apiKey,
+      audio,
+      model: options.model,
+      provider: options.provider,
     });
-    const data = (await response.json().catch(() => ({}))) as {
-      error?: { message?: string };
-      text?: string;
-    };
-    if (!response.ok) {
+  } catch (error) {
+    if (isSharedUnusableSpeechError(error, options.provider)) {
       throw new Error(
-        data.error?.message ||
-          `${providerLabel} transcription failed with HTTP ${response.status}.`,
+        `${normalizeProviderLabel(options.provider)} transcription returned no usable stream speech.`,
       );
     }
-    const text = normalizeTranscriptText(data.text ?? '');
-    if (!text || looksLikePromptEcho(text)) {
-      throw new Error(`${providerLabel} transcription returned no usable stream speech.`);
-    }
-
-    return {
-      channel,
-      model: options.model.trim() || 'openai/whisper-large-v3',
-      sampleSeconds: Math.max(5, Math.min(60, Math.round(options.sampleSeconds))),
-      text,
-    };
-  }
-
-  const response = await fetch(resolveFishAsrUrl(options.apiBaseUrl), {
-    body: JSON.stringify({
-      audio: audio.toString('base64'),
-      ignore_timestamps: true,
-    }),
-    headers: {
-      Authorization: `Bearer ${options.apiKey}`,
-      'Content-Type': 'application/json',
-    },
-    method: 'POST',
-  });
-  const data = (await response.json().catch(() => ({}))) as {
-    error?: { message?: string };
-    text?: string;
-  };
-  if (!response.ok) {
-    throw new Error(
-      data.error?.message || `${providerLabel} transcription failed with HTTP ${response.status}.`,
-    );
-  }
-  const text = normalizeTranscriptText(data.text ?? '');
-  if (!text || looksLikePromptEcho(text)) {
-    throw new Error(`${providerLabel} transcription returned no usable stream speech.`);
+    throw error;
   }
 
   return {
     channel,
-    model: 'fish-audio/asr',
+    model: transcript.model,
     sampleSeconds: Math.max(5, Math.min(60, Math.round(options.sampleSeconds))),
-    text,
+    text: validateTwitchTranscriptText(transcript.text, options.provider),
   };
 }
 
