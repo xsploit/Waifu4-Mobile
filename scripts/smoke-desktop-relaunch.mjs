@@ -117,20 +117,54 @@ function killPackagedProcesses() {
   if (process.platform !== 'win32') {
     return Promise.resolve();
   }
-  const escapedRoot = repoRoot.replace(/'/g, "''");
+  const releaseRoot = path.join(repoRoot, 'release', 'win-unpacked');
+  const command = [
+    '$root = [IO.Path]::GetFullPath($env:WEBWAIFU_RELEASE_ROOT)',
+    '$targets = @(Get-CimInstance Win32_Process | Where-Object {',
+    '  $_.ExecutablePath -and [IO.Path]::GetFullPath($_.ExecutablePath).StartsWith($root, [StringComparison]::OrdinalIgnoreCase)',
+    '})',
+    'foreach ($target in $targets) {',
+    '  Stop-Process -Id $target.ProcessId -Force -ErrorAction SilentlyContinue',
+    '}',
+    'Start-Sleep -Milliseconds 750',
+    '$left = @(Get-CimInstance Win32_Process | Where-Object {',
+    '  $_.ExecutablePath -and [IO.Path]::GetFullPath($_.ExecutablePath).StartsWith($root, [StringComparison]::OrdinalIgnoreCase)',
+    '})',
+    'if ($left.Count -gt 0) {',
+    '  Write-Error ("Packaged processes survived cleanup: " + (($left | ForEach-Object { "$($_.Name):$($_.ProcessId)" }) -join ", "))',
+    '  exit 1',
+    '}',
+  ].join('; ');
   const child = spawn(
-    'powershell',
-    [
-      '-NoProfile',
-      '-Command',
-      `$repo='${escapedRoot}'; Get-Process | Where-Object { ($_.ProcessName -eq 'WebWaifu 4' -and $_.Path -like "$repo\\release\\win-unpacked\\*") -or ($_.ProcessName -eq 'node' -and $_.Path -like "$repo\\release\\win-unpacked\\resources\\desktop-runtime\\node.exe") } | Stop-Process -Force -ErrorAction SilentlyContinue`,
-    ],
-    { stdio: 'ignore', windowsHide: true },
+    'powershell.exe',
+    ['-NoProfile', '-NonInteractive', '-Command', command],
+    {
+      env: {
+        ...process.env,
+        WEBWAIFU_RELEASE_ROOT: releaseRoot,
+      },
+      stdio: ['ignore', 'ignore', 'pipe'],
+      windowsHide: true,
+    },
   );
-  return new Promise((resolve) => child.once('exit', resolve));
+  let stderr = '';
+  child.stderr.on('data', (chunk) => {
+    stderr += chunk.toString();
+  });
+  return new Promise((resolve, reject) => {
+    child.once('error', reject);
+    child.once('close', (code) => {
+      if (code === 0) {
+        resolve();
+        return;
+      }
+      reject(new Error(stderr.trim() || `Packaged process cleanup exited with code ${code}.`));
+    });
+  });
 }
 
 async function main() {
+  await killPackagedProcesses();
   spawn(exePath, [`--remote-debugging-port=${debugPort}`], {
     cwd: path.dirname(exePath),
     detached: false,
