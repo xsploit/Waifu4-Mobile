@@ -97,6 +97,19 @@ describe('LLM gateway provider options', () => {
     ).toEqual({ gateway: { sort: 'ttft' } });
   });
 
+  it('prefers verified strict-tool providers for structured DeepSeek V4 Pro', () => {
+    expect(
+      buildProviderOptions(
+        {
+          provider: 'vercel-gateway',
+          model: 'deepseek/deepseek-v4-pro',
+        },
+        true,
+        true,
+      ),
+    ).toEqual({ gateway: { order: ['baseten', 'fireworks'] } });
+  });
+
   it('keeps Vercel TTFT routing when request-scoped BYOK is present', () => {
     expect(
       buildProviderOptions(

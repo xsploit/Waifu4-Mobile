@@ -2,8 +2,10 @@ import {
   Output,
   extractJsonMiddleware,
   generateText,
+  parsePartialJson,
   stepCountIs,
   streamText,
+  tool,
   wrapLanguageModel,
   type ModelMessage,
 } from 'ai';
@@ -112,8 +114,12 @@ export function buildProviderOptions(
   const options: Record<string, unknown> = {};
 
   if (req.provider === 'vercel-gateway') {
-    const gateway: Record<string, unknown> = structured && req.model === 'deepseek/deepseek-v4-flash'
-      ? { order: ['azure', 'fireworks'] }
+    const gateway: Record<string, unknown> = structured
+      ? req.model === 'deepseek/deepseek-v4-flash'
+        ? { order: ['azure', 'fireworks'] }
+        : req.model === 'deepseek/deepseek-v4-pro'
+          ? { order: ['baseten', 'fireworks'] }
+          : { sort: 'ttft' }
       : { sort: 'ttft' };
     if (req.byokOpenAiKey?.trim()) {
       gateway.byok = { openai: [{ apiKey: req.byokOpenAiKey.trim() }] };
@@ -247,8 +253,21 @@ export async function streamChat(
   onDelta: (text: string) => void,
 ): Promise<StreamChatResult> {
   const structured = req.replyFormat === 'structured';
-  const model = createModel(req, structured);
-  const tools = req.toolChoiceMode === 'off' ? undefined : createTavilyTools(req.tavilyKey);
+  const strictReplyTool = structured
+    && req.provider === 'vercel-gateway'
+    && req.model === 'deepseek/deepseek-v4-pro';
+  const model = createModel(req, structured && !strictReplyTool);
+  const tavilyTools = req.toolChoiceMode === 'off' ? undefined : createTavilyTools(req.tavilyKey);
+  const tools = strictReplyTool
+    ? {
+        ...tavilyTools,
+        assistant_reply: tool({
+          description: 'Return the complete WebWaifu assistant reply.',
+          inputSchema: assistantReplySchema,
+          strict: true,
+        }),
+      }
+    : tavilyTools;
   const providerOptions = buildProviderOptions(req, structured, !!tools);
   let streamError: string | null = null;
   let deltaCount = 0;
@@ -264,7 +283,7 @@ export async function streamChat(
   log.info('chat start', {
     provider: req.provider,
     model: req.model,
-    lane: structured ? 'A/structured' : 'B/text',
+    lane: strictReplyTool ? 'A/strict-tool' : structured ? 'A/structured' : 'B/text',
     messages: req.messages.length,
     tools: Boolean(tools),
     reasoning: req.provider === 'vercel-gateway' && isReasoningModel(req.model)
@@ -279,9 +298,13 @@ export async function streamChat(
     messages: toModelMessages(req.messages),
     temperature: resolveTemperature(req),
     maxOutputTokens: req.maxTokens,
-    output: structured ? createAssistantStructuredOutput() : undefined,
+    output: structured && !strictReplyTool ? createAssistantStructuredOutput() : undefined,
     tools,
-    toolChoice: tools && req.toolChoiceMode === 'required' ? 'required' : undefined,
+    toolChoice: strictReplyTool
+      ? 'required'
+      : tools && req.toolChoiceMode === 'required'
+        ? 'required'
+        : undefined,
     stopWhen: tools ? stepCountIs(req.maxToolRounds ?? 10) : undefined,
     providerOptions: providerOptions as never,
     onError: ({ error }) => {
@@ -289,6 +312,51 @@ export async function streamChat(
       log.error('stream onError', { provider: req.provider, model: req.model, error: streamError });
     },
   });
+
+  if (strictReplyTool) {
+    let activeReplyId = '';
+    let rawInput = '';
+    let lastMessage = '';
+    let output: unknown;
+    try {
+      for await (const part of result.fullStream) {
+        if (part.type === 'tool-input-start' && part.toolName === 'assistant_reply') {
+          activeReplyId = part.id;
+          rawInput = '';
+        } else if (part.type === 'tool-input-delta' && part.id === activeReplyId) {
+          rawInput += part.delta;
+          const partial = (await parsePartialJson(rawInput)).value;
+          const next = partial && typeof partial === 'object' && !Array.isArray(partial)
+            && typeof (partial as { message?: unknown }).message === 'string'
+            ? (partial as { message: string }).message
+            : '';
+          const delta = monotonicDelta(lastMessage, next);
+          if (delta) {
+            lastMessage = next;
+            emit(delta);
+          }
+        } else if (part.type === 'tool-call' && part.toolName === 'assistant_reply') {
+          output = part.input;
+        }
+      }
+    } catch (err) {
+      throw new Error(streamError ?? (err instanceof Error ? err.message : String(err)));
+    }
+    const parsed = assistantReplySchema.safeParse(output);
+    if (!parsed.success) {
+      throw new Error(streamError ?? `Invalid assistant_reply tool call: ${parsed.error.message}`);
+    }
+    const { visibleText, metadata } = extractStructuredReply(parsed.data);
+    emit(monotonicDelta(lastMessage, visibleText));
+    log.info('chat done', {
+      lane: 'A/strict-tool',
+      deltas: deltaCount,
+      chars: visibleText.length,
+      ms: Date.now() - started,
+      emotion: metadata?.emotion ?? 'none',
+    });
+    return { visibleText, metadata, provider: req.provider, model: req.model };
+  }
 
   if (structured) {
     let lastMessage = '';

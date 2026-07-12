@@ -1,5 +1,5 @@
 import { performance } from 'node:perf_hooks';
-import { Output, streamText, wrapLanguageModel, extractJsonMiddleware } from 'ai';
+import { Output, streamText, tool, wrapLanguageModel, extractJsonMiddleware } from 'ai';
 import { createGateway } from '@ai-sdk/gateway';
 import { assistantReplySchema } from '../src/brain/BrainTypes';
 
@@ -25,12 +25,15 @@ const prompt = [
   'User: Say hello in one short sentence.',
 ].join('\n');
 
-type Mode = 'json-local-zod' | 'schema';
-const modes = (process.env['VERCEL_BENCH_MODES'] || 'schema,json-local-zod')
+type Mode = 'json-local-zod' | 'schema' | 'strict-tool';
+const modes = (process.env['VERCEL_BENCH_MODES'] || 'schema,json-local-zod,strict-tool')
   .split(',')
   .map((value) => value.trim())
-  .filter((value): value is Mode => value === 'schema' || value === 'json-local-zod');
-if (modes.length === 0) throw new Error('VERCEL_BENCH_MODES must include schema or json-local-zod');
+  .filter((value): value is Mode =>
+    value === 'schema' || value === 'json-local-zod' || value === 'strict-tool');
+if (modes.length === 0) {
+  throw new Error('VERCEL_BENCH_MODES must include schema, json-local-zod, or strict-tool');
+}
 type Result = {
   provider: string;
   mode: Mode;
@@ -82,6 +85,11 @@ async function runCase(provider: string, mode: Mode, round: number): Promise<Res
       mode === 'schema'
         ? wrapLanguageModel({ model: gatewayModel, middleware: extractJsonMiddleware() })
         : gatewayModel;
+    const strictTool = tool({
+      description: 'Return the complete WebWaifu assistant reply.',
+      inputSchema: assistantReplySchema,
+      strict: true,
+    });
     const stream = streamText({
       abortSignal: AbortSignal.timeout(timeoutMs),
       model,
@@ -90,15 +98,31 @@ async function runCase(provider: string, mode: Mode, round: number): Promise<Res
       output:
         mode === 'schema'
           ? Output.object({ name: 'assistant_reply', schema: assistantReplySchema })
-          : Output.json({ name: 'assistant_reply' }),
+          : mode === 'json-local-zod'
+            ? Output.json({ name: 'assistant_reply' })
+            : undefined,
+      tools: mode === 'strict-tool' ? { assistant_reply: strictTool } : undefined,
+      toolChoice: mode === 'strict-tool'
+        ? { type: 'tool', toolName: 'assistant_reply' }
+        : undefined,
       providerOptions: { gateway: { only: [provider] } },
     });
     let output: unknown;
-    for await (const partial of stream.partialOutputStream) {
-      firstMs ??= performance.now() - started;
-      output = partial;
+    if (mode === 'strict-tool') {
+      for await (const part of stream.fullStream) {
+        if (part.type === 'tool-input-delta' || part.type === 'tool-call') {
+          firstMs ??= performance.now() - started;
+        }
+      }
+      const call = (await stream.toolCalls).find((candidate) => candidate.toolName === 'assistant_reply');
+      output = call?.input;
+    } else {
+      for await (const partial of stream.partialOutputStream) {
+        firstMs ??= performance.now() - started;
+        output = partial;
+      }
+      output = await stream.output;
     }
-    output = await stream.output;
     const parsed = assistantReplySchema.safeParse(output);
     if (!parsed.success) {
       throw new Error(`local Zod validation failed: ${parsed.error.issues.map((issue) => issue.message).join('; ')}`);
