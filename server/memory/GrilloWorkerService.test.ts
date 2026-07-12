@@ -1117,6 +1117,75 @@ describe('GrilloWorkerService', () => {
     }
   });
 
+  it('keeps semantic recall isolated to the requested participant', async () => {
+    const { grillo, memory } = createServices();
+    const scopeKey = 'twitch:channel:collab:persona:hikari';
+    const alice = 'twitch:collab:alice';
+    try {
+      await memory.saveSemanticRecords(scopeKey, [
+        {
+          assistantText: 'Alice likes synthwave.',
+          createdAt: 1770000003000,
+          embedding: [1, 0, 0],
+          id: 'semantic-alice',
+          participantKeys: [alice],
+          personaId: 'hikari',
+          scopeKey,
+          text: 'Alice uses the starlight codeword for synthwave.',
+          userText: 'My codeword is starlight.',
+        },
+        {
+          assistantText: 'Bob likes jazz.',
+          createdAt: 1770000002000,
+          embedding: [1, 0, 0],
+          id: 'semantic-bob',
+          participantKeys: ['twitch:collab:bob'],
+          personaId: 'hikari',
+          scopeKey,
+          text: 'Bob uses the starlight codeword for jazz.',
+          userText: 'My codeword is starlight.',
+        },
+        {
+          assistantText: 'Legacy identity is unknown.',
+          createdAt: 1770000001000,
+          embedding: [1, 0, 0],
+          id: 'semantic-legacy',
+          personaId: 'hikari',
+          scopeKey,
+          text: 'An unknown participant used the starlight codeword.',
+          userText: 'Starlight.',
+        },
+      ]);
+
+      const packet = await grillo.buildContextPacket({
+        participantKeys: [alice],
+        query: 'starlight codeword',
+        queryEmbedding: [1, 0, 0],
+        scopeKey,
+      });
+      expect(
+        packet.recalled_memories
+          .filter((item) => item.source === 'semantic')
+          .map((item) => item.id),
+      ).toEqual(['semantic-alice']);
+
+      const workerSearch = await grillo.runWorkerTool({
+        args: { query: 'starlight codeword' },
+        name: 'core.worker_memory_search',
+        participantKey: alice,
+        scopeKey,
+      });
+      expect(workerSearch.ok).toBe(true);
+      expect(
+        ((workerSearch.result as { results: Array<{ id: string }> }).results ?? []).map(
+          (item) => item.id,
+        ),
+      ).toEqual(['semantic-alice']);
+    } finally {
+      await memory.close();
+    }
+  });
+
   it('uses lexical recall without an embedding instead of arbitrary recent semantic records', async () => {
     const { grillo, memory } = createServices();
     const scopeKey = 'local:persona:hikari-lexical-recall';

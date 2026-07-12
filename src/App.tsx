@@ -1638,6 +1638,7 @@ async function rememberSemanticTurn(
   embeddingMode: AiSettings['embeddingMode'] = 'browser',
   embeddingModel = DEFAULT_OPENROUTER_EMBEDDING_MODEL,
   embeddingLocalModel = DEFAULT_LOCAL_EMBEDDING_MODEL,
+  participantKeys: string[] = [],
 ) {
   const embeddingResult = await requestTextEmbedding(
     `${userText}\n${assistantText}`,
@@ -1656,6 +1657,7 @@ async function rememberSemanticTurn(
     embeddingProvider: embeddingResult?.provider,
     embeddingVersion: embeddingResult?.version,
     persona,
+    participantKeys,
     scopeKey,
     userText,
   });
@@ -5076,6 +5078,7 @@ function App() {
         let rawContent = '';
         let lastError: unknown = null;
         const recentTurns = grilloRecentTurnsByStateKeyRef.current[stateKey] ?? [];
+        const workerParticipantKeys = Array.from(new Set(recentTurns.map(getGrilloParticipantKey)));
 
         for (const model of modelCandidates) {
           try {
@@ -5115,6 +5118,7 @@ function App() {
                     aiSettings.embeddingMode,
                     aiSettings.embeddingModel,
                     aiSettings.embeddingLocalModel,
+                    workerParticipantKeys,
                   );
                   return {
                     id: write?.record.id,
@@ -5140,6 +5144,7 @@ function App() {
                       query,
                       embeddingResult?.embedding ?? null,
                       limit,
+                      workerParticipantKeys,
                     )
                   ).map(
                     (match) => ({
@@ -6370,6 +6375,8 @@ function App() {
                 stateKey,
                 userContent,
                 semanticEmbeddingResult?.embedding ?? null,
+                4,
+                participantKeys,
               ),
             );
         if (isAppDiagnosticsEnabled()) {
@@ -6632,6 +6639,7 @@ function App() {
             settings.embeddingMode,
             settings.embeddingModel,
             settings.embeddingLocalModel,
+            participantKeys,
           )
             .then(() => {
               void refreshMemoryBackendStatus();

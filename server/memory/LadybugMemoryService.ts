@@ -12,6 +12,7 @@ export type LadybugSemanticMemoryRecord = {
   embeddingProvider?: string;
   embeddingVersion?: string;
   personaId: string;
+  participantKeys?: string[];
   scopeKey: string;
   sourceTurnIds?: string[];
   text: string;
@@ -441,6 +442,7 @@ export class LadybugMemoryService {
         embeddingCompatibility: 'exact' as const,
         id: stringValue(row['id']),
         personaId: stringValue(row['personaId']) || 'unknown',
+        participantKeys: semanticRecord?.participantKeys ?? [],
         scopeKey: stringValue(row['scopeKey']) || normalizedScopeKey,
         score: Math.max(0, 1 - distance),
         text: stringValue(row['text']),
@@ -2804,6 +2806,9 @@ function normalizeSemanticRecords(values: unknown[]) {
         embeddingProvider: stringValue(source.embeddingProvider),
         embeddingVersion: stringValue(source.embeddingVersion),
         personaId: stringValue(source.personaId) || 'unknown',
+        participantKeys: dedupeStringValues(arrayValue(source.participantKeys)).map((value) =>
+          normalizeScopeKey(value),
+        ),
         scopeKey,
         sourceTurnIds: dedupeStringValues(arrayValue(source.sourceTurnIds)),
         text,

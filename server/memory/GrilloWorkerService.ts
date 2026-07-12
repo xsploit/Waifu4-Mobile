@@ -1290,6 +1290,11 @@ export class GrilloWorkerService {
         embeddingProvider: result.provider || lastProvider,
         embeddingVersion: 'provider-managed',
         id: this.idFactory(),
+        participantKeys: Array.from(
+          new Set(
+            [recordParticipantKey(pair.user), recordParticipantKey(pair.assistant)].filter(Boolean),
+          ),
+        ),
         personaId: inferPersona(input.scopeKey),
         scopeKey: input.scopeKey,
         sourceTurnIds,
@@ -1381,7 +1386,7 @@ export class GrilloWorkerService {
       this.memory.readGrilloRecords<Record<string, unknown>>('diary_entries'),
       this.memory.loadSemanticRecords(scopeKey),
       queryEmbedding.length > 0
-        ? this.memory.querySemanticVectors(scopeKey, queryEmbedding, 8, {
+        ? this.memory.querySemanticVectors(scopeKey, queryEmbedding, participantSet.size > 0 ? 32 : 8, {
             model: normalizeText(input.embeddingModel),
             provider: normalizeText(input.embeddingProvider),
             version: normalizeText(input.embeddingVersion),
@@ -1422,13 +1427,18 @@ export class GrilloWorkerService {
     );
     const scopedDiary = participantDiary.slice(0, 5);
     const relationshipProfile = asRecord(asRecord(relationshipProfiles)[scopeKey]);
-    const normalizedSemanticRecords = semanticRecords ?? [];
+    const normalizedSemanticRecords = (semanticRecords ?? []).filter((record) =>
+      semanticRecordMatchesParticipants(record, participantSet),
+    );
     const semanticRecordById = new Map(normalizedSemanticRecords.map((record) => [record.id, record]));
-    const vectorSemantic = semanticVectorMatches.map((match) => ({
-      ...match,
-      ...(semanticRecordById.get(match.id) ?? {}),
-      score: match.score,
-    }));
+    const vectorSemantic = semanticVectorMatches
+      .map((match) => ({
+        ...match,
+        ...(semanticRecordById.get(match.id) ?? {}),
+        score: match.score,
+      }))
+      .filter((record) => semanticRecordMatchesParticipants(record, participantSet))
+      .slice(0, 8);
     const lexicalSemantic = query
       ? normalizedSemanticRecords
           .map((record) => ({ ...record, score: Math.min(1, lexicalScore(record.text, query)) }))
@@ -1682,7 +1692,7 @@ export class GrilloWorkerService {
     if (name === 'core.worker_repair_transition') {
       return this.transitionWorkerRepair(scopeKey, participantKey, args);
     }
-    return this.insertWorkerArchivalMemory(scopeKey, args);
+    return this.insertWorkerArchivalMemory(scopeKey, participantKey, args);
   }
 
   private async transitionWorkerRepair(
@@ -1790,11 +1800,18 @@ export class GrilloWorkerService {
         metadata: { source: 'memory_slot', slot_name: normalizeText(record['slotName'] ?? record['slot_name']) },
         text: readJsonArray(record['contentJson'] ?? record['content_json']).join(' '),
       })),
-      ...(semanticRecords ?? []).map((record) => ({
-        id: record.id,
-        metadata: { source: 'semantic', persona_id: record.personaId },
-        text: normalizeText(record.text),
-      })),
+      ...(semanticRecords ?? [])
+        .filter((record) =>
+          semanticRecordMatchesParticipants(
+            record,
+            new Set(participantKey ? [participantKey.toLowerCase()] : []),
+          ),
+        )
+        .map((record) => ({
+          id: record.id,
+          metadata: { source: 'semantic', persona_id: record.personaId },
+          text: normalizeText(record.text),
+        })),
       ...projection.slots
         .filter(
           (slot) =>
@@ -2062,7 +2079,11 @@ export class GrilloWorkerService {
     });
   }
 
-  private async insertWorkerArchivalMemory(scopeKey: string, args: Record<string, unknown>) {
+  private async insertWorkerArchivalMemory(
+    scopeKey: string,
+    participantKey: string,
+    args: Record<string, unknown>,
+  ) {
     const text = normalizeText(args['text']);
     if (!text) {
       throw new Error('archival memory text is required');
@@ -2076,6 +2097,7 @@ export class GrilloWorkerService {
         createdAt: this.nowMs(),
         embedding: null,
         id,
+        participantKeys: participantKey ? [participantKey] : [],
         personaId: inferPersona(scopeKey),
         scopeKey,
         text,
@@ -3036,6 +3058,22 @@ function recordScopeKey(record: Record<string, unknown>) {
 
 function recordParticipantKey(record: Record<string, unknown>) {
   return normalizeText(record['participantKey'] ?? record['participant_key']);
+}
+
+function semanticRecordMatchesParticipants(
+  record: LadybugSemanticMemoryRecord,
+  participantSet: Set<string>,
+) {
+  if (participantSet.size === 0) {
+    return true;
+  }
+  const recordParticipantKeys = readStringArray(record.participantKeys);
+  if (recordParticipantKeys.length === 0) {
+    return record.scopeKey.startsWith('local:');
+  }
+  return recordParticipantKeys.some((key) =>
+    participantSet.has(key.toLowerCase()),
+  );
 }
 
 function recordTurnId(record: Record<string, unknown>) {

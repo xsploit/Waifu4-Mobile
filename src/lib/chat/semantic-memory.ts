@@ -14,6 +14,7 @@ export type SemanticMemoryRecord = {
   embeddingProvider?: string;
   embeddingVersion?: string;
   personaId: string;
+  participantKeys?: string[];
   scopeKey: string;
   sourceTurnIds?: string[];
   text: string;
@@ -225,6 +226,7 @@ export async function addSemanticMemoryTurn({
   embeddingProvider,
   embeddingVersion,
   persona,
+  participantKeys,
   scopeKey,
   userText,
 }: {
@@ -234,6 +236,7 @@ export async function addSemanticMemoryTurn({
   embeddingProvider?: string;
   embeddingVersion?: string;
   persona: PersonaProfile | null;
+  participantKeys?: string[];
   scopeKey: string;
   userText: string;
 }) {
@@ -250,6 +253,7 @@ export async function addSemanticMemoryTurn({
       id: `${Date.now()}-${hashText(text).toString(36)}`,
       createdAt: Date.now(),
       personaId: persona?.id ?? 'unknown',
+      participantKeys: normalizeParticipantKeys(participantKeys),
       scopeKey,
       text,
       userText: normalizedUserText,
@@ -276,13 +280,27 @@ export async function findSemanticMemoryMatches(
   query: string,
   queryEmbedding: number[] | null,
   limit = 4,
+  participantKeys: string[] = [],
 ): Promise<SemanticMemoryMatch[]> {
-  const remoteMatches = await searchLadybugSemanticMemory(scopeKey, queryEmbedding, limit);
+  const participantSet = new Set(normalizeParticipantKeys(participantKeys));
+  const remoteLimit = participantSet.size > 0 ? Math.max(32, limit * 8) : limit;
+  const remoteMatches = await searchLadybugSemanticMemory(scopeKey, queryEmbedding, remoteLimit);
   if (remoteMatches?.length) {
-    return rerankSemanticMemoryMatches(remoteMatches, query, queryEmbedding, limit, Date.now());
+    const filteredRemoteMatches = rerankSemanticMemoryMatches(
+      remoteMatches.filter((record) => semanticRecordMatchesParticipants(record, participantSet)),
+      query,
+      queryEmbedding,
+      limit,
+      Date.now(),
+    );
+    if (filteredRemoteMatches.length > 0) {
+      return filteredRemoteMatches;
+    }
   }
 
-  const records = await loadSemanticMemory(scopeKey);
+  const records = (await loadSemanticMemory(scopeKey)).filter((record) =>
+    semanticRecordMatchesParticipants(record, participantSet),
+  );
   const signature = createSemanticSearchSignature(records, query, queryEmbedding, limit);
   const cacheKey = `${normalizeScopeKey(scopeKey)}:${hashText(signature).toString(36)}`;
   const cached = semanticMemorySearchCache.get(cacheKey);
@@ -538,6 +556,7 @@ function normalizeSemanticMemoryRecord(value: unknown): SemanticMemoryRecord | n
         ? source.createdAt
         : Date.now(),
     personaId: String(source.personaId ?? 'unknown'),
+    participantKeys: normalizeParticipantKeys(source.participantKeys),
     scopeKey: String(source.scopeKey),
     text: text.trim().slice(0, 2400),
     userText,
@@ -550,6 +569,34 @@ function normalizeSemanticMemoryRecord(value: unknown): SemanticMemoryRecord | n
       ? source.sourceTurnIds.map((value) => String(value).trim()).filter(Boolean)
       : [],
   };
+}
+
+function normalizeParticipantKeys(value: unknown) {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+  return Array.from(
+    new Set(
+      value
+        .map((item) => String(item).trim().toLowerCase())
+        .filter(Boolean)
+        .map((item) => item.slice(0, 160)),
+    ),
+  );
+}
+
+function semanticRecordMatchesParticipants(
+  record: SemanticMemoryRecord,
+  participantSet: Set<string>,
+) {
+  if (participantSet.size === 0) {
+    return true;
+  }
+  const recordParticipantKeys = normalizeParticipantKeys(record.participantKeys);
+  if (recordParticipantKeys.length === 0) {
+    return record.scopeKey.startsWith('local:');
+  }
+  return recordParticipantKeys.some((key) => participantSet.has(key));
 }
 
 export function buildSemanticMemoryContextFromRecallItems(items: GrilloRecallItem[]) {
