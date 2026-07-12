@@ -1,6 +1,7 @@
 import type {
   AffectState,
   AiSettings,
+  DiscordSettings,
   PersonaProfile,
   PersonaVoiceBinding,
   RelationshipMemory,
@@ -23,6 +24,7 @@ export const STORAGE_KEYS = {
   currentCustomVrmModelId: 'yourwifey.currentCustomVrmModelId.v1',
   twitchChannel: 'yourwifey.twitchChannel.v1',
   twitchSettings: 'yourwifey.twitchSettings.v1',
+  discordSettings: 'yourwifey.discordSettings.v1',
   emotionTelemetryEvents: 'yourwifey.emotionTelemetryEvents.v1',
   sequencerSettings: 'yourwifey.sequencerSettings.v1',
   visualSettings: 'yourwifey.visualSettings.v1',
@@ -217,5 +219,26 @@ export function createDefaultTwitchSettings(): TwitchSettings {
     streamVisionDetail: 'low',
     streamVisionIntervalSeconds: 120,
     streamVisionMaxAgeSeconds: 180,
+  };
+}
+
+export function createDefaultDiscordSettings(): DiscordSettings {
+  return {
+    enabled: false,
+    connectOnStart: false,
+    botToken: '',
+    guildId: '',
+    voiceChannelId: '',
+    trustedControllerUserIds: [],
+    asrProvider: 'openrouter',
+    transcriptionModel: 'openai/gpt-4o-mini-transcribe',
+    languageHint: '',
+    vadThreshold: 0.03,
+    vadEndSilenceMs: 850,
+    vadMinSpeechMs: 250,
+    vadMaxSpeechMs: 30000,
+    listenEnabled: true,
+    speakEnabled: true,
+    interruptionPolicy: 'stop-speaking',
   };
 }

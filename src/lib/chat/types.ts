@@ -278,6 +278,29 @@ export type TwitchSettings = {
   streamVisionMaxAgeSeconds: number;
 };
 
+export type DiscordAsrProvider = 'fish' | 'openrouter' | 'vercel';
+export type DiscordInterruptionPolicy = 'ignore' | 'stop-speaking' | 'barge-in';
+export type DiscordConnectionStatus = 'disconnected' | 'connecting' | 'connected' | 'error';
+
+export type DiscordSettings = {
+  enabled: boolean;
+  connectOnStart: boolean;
+  botToken: string;
+  guildId: string;
+  voiceChannelId: string;
+  trustedControllerUserIds: string[];
+  asrProvider: DiscordAsrProvider;
+  transcriptionModel: string;
+  languageHint: string;
+  vadThreshold: number;
+  vadEndSilenceMs: number;
+  vadMinSpeechMs: number;
+  vadMaxSpeechMs: number;
+  listenEnabled: boolean;
+  speakEnabled: boolean;
+  interruptionPolicy: DiscordInterruptionPolicy;
+};
+
 export type PersistedChatState = {
   personas: PersonaProfile[];
   activePersonaId: string;
@@ -294,6 +317,7 @@ export type PersistedChatState = {
   currentCustomVrmModelId: string;
   twitchChannel: string;
   twitchSettings: TwitchSettings;
+  discordSettings?: DiscordSettings;
   emotionTelemetryEvents: EmotionTelemetryEvent[];
   sequencerSettings: SequencerSettings;
   visualSettings: VisualSettings;

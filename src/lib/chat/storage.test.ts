@@ -4,13 +4,18 @@ import {
   DEFAULT_OPENROUTER_MODEL,
   STORAGE_KEYS,
   createDefaultAiSettings,
+  createDefaultDiscordSettings,
   createDefaultPersonaVoiceBindings,
   createDefaultPersonas,
   createDefaultRelationshipMemory,
   createDefaultUiState,
   createDefaultTwitchSettings,
 } from './defaults';
-import { loadPersistedChatState, savePersistedChatState } from './storage';
+import {
+  loadPersistedChatState,
+  normalizePersistedChatStateSnapshot,
+  savePersistedChatState,
+} from './storage';
 import { createDefaultSequencerSettings, createDefaultVisualSettings } from '../menu/defaults';
 import type { PersistedChatState } from './types';
 
@@ -405,6 +410,79 @@ describe('chat settings persistence', () => {
     const loaded = await loadPersistedChatState();
 
     expect(loaded.twitchSettings.streamTranscriptionModel).toBe('openai/whisper-large-v3');
+  });
+
+  it('persists Discord settings and clamps imported voice controls defensively', async () => {
+    window.localStorage.setItem(
+      STORAGE_KEYS.discordSettings,
+      JSON.stringify({
+        ...createDefaultDiscordSettings(),
+        asrProvider: 'fish',
+        botToken: `  ${'a'.repeat(520)}  `,
+        connectOnStart: true,
+        enabled: true,
+        guildId: '123456789012345678',
+        interruptionPolicy: 'barge-in',
+        languageHint: '  en-US  ',
+        transcriptionModel: 'openai/gpt-4o-mini-transcribe',
+        trustedControllerUserIds: [
+          '987654321098765432',
+          '987654321098765432',
+          'not-a-discord-id',
+        ],
+        vadEndSilenceMs: 99999,
+        vadMaxSpeechMs: 100,
+        vadMinSpeechMs: 2000,
+        vadThreshold: 2,
+        voiceChannelId: '234567890123456789',
+      }),
+    );
+
+    const loaded = await loadPersistedChatState();
+
+    expect(loaded.discordSettings).toMatchObject({
+      asrProvider: 'fish',
+      botToken: 'a'.repeat(512),
+      connectOnStart: true,
+      enabled: true,
+      guildId: '123456789012345678',
+      interruptionPolicy: 'barge-in',
+      languageHint: 'en-US',
+      transcriptionModel: 'fish-audio/asr',
+      trustedControllerUserIds: ['987654321098765432'],
+      vadEndSilenceMs: 5000,
+      vadMaxSpeechMs: 2000,
+      vadMinSpeechMs: 2000,
+      vadThreshold: 0.5,
+      voiceChannelId: '234567890123456789',
+    });
+  });
+
+  it('keeps Discord settings in normalized import and export snapshots', async () => {
+    const snapshot = normalizePersistedChatStateSnapshot({
+      activeTab: 'discord',
+      discordSettings: {
+        ...createDefaultDiscordSettings(),
+        botToken: 'local-discord-token',
+        guildId: '123456789012345678',
+        trustedControllerUserIds: ['987654321098765432'],
+        voiceChannelId: '234567890123456789',
+      },
+    });
+
+    expect(snapshot.activeTab).toBe('discord');
+    expect(snapshot.discordSettings).toEqual({
+      ...createDefaultDiscordSettings(),
+      botToken: 'local-discord-token',
+      guildId: '123456789012345678',
+      trustedControllerUserIds: ['987654321098765432'],
+      voiceChannelId: '234567890123456789',
+    });
+
+    await savePersistedChatState(snapshot);
+    const loaded = await loadPersistedChatState();
+
+    expect(loaded.discordSettings).toEqual(snapshot.discordSettings);
   });
 
   it('normalizes stale Fish model ids to the active Fish TTS model choice', async () => {

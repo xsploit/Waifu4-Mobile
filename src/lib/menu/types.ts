@@ -7,6 +7,7 @@ export type SettingsTabId =
   | 'character'
   | 'ai'
   | 'twitch'
+  | 'discord'
   | 'context'
   | 'voice-lab'
   | 'tts';

@@ -3,6 +3,7 @@ import {
   DEFAULT_LOCAL_EMBEDDING_MODEL,
   HIKARI_PERSONA,
   createDefaultAiSettings,
+  createDefaultDiscordSettings,
   createDefaultPersonaVoiceBindings,
   createDefaultRelationshipMemory,
   createDefaultPersonas,
@@ -21,6 +22,8 @@ import {
 import type {
   AiSettings,
   ChatMessage,
+  DiscordAsrProvider,
+  DiscordSettings,
   PersistedChatState,
   PersonaVoiceBinding,
   PersonaVoiceProvider,
@@ -715,6 +718,7 @@ function normalizeSettingsTab(value: string | null): SettingsTabId {
     case 'character':
     case 'ai':
     case 'twitch':
+    case 'discord':
     case 'context':
     case 'tts':
     case 'voice-lab':
@@ -896,6 +900,100 @@ function normalizeTwitchSettings(value: unknown): TwitchSettings {
       600,
     ),
   };
+}
+
+function normalizeDiscordAsrProvider(value: unknown): DiscordAsrProvider {
+  return value === 'fish' || value === 'vercel' ? value : 'openrouter';
+}
+
+function getDefaultDiscordTranscriptionModel(provider: DiscordAsrProvider) {
+  switch (provider) {
+    case 'fish':
+      return 'fish-audio/asr';
+    case 'vercel':
+      return 'openai/gpt-4o-mini-transcribe';
+    default:
+      return 'openai/gpt-4o-mini-transcribe';
+  }
+}
+
+function normalizeDiscordTranscriptionModel(provider: DiscordAsrProvider, value: unknown) {
+  const model = typeof value === 'string' ? value.trim().toLowerCase() : '';
+  if (provider === 'fish') {
+    return model === 'fish-audio/asr' ? model : getDefaultDiscordTranscriptionModel(provider);
+  }
+
+  const permittedModels =
+    provider === 'vercel'
+      ? new Set(['openai/gpt-4o-mini-transcribe', 'openai/gpt-4o-transcribe', 'openai/whisper-1'])
+      : new Set([
+          'openai/whisper-large-v3',
+          'openai/whisper-1',
+          'openai/gpt-4o-transcribe',
+          'openai/gpt-4o-mini-transcribe',
+        ]);
+  return permittedModels.has(model) ? model : getDefaultDiscordTranscriptionModel(provider);
+}
+
+function normalizeDiscordSnowflake(value: unknown) {
+  const id = typeof value === 'string' ? value.trim() : '';
+  return /^\d{5,32}$/.test(id) ? id : '';
+}
+
+function normalizeDiscordControllerIds(value: unknown) {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+  return Array.from(
+    new Set(value.map(normalizeDiscordSnowflake).filter((id): id is string => Boolean(id))),
+  ).slice(0, 50);
+}
+
+export function normalizeDiscordSettings(value: unknown): DiscordSettings {
+  const defaults = createDefaultDiscordSettings();
+  if (!value || typeof value !== 'object') {
+    return defaults;
+  }
+
+  const source = value as Partial<DiscordSettings>;
+  const asrProvider = normalizeDiscordAsrProvider(source.asrProvider);
+  const vadMinSpeechMs = clampInteger(source.vadMinSpeechMs, defaults.vadMinSpeechMs, 50, 10000);
+  return {
+    enabled: typeof source.enabled === 'boolean' ? source.enabled : defaults.enabled,
+    connectOnStart:
+      typeof source.connectOnStart === 'boolean' ? source.connectOnStart : defaults.connectOnStart,
+    botToken: normalizeBoundedString(source.botToken, '', 512),
+    guildId: normalizeDiscordSnowflake(source.guildId),
+    voiceChannelId: normalizeDiscordSnowflake(source.voiceChannelId),
+    trustedControllerUserIds: normalizeDiscordControllerIds(source.trustedControllerUserIds),
+    asrProvider,
+    transcriptionModel: normalizeDiscordTranscriptionModel(asrProvider, source.transcriptionModel),
+    languageHint: normalizeBoundedString(source.languageHint, '', 24),
+    vadThreshold: clampNumber(source.vadThreshold, defaults.vadThreshold, 0.005, 0.5),
+    vadEndSilenceMs: clampInteger(source.vadEndSilenceMs, defaults.vadEndSilenceMs, 100, 5000),
+    vadMinSpeechMs,
+    vadMaxSpeechMs: Math.max(
+      vadMinSpeechMs,
+      clampInteger(source.vadMaxSpeechMs, defaults.vadMaxSpeechMs, 500, 120000),
+    ),
+    listenEnabled:
+      typeof source.listenEnabled === 'boolean' ? source.listenEnabled : defaults.listenEnabled,
+    speakEnabled: typeof source.speakEnabled === 'boolean' ? source.speakEnabled : defaults.speakEnabled,
+    interruptionPolicy:
+      source.interruptionPolicy === 'ignore' ||
+      source.interruptionPolicy === 'stop-speaking' ||
+      source.interruptionPolicy === 'barge-in'
+        ? source.interruptionPolicy
+        : defaults.interruptionPolicy,
+  };
+}
+
+export async function loadDiscordSettings(): Promise<DiscordSettings> {
+  return normalizeDiscordSettings(safeParse(await getPersistedItem(STORAGE_KEYS.discordSettings), null));
+}
+
+export async function saveDiscordSettings(settings: DiscordSettings) {
+  await setPersistedItem(STORAGE_KEYS.discordSettings, JSON.stringify(normalizeDiscordSettings(settings)));
 }
 
 function normalizeHexColor(value: unknown, fallback: string): string {
@@ -1351,6 +1449,7 @@ function createDefaultPersistedChatState(): PersistedChatState {
     currentCustomVrmModelId: '',
     twitchChannel: '',
     twitchSettings: createDefaultTwitchSettings(),
+    discordSettings: createDefaultDiscordSettings(),
     emotionTelemetryEvents: [],
     sequencerSettings: createDefaultSequencerSettings(),
     visualSettings: createDefaultVisualSettings(),
@@ -1417,6 +1516,7 @@ export function normalizePersistedChatStateSnapshot(value: unknown): PersistedCh
       typeof source.twitchChannel === 'string' ? source.twitchChannel : null,
     ),
     twitchSettings: normalizeTwitchSettings(source.twitchSettings),
+    discordSettings: normalizeDiscordSettings(source.discordSettings),
     emotionTelemetryEvents: normalizeEmotionTelemetryEvents(source.emotionTelemetryEvents),
     sequencerSettings: normalizeSequencerSettings(source.sequencerSettings),
     visualSettings: normalizeVisualSettings(source.visualSettings),
@@ -1445,6 +1545,7 @@ export async function loadPersistedChatState(): Promise<PersistedChatState> {
       currentCustomVrmModelIdRaw,
       twitchChannelRaw,
       twitchSettingsRaw,
+      discordSettingsRaw,
       emotionTelemetryEventsRaw,
       sequencerSettingsRaw,
       visualSettingsRaw,
@@ -1464,6 +1565,7 @@ export async function loadPersistedChatState(): Promise<PersistedChatState> {
       getPersistedItem(STORAGE_KEYS.currentCustomVrmModelId),
       getPersistedItem(STORAGE_KEYS.twitchChannel),
       getPersistedItem(STORAGE_KEYS.twitchSettings),
+      getPersistedItem(STORAGE_KEYS.discordSettings),
       getPersistedItem(STORAGE_KEYS.emotionTelemetryEvents),
       getPersistedItem(STORAGE_KEYS.sequencerSettings),
       getPersistedItem(STORAGE_KEYS.visualSettings),
@@ -1500,6 +1602,7 @@ export async function loadPersistedChatState(): Promise<PersistedChatState> {
         : '';
     const twitchChannel = normalizeTwitchChannel(twitchChannelRaw);
     const twitchSettings = normalizeTwitchSettings(safeParse(twitchSettingsRaw, null));
+    const discordSettings = normalizeDiscordSettings(safeParse(discordSettingsRaw, null));
     const emotionTelemetryEvents = normalizeEmotionTelemetryEvents(
       safeParse(emotionTelemetryEventsRaw, null),
     );
@@ -1536,6 +1639,7 @@ export async function loadPersistedChatState(): Promise<PersistedChatState> {
       currentCustomVrmModelId,
       twitchChannel,
       twitchSettings,
+      discordSettings,
       emotionTelemetryEvents,
       sequencerSettings,
       visualSettings,
@@ -1555,7 +1659,7 @@ export async function savePersistedChatState(state: PersistedChatState) {
       ? normalizedState.activePersonaId
       : fallbackActivePersonaId;
 
-  const entries = [
+  const entries: Array<readonly [string, string]> = [
     [STORAGE_KEYS.personas, JSON.stringify(normalizedState.personas)],
     [STORAGE_KEYS.activePersonaId, activePersonaId],
     [STORAGE_KEYS.aiSettings, JSON.stringify(normalizedState.aiSettings)],
@@ -1588,7 +1692,14 @@ export async function savePersistedChatState(state: PersistedChatState) {
       }),
     ],
     [STORAGE_KEYS.visualSettings, JSON.stringify(normalizedState.visualSettings)],
-  ] as const;
+  ];
+
+  if (state.discordSettings !== undefined) {
+    entries.push([
+      STORAGE_KEYS.discordSettings,
+      JSON.stringify(normalizeDiscordSettings(normalizedState.discordSettings)),
+    ]);
+  }
 
   await Promise.all(
     entries.map(([key, value]) => {

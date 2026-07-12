@@ -3,6 +3,8 @@ import type { Dispatch, SetStateAction } from 'react';
 import type {
   AiProxyHealth,
   AiSettings,
+  DiscordConnectionStatus,
+  DiscordSettings,
   PersonaDraft,
   PersonaProfile,
   PersonaVoiceBinding,
@@ -50,6 +52,7 @@ import { AnimTab } from './tabs/AnimTab';
 import { BackgroundTab } from './tabs/BackgroundTab';
 import { CharacterTab } from './tabs/CharacterTab';
 import { ContextTab } from './tabs/ContextTab';
+import { DiscordTab } from './tabs/DiscordTab';
 import { EmotionTelemetryTab } from './tabs/EmotionTelemetryTab';
 import { TtsTab } from './tabs/TtsTab';
 import { TwitchTab } from './tabs/TwitchTab';
@@ -73,6 +76,9 @@ type SettingsPanelProps = {
   messageCount: number;
   currentBundledModelId: string;
   currentCustomVrmModelId: string;
+  discordConnectionStatus?: DiscordConnectionStatus;
+  discordSettings?: DiscordSettings;
+  discordStatusDetail?: string;
   emotionTelemetryEvents: EmotionTelemetryEvent[];
   vrmTelemetry: VrmTelemetrySnapshot | null;
   localTransferStatus: string;
@@ -114,6 +120,8 @@ type SettingsPanelProps = {
     request: PublishDesignedRemoteTtsVoiceRequest,
   ) => Promise<CreatedRemoteTtsVoice>;
   onDeleteVoiceLabVoice: (voiceId: string) => void;
+  onConnectDiscord?: () => void;
+  onDisconnectDiscord?: () => void;
   onResetContext: () => void;
   onResetTwitchState: () => void;
   onRunBackendGrilloBeat: () => void;
@@ -150,6 +158,7 @@ type SettingsPanelProps = {
   memoryPromptDebug: MemoryPromptDebugSnapshot | null;
   memoryWorkerDebug: MemoryWorkerDebugSnapshot | null;
   setAiSettings: Dispatch<SetStateAction<AiSettings>>;
+  setDiscordSettings?: Dispatch<SetStateAction<DiscordSettings>>;
   setSequencerSettings: Dispatch<SetStateAction<SequencerSettings>>;
   setTwitchSettings: Dispatch<SetStateAction<TwitchSettings>>;
   setVisualSettings: Dispatch<SetStateAction<VisualSettings>>;
@@ -191,6 +200,7 @@ const TABS: { id: SettingsTabId; label: string }[] = [
   { id: 'voice-lab', label: 'Voice Lab' },
   { id: 'ai', label: 'AI' },
   { id: 'twitch', label: 'Twitch' },
+  { id: 'discord', label: 'Discord' },
   { id: 'context', label: 'Memory' },
   { id: 'tts', label: 'TTS' },
 ];
@@ -212,6 +222,9 @@ export function SettingsPanel({
   messageCount,
   currentBundledModelId,
   currentCustomVrmModelId,
+  discordConnectionStatus,
+  discordSettings,
+  discordStatusDetail,
   emotionTelemetryEvents,
   localTransferStatus,
   onCacheVoice,
@@ -239,6 +252,8 @@ export function SettingsPanel({
   onApplyPersonaVoice,
   onCreateVoiceLabProviderVoice,
   onDeleteVoiceLabVoice,
+  onConnectDiscord,
+  onDisconnectDiscord,
   onDesignVoiceLabProviderVoice,
   onPublishDesignedVoiceLabProviderVoice,
   onResetContext,
@@ -277,6 +292,7 @@ export function SettingsPanel({
   memoryPromptDebug,
   memoryWorkerDebug,
   setAiSettings,
+  setDiscordSettings,
   setSequencerSettings,
   setTwitchSettings,
   setVisualSettings,
@@ -398,6 +414,15 @@ export function SettingsPanel({
         streamTranscriptionStatus={twitchStreamTranscriptionStatus}
         streamVisionStatus={twitchStreamVisionStatus}
         twitchSettings={twitchSettings}
+      />
+    ) : activeTab === 'discord' ? (
+      <DiscordTab
+        connectionStatus={discordConnectionStatus}
+        discordSettings={discordSettings}
+        onConnect={onConnectDiscord}
+        onDisconnect={onDisconnectDiscord}
+        setDiscordSettings={setDiscordSettings}
+        statusDetail={discordStatusDetail}
       />
     ) : activeTab === 'context' ? (
       <ContextTab

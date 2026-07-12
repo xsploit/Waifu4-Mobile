@@ -5,6 +5,7 @@ import type { SettingsTabId } from '../../lib/menu/types';
 import {
   DEFAULT_PERSONA,
   createDefaultAiSettings,
+  createDefaultDiscordSettings,
   createDefaultPersonaVoiceBindings,
   createDefaultPersonas,
   createDefaultRelationshipMemory,
@@ -162,6 +163,7 @@ describe('SettingsPanel tab smoke', () => {
     ['voice-lab', 'Persona Voice Defaults'],
     ['ai', 'LLM Provider'],
     ['twitch', 'Twitch Connection'],
+    ['discord', 'Discord Voice Bridge'],
     ['context', 'G.R.I.L.L.O.'],
     ['tts', 'Speech Output'],
   ];
@@ -274,6 +276,33 @@ describe('SettingsPanel tab smoke', () => {
     expect(html).toContain('OpenRouter ASR uses the Account-tab OpenRouter key');
     expect(html).toContain('Attach Twitch stream frame to vision models');
     expect(html).toContain('Captures one JPEG frame from the Twitch stream');
+  });
+
+  it('keeps Discord voice, provider, VAD, and controller controls mounted', () => {
+    const props = createProps('discord');
+    props.discordConnectionStatus = 'connected';
+    props.discordSettings = {
+      ...createDefaultDiscordSettings(),
+      botToken: 'discord-test-token',
+      guildId: '123456789012345678',
+      trustedControllerUserIds: ['987654321098765432'],
+      voiceChannelId: '234567890123456789',
+    };
+    props.discordStatusDetail = 'Connected to a test voice channel.';
+    props.onConnectDiscord = noop;
+    props.onDisconnectDiscord = noop;
+    props.setDiscordSettings = noop;
+
+    const html = renderToStaticMarkup(<SettingsPanel {...props} />);
+
+    expect(html).toContain('Discord Voice Bridge');
+    expect(html).toContain('Connected to a test voice channel.');
+    expect(html).toContain('Paste Discord bot token');
+    expect(html).toContain('ASR provider');
+    expect(html).toContain('Vercel AI Gateway');
+    expect(html).toContain('VAD threshold');
+    expect(html).toContain('Trusted controller user IDs');
+    expect(html).toContain('987654321098765432');
   });
 
   it('keeps provider embedding picker filtered by metadata while allowing custom IDs', () => {

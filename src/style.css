@@ -1359,6 +1359,18 @@ input[type='range']::-webkit-slider-thumb:hover {
   color: var(--text-main);
 }
 
+.discord-controller-ids {
+  min-height: 86px;
+}
+
+.discord-status--connected strong {
+  color: var(--c-text-accent);
+}
+
+.discord-status--error strong {
+  color: var(--danger);
+}
+
 .provider-key-list {
   display: flex;
   flex-direction: column;
