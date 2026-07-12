@@ -1226,6 +1226,10 @@ function normalizeSequencerSettings(value: unknown) {
   const mergedDefaults = DEFAULT_ANIMATIONS.map((entry) => {
     const persisted = persistedById.get(entry.id);
     const rawPersisted = rawPersistedById.get(entry.id);
+    const shouldRepairAmbientClassification =
+      entry.purpose === 'ambient' &&
+      persisted?.purpose === 'emotion' &&
+      (entry.tags ?? []).some((tag) => tag === 'idle' || tag === 'neutral');
     const merged = persisted
       ? {
           ...entry,
@@ -1238,7 +1242,10 @@ function normalizeSequencerSettings(value: unknown) {
             typeof rawPersisted?.weight === 'number' && Number.isFinite(rawPersisted.weight)
               ? clampAnimationWeight(rawPersisted.weight)
               : entry.weight,
-          purpose: typeof rawPersisted?.purpose === 'string' ? persisted.purpose : entry.purpose,
+          purpose:
+            typeof rawPersisted?.purpose === 'string' && !shouldRepairAmbientClassification
+              ? persisted.purpose
+              : entry.purpose,
           tags: Array.isArray(rawPersisted?.tags) ? persisted.tags : entry.tags,
         }
       : { ...entry };

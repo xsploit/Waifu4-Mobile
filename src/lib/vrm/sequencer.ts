@@ -22,6 +22,7 @@ const UNSAFE_BASE_LOOP_TAGS = new Set([
   'down',
   'kneel',
   'lay',
+  'laying',
   'lying',
   'pose',
   'rotate',
@@ -563,7 +564,15 @@ function classifySillyAnimation(
     enabled: !isMovement && !isPose && !isUnknown,
     experimental: true,
     loopEligible: isAmbient && !isMovement && !isPose,
-    purpose: isMovement ? 'movement' : isPose ? 'pose' : isGreeting ? 'gesture' : 'emotion',
+    purpose: isMovement
+      ? 'movement'
+      : isPose
+        ? 'pose'
+        : isAmbient
+          ? 'ambient'
+          : isGreeting
+            ? 'gesture'
+            : 'emotion',
     tags,
   };
 }

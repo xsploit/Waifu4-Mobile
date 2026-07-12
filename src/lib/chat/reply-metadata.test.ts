@@ -338,6 +338,38 @@ describe('assistant reply metadata', () => {
     expect(resolveAnimationIndexForReplyMetadata(metadata('grateful'), playlist)).toBe(1);
   });
 
+  it('rotates to another matching reaction when the top match played recently', () => {
+    const playlist: AnimationEntry[] = [
+      {
+        enabled: true,
+        experimental: false,
+        format: 'vrma',
+        id: 'stable-happy',
+        name: 'Stable happy reaction',
+        purpose: 'emotion',
+        tags: ['happy', 'amused'],
+        url: '/stable.vrma',
+      },
+      {
+        enabled: true,
+        experimental: true,
+        format: 'bvh',
+        id: 'alternate-amusement',
+        name: 'Alternate amusement',
+        purpose: 'emotion',
+        tags: ['amusement', 'amused'],
+        url: '/alternate.bvh',
+      },
+    ];
+
+    expect(resolveAnimationIndexForReplyMetadata(metadata('amused'), playlist)).toBe(0);
+    expect(
+      resolveAnimationIndexForReplyMetadata(metadata('amused'), playlist, {
+        recentAnimationIds: ['stable-happy'],
+      }),
+    ).toBe(1);
+  });
+
   it('falls back to experimental animation entries when no stable match exists', () => {
     const playlist: AnimationEntry[] = [
       {

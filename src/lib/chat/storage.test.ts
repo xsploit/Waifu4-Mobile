@@ -574,4 +574,33 @@ describe('chat settings persistence', () => {
       userNickname: 'Subby',
     });
   });
+
+  it('repairs the old emotion classification for bundled neutral idle clips', async () => {
+    window.localStorage.setItem(
+      STORAGE_KEYS.sequencerSettings,
+      JSON.stringify({
+        playlist: [
+          {
+            enabled: true,
+            experimental: true,
+            format: 'bvh',
+            id: 'silly-neutral-idle',
+            loopEligible: true,
+            name: 'Silly Neutral Idle 1',
+            purpose: 'emotion',
+            tags: ['neutral', 'idle'],
+            url: '/assets/animations/silly-bvh/neutral_idle.bvh',
+          },
+        ],
+      }),
+    );
+
+    const loaded = await loadPersistedChatState();
+    const neutralIdle = loaded.sequencerSettings.playlist.find(
+      (entry) => entry.id === 'silly-neutral-idle',
+    );
+
+    expect(neutralIdle?.purpose).toBe('ambient');
+    expect(neutralIdle?.enabled).toBe(true);
+  });
 });

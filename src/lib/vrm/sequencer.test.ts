@@ -61,6 +61,18 @@ describe('animation sequencer catalog', () => {
     expect(isBaseLoopAnimation(thinking!)).toBe(false);
   });
 
+  it('classifies detected neutral idle clips as autoplay candidates', () => {
+    const neutralIdle = DEFAULT_ANIMATIONS.find((entry) => entry.id === 'silly-neutral-idle');
+
+    expect(neutralIdle?.enabled).toBe(true);
+    expect(neutralIdle?.purpose).toBe('ambient');
+    expect(neutralIdle?.loopEligible).toBe(true);
+    expect(isBaseLoopAnimation(neutralIdle!)).toBe(true);
+    expect(
+      isBaseLoopAnimation(DEFAULT_ANIMATIONS.find((entry) => entry.name === 'Silly Laying Idle')!),
+    ).toBe(false);
+  });
+
   it('enriches catalog tags for AI-safe animation selection', () => {
     const talk = DEFAULT_ANIMATIONS.find((entry) => entry.id === 'sachi-ruru01');
     const greeting = DEFAULT_ANIMATIONS.find((entry) => entry.id === 'silly-action-greeting');

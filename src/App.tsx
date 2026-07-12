@@ -2142,6 +2142,7 @@ function App() {
   const availableModelsRef = useRef<string[]>([]);
   const availableModelMetadataRef = useRef<Map<string, AppModelMetadata>>(new Map());
   const sequencerSettingsRef = useRef(createDefaultSequencerSettings());
+  const recentReactionAnimationIdsRef = useRef<string[]>([]);
   const directTwitchClientRef = useRef<DirectTwitchIrcClient | null>(null);
   const directTwitchCommandHandlerRef = useRef<(message: CommandChatMessage) => boolean>(
     () => false,
@@ -5350,8 +5351,16 @@ function App() {
           (1 + Math.min(0.28, nextAffectState.arousal * 0.18)),
       );
       const playlist = sequencerSettingsRef.current.playlist;
-      const index = resolveAnimationIndexForReplyMetadata(metadata, playlist);
+      const index = resolveAnimationIndexForReplyMetadata(metadata, playlist, {
+        recentAnimationIds: recentReactionAnimationIdsRef.current,
+      });
       const animationEntry = index >= 0 ? playlist[index] ?? null : null;
+      if (animationEntry) {
+        recentReactionAnimationIdsRef.current = [
+          animationEntry.id,
+          ...recentReactionAnimationIdsRef.current.filter((id) => id !== animationEntry.id),
+        ].slice(0, 4);
+      }
       setEmotionTelemetryEvents((current) =>
         [
           {

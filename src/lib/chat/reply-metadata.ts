@@ -386,6 +386,7 @@ export function createAssistantReplyStreamFilter() {
 export function resolveAnimationIndexForReplyMetadata(
   metadata: AssistantReplyMetadata | null,
   playlist: AnimationEntry[],
+  options: { recentAnimationIds?: readonly string[] } = {},
 ) {
   if (!metadata || metadata.emotion === 'neutral' || playlist.length === 0) {
     return -1;
@@ -418,20 +419,21 @@ export function resolveAnimationIndexForReplyMetadata(
     })
     .filter((candidate) => candidate.score > 0 && candidate.semanticScore > 0);
 
-  const rankedCandidates = candidates.some((candidate) => !candidate.entry.experimental)
-    ? candidates.filter((candidate) => !candidate.entry.experimental)
-    : candidates;
-
-  rankedCandidates.sort((a, b) => {
+  candidates.sort((a, b) => {
     const aStable = a.entry.experimental ? 0 : 1;
     const bStable = b.entry.experimental ? 0 : 1;
+    if (aStable !== bStable) return bStable - aStable;
     if (a.score !== b.score) return b.score - a.score;
     if (a.semanticScore !== b.semanticScore) return b.semanticScore - a.semanticScore;
-    if (aStable !== bStable) return bStable - aStable;
     return a.index - b.index;
   });
 
-  return rankedCandidates[0]?.index ?? -1;
+  const recentIds = new Set(options.recentAnimationIds ?? []);
+  return (
+    candidates.find((candidate) => !recentIds.has(candidate.entry.id))?.index ??
+    candidates[0]?.index ??
+    -1
+  );
 }
 
 export function resolveFacialExpressionForReplyMetadata(metadata: AssistantReplyMetadata | null) {
