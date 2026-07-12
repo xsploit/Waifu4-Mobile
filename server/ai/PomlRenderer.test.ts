@@ -4,7 +4,6 @@ import { renderYourWifeyPomlMessages, stringifyPomlContent } from './PomlRendere
 describe('PomlRenderer', () => {
   it('renders the Web Waifu 4 template with the fixed pomljs parser', async () => {
     const messages = await renderYourWifeyPomlMessages({
-      animation_catalog_context: 'Available animation if mood_points < 8 && mood_points > 2',
       diary_context: '',
       persona_context: 'You are Hikari. Stay in character.',
       relationship_memory_context: 'Known user facts: ["likes POML"]',
@@ -18,7 +17,6 @@ describe('PomlRenderer', () => {
     expect(messages[0]).toMatchObject({ role: 'system' });
     expect(messages[0]?.content).toContain('You are Hikari');
     expect(messages[0]?.content).toContain('- persona: Web Waifu 4');
-    expect(messages[0]?.content).toContain('mood_points < 8 && mood_points > 2');
     expect(messages[0]?.content).toContain('<yw-meta>');
     expect(messages[0]?.content).not.toContain('[{');
     expect(messages[0]?.content).not.toContain('{{');

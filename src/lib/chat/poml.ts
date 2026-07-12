@@ -14,7 +14,6 @@ type ResponsesPromptInputMessage = {
 };
 
 export type YourWifeyPomlPromptInput = {
-  animationCatalogContext?: string;
   currentTurnContext?: string;
   diaryContext?: string;
   dynamicState?: Record<string, PomlDynamicStateValue>;
@@ -44,7 +43,6 @@ export async function buildYourWifeyPomlMessages(
 ): Promise<PomlPromptMessage[]> {
   const variables: YourWifeyPomlVariables = {
     ...normalizeDynamicState(input.dynamicState),
-    animation_catalog_context: cleanBlock(input.animationCatalogContext),
     current_turn_context: cleanBlock(input.currentTurnContext),
     diary_context: cleanBlock(input.diaryContext),
     grillo_context: cleanBlock(input.grilloContext),
@@ -114,11 +112,14 @@ async function renderPomlMessagesOnServer(
     body: JSON.stringify({ variables }),
   });
 
+  const data = (await response.json().catch(() => ({}))) as PomlRenderResponse;
   if (!response.ok) {
-    throw new Error(`POML render endpoint failed with HTTP ${response.status}.`);
+    throw new Error(
+      data.error
+        ? `POML render failed: ${data.error}`
+        : `POML render endpoint failed with HTTP ${response.status}.`,
+    );
   }
-
-  const data = (await response.json()) as PomlRenderResponse;
   if (!data.ok) {
     throw new Error(data.error ?? 'POML render endpoint failed.');
   }

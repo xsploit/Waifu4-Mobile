@@ -5,6 +5,13 @@ import { DiscordTranscriber } from './DiscordTranscriber';
 import { createDiscordVoiceRuntime, type DiscordVoiceStateLike } from './DiscordVoiceRuntime';
 
 class TestClient extends EventEmitter {
+  public readonly sentMessages: string[] = [];
+  public readonly channels = {
+    fetch: async () => ({
+      isTextBased: () => true,
+      send: async (text: string) => { this.sentMessages.push(text); },
+    }),
+  };
   public readonly guilds = { cache: { get: () => ({ voiceAdapterCreator: () => ({ destroy() {}, sendPayload: () => true }) }) } };
   public readonly users = { cache: new Map(), fetch: async () => ({ bot: false, id: 'human' }) };
   public user = { id: 'self' };
@@ -63,6 +70,8 @@ describe('DiscordVoiceRuntime', () => {
       selfMute: false,
     });
     expect(runtime.status()).toMatchObject({ connected: true, started: true });
+    await runtime.sendReplyText('hello from the waifu');
+    expect(client.sentMessages).toEqual(['hello from the waifu']);
     expect(output.attached).toEqual([connection]);
     expect(runtime.tryEnqueueOutput({ audio: Buffer.alloc(0), chunkIndex: 0, sampleRate: 48_000, sessionId: 'session', utteranceId: 'utterance' })).toBe(true);
     connection.emit('stateChange', { status: VoiceConnectionStatus.Ready }, { status: VoiceConnectionStatus.Disconnected });

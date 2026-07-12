@@ -241,6 +241,7 @@ export function createDefaultDiscordSettings(): DiscordSettings {
     vadMaxSpeechMs: 30000,
     listenEnabled: true,
     speakEnabled: true,
+    sendReplyText: true,
     interruptionPolicy: 'stop-speaking',
   };
 }

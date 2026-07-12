@@ -12,6 +12,12 @@ import type { DiscordVoiceOutputChunk, DiscordVoiceOutputLike } from './DiscordV
 import type { VoiceActivityDetectorConfig, VoiceUtterance } from './VoiceActivityDetector';
 
 type DiscordClientLike = {
+  channels: {
+    fetch: (channelId: string) => Promise<{
+      isTextBased?: () => boolean;
+      send?: (text: string) => Promise<unknown>;
+    } | null>;
+  };
   destroy: () => void | Promise<void>;
   guilds: { cache: { get: (guildId: string) => { voiceAdapterCreator: DiscordGatewayAdapterCreator } | undefined } };
   isReady?: () => boolean;
@@ -138,6 +144,18 @@ export class DiscordVoiceRuntime {
   /** Attempts optional Discord playback without coupling the receive runtime to a TTS provider. */
   public tryEnqueueOutput(chunk: DiscordVoiceOutputChunk): boolean {
     return this.options.voiceOutput?.tryEnqueue(chunk) ?? false;
+  }
+
+  public async sendReplyText(text: string): Promise<void> {
+    const content = text.replace(/\s+/g, ' ').trim();
+    if (!content) return;
+    const channel = await this.client.channels.fetch(this.options.channelId);
+    if (!channel?.send || channel.isTextBased?.() === false) {
+      throw new Error('Discord voice channel text chat is unavailable.');
+    }
+    for (let offset = 0; offset < content.length; offset += 2_000) {
+      await channel.send(content.slice(offset, offset + 2_000));
+    }
   }
 
   private async join(): Promise<void> {

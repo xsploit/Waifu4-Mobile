@@ -77,7 +77,6 @@ import { buildPromptProvenanceReceipt } from './lib/chat/prompt-provenance';
 import { getTurnReplyLengthInstruction } from './lib/chat/reply-length';
 import {
   ASSISTANT_REPLY_JSON_FORMAT,
-  buildAnimationCatalogInstruction,
   createAssistantReplyStreamFilter,
   resolveAnimationIndexForReplyMetadata,
   resolveFacialExpressionDurationMsForReplyMetadata,
@@ -754,9 +753,27 @@ function decodeAiProxyAudioEvent(event: AiProxyStreamEvent): RemoteTtsAudioChunk
   };
 }
 
-function getDiscordApiUrl(pathname: '/api/discord/status' | '/api/discord/connect' | '/api/discord/disconnect') {
+function getDiscordApiUrl(
+  pathname:
+    | '/api/discord/status'
+    | '/api/discord/connect'
+    | '/api/discord/disconnect'
+    | '/api/discord/message',
+) {
   const desktopUrl = getDesktopBackendUrl(pathname);
   return desktopUrl || new URL(pathname, window.location.href).toString();
+}
+
+async function postDiscordReplyText(text: string) {
+  const response = await fetch(getDiscordApiUrl('/api/discord/message'), {
+    body: JSON.stringify({ text }),
+    headers: { 'Content-Type': 'application/json' },
+    method: 'POST',
+  });
+  if (!response.ok) {
+    const data = await response.json().catch(() => ({})) as { error?: string };
+    throw new Error(data.error || `Discord reply text failed (${response.status}).`);
+  }
 }
 
 function isAssistantReplyMetadata(value: unknown): value is AssistantReplyMetadata {
@@ -6409,9 +6426,6 @@ function App() {
                 visionEnabled: currentTwitchSettings.streamVisionContextEnabled,
               });
         const promptBuild = await buildChatCompletionMessagesWithReceipt({
-            animationCatalogContext: buildAnimationCatalogInstruction(
-              sequencerSettingsRef.current.playlist,
-            ),
             channelHistory: job.context,
             currentTurnContext,
             grilloMemory: grilloPromptMemory,
@@ -6536,6 +6550,16 @@ function App() {
         const assistantContent = assistantReply.text;
         if (!assistantContent) {
           throw new Error('AI backend returned an empty chat reply.');
+        }
+        const discordOutputMode = getEffectiveTtsOutputMode(settings);
+        const shouldPostDiscordReply =
+          discordSettingsRef.current.enabled &&
+          discordSettingsRef.current.sendReplyText &&
+          (targetMessage?.source === 'discord' || discordOutputMode !== 'local-only');
+        if (shouldPostDiscordReply) {
+          void postDiscordReplyText(assistantContent).catch((error) => {
+            console.warn('[Discord] Reply text delivery failed:', error);
+          });
         }
         playAssistantMetadataAnimation(response.replyMetadata ?? assistantReply.metadata, stateKey);
         const completedAssistantMessage = {
@@ -6752,6 +6776,7 @@ function App() {
         connectOnStart: _connectOnStart,
         enabled: _enabled,
         interruptionPolicy: _interruptionPolicy,
+        sendReplyText: _sendReplyText,
         speakEnabled: _speakEnabled,
         trustedControllerUserIds: _trustedControllerUserIds,
         ...configuration

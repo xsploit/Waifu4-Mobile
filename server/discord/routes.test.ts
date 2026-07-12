@@ -26,6 +26,7 @@ const config: DiscordConnectConfig = {
 
 class FakeRuntime {
   public stopped = false;
+  public readonly sentMessages: string[] = [];
   private statusValue: DiscordVoiceRuntimeStatus;
 
   public constructor(
@@ -60,6 +61,10 @@ class FakeRuntime {
 
   public tryEnqueueOutput(): boolean {
     return true;
+  }
+
+  public async sendReplyText(text: string): Promise<void> {
+    this.sentMessages.push(text);
   }
 
   public emitTranscript(): void {
@@ -236,6 +241,9 @@ describe('Discord control routes', () => {
 
       const status = await fetch(`${baseUrl}/status`);
       expect(await status.json()).toMatchObject({ ok: true, status: { status: 'connected' } });
+
+      const message = await request(baseUrl, '/message', { text: 'hello Discord' });
+      expect(await message.json()).toEqual({ ok: true });
 
       const disconnected = await request(baseUrl, '/disconnect');
       expect(await disconnected.json()).toMatchObject({ ok: true, status: { status: 'disconnected' } });

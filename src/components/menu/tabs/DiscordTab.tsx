@@ -272,6 +272,13 @@ export function DiscordTab({
             onChange={(speakEnabled) => updateSettings({ speakEnabled })}
           />
         </div>
+        <div className="setting-row">
+          <span>Post reply text in voice chat</span>
+          <Toggle
+            checked={settings.sendReplyText}
+            onChange={(sendReplyText) => updateSettings({ sendReplyText })}
+          />
+        </div>
         <label className="setting-row">
           <span>Interruption policy</span>
           <select

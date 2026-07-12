@@ -25,7 +25,6 @@ type BuildChatCompletionMessagesOptions = {
   currentTurnContext?: string;
   grilloMemory?: GrilloMemoryPromptAdditions;
   history: ChatMessage[];
-  animationCatalogContext?: string;
   maxHistoryMessages?: number;
   persona: PersonaProfile | null;
   relationshipMemory: RelationshipMemory;
@@ -179,7 +178,6 @@ function describeAffectForPrompt(affectState: ReturnType<typeof normalizeAffectS
 }
 
 function buildDynamicPromptState({
-  animationCatalogContext,
   diaryContext,
   persona,
   relationshipMemory,
@@ -190,7 +188,6 @@ function buildDynamicPromptState({
   ttsModel,
   replyLength,
 }: {
-  animationCatalogContext: string;
   diaryContext: string;
   persona: PersonaProfile | null;
   relationshipMemory: RelationshipMemory;
@@ -229,7 +226,6 @@ function buildDynamicPromptState({
       relationshipMood === 'soft' ||
       relationshipMood === 'affectionate' ||
       relationshipMemory.attraction >= 12,
-    animation_catalog_present: Boolean(animationCatalogContext.trim()),
     attraction_score: relationshipMemory.attraction,
     affect_arousal: affectState.arousal.toFixed(2),
     affect_dominance: affectState.dominance.toFixed(2),
@@ -246,7 +242,6 @@ function buildDynamicPromptState({
       relationshipMood === 'guarded' ||
       relationshipMood === 'cold' ||
       relationshipMemory.guard >= 12,
-    has_animation_catalog: Boolean(animationCatalogContext.trim()),
     has_private_diary: Boolean(diaryContext.trim()),
     has_semantic_memory: Boolean(semanticMemoryContext.trim()),
     high_trust: relationshipMemory.trust >= 12,
@@ -421,7 +416,6 @@ export async function buildChatCompletionMessages(
 }
 
 export async function buildChatCompletionMessagesWithReceipt({
-  animationCatalogContext = '',
   channelHistory = [],
   currentTurnContext = '',
   grilloMemory,
@@ -489,11 +483,9 @@ export async function buildChatCompletionMessagesWithReceipt({
   });
 
   const messages = await buildYourWifeyPomlMessages({
-    animationCatalogContext,
     currentTurnContext,
     diaryContext: '',
     dynamicState: buildDynamicPromptState({
-      animationCatalogContext,
       diaryContext: legacyDiaryContext,
       persona,
       relationshipMemory,

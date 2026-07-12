@@ -32,11 +32,12 @@ const connectBodySchema = z
     voiceChannelId: z.string().trim().min(1).max(64),
   })
   .strict();
+const replyTextBodySchema = z.object({ text: z.string().trim().min(1).max(12_000) }).strict();
 
 export type DiscordConnectConfig = z.infer<typeof connectBodySchema>;
 export type DiscordVoiceRuntimeLike = Pick<
   ReturnType<typeof createDiscordVoiceRuntime>,
-  'start' | 'status' | 'stop' | 'tryEnqueueOutput'
+  'sendReplyText' | 'start' | 'status' | 'stop' | 'tryEnqueueOutput'
 >;
 
 export type DiscordVoiceControllerStatus = {
@@ -172,6 +173,14 @@ export class DiscordVoiceController {
     }) ?? false;
   }
 
+  public async sendReplyText(text: string): Promise<void> {
+    const runtime = this.runtime;
+    if (!runtime || this.connectionStatus !== 'connected') {
+      throw new Error('Discord voice bridge is not connected.');
+    }
+    await runtime.sendReplyText(text);
+  }
+
   private enqueue<T>(work: () => Promise<T> | T): Promise<T> {
     const next = this.operation.then(work, work);
     this.operation = next.then(
@@ -290,6 +299,23 @@ export function createDiscordRouter(controller = new DiscordVoiceController()) {
   router.post('/disconnect', async (_req, res) => {
     const status = await controller.disconnect();
     res.json({ ok: true, status });
+  });
+
+  router.post('/message', async (req, res) => {
+    const parsed = replyTextBodySchema.safeParse(req.body ?? {});
+    if (!parsed.success) {
+      res.status(400).json({ ok: false, error: 'Invalid Discord reply text.' });
+      return;
+    }
+    try {
+      await controller.sendReplyText(parsed.data.text);
+      res.json({ ok: true });
+    } catch (error) {
+      res.status(409).json({
+        ok: false,
+        error: error instanceof Error ? error.message : 'Discord reply text failed.',
+      });
+    }
   });
 
   return router;

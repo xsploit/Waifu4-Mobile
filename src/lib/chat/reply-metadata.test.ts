@@ -5,7 +5,6 @@ import {
   ASSISTANT_REPLY_META_CLOSE,
   ASSISTANT_REPLY_META_OPEN,
   ASSISTANT_REPLY_JSON_FORMAT,
-  buildAnimationCatalogInstruction,
   buildReplyMetadataInstruction,
   createAssistantMetadataStreamFilter,
   createAssistantReplyStreamFilter,
@@ -204,37 +203,6 @@ describe('assistant reply metadata', () => {
     expect(resolveAnimationIndexForReplyMetadata(metadata('grateful'), playlist)).toBe(1);
   });
 
-  it('builds a compact legal animation catalog from enabled stable tagged entries', () => {
-    const catalog = buildAnimationCatalogInstruction([
-      {
-        enabled: true,
-        experimental: false,
-        format: 'vrma',
-        id: 'talk',
-        loopEligible: true,
-        name: 'Talk Loop',
-        purpose: 'ambient',
-        tags: ['talk', 'casual', 'upper-body'],
-        url: '/talk.vrma',
-      },
-      {
-        enabled: true,
-        experimental: true,
-        format: 'vrma',
-        id: 'unknown',
-        name: 'Unknown Motion',
-        purpose: 'gesture',
-        tags: ['unknown'],
-        url: '/unknown.vrma',
-      },
-    ]);
-
-    expect(catalog).toContain('Talk Loop');
-    expect(catalog).toContain('talk, casual, upper-body');
-    expect(catalog).not.toContain('Unknown Motion');
-    expect(catalog).toContain('do not name animations');
-  });
-
   it('maps every supported emotion to an equivalent enabled animation when the catalog has one', () => {
     const emotionCases = [
       ['amused', ['amusement', 'happy', 'joy']],
@@ -279,9 +247,6 @@ describe('assistant reply metadata', () => {
     expect(instruction).toContain('Do not choose animation names, motions, gestures');
     expect(instruction).toContain('Use neutral only when there is no clear emotional color');
     expect(instruction).toContain('Use amused for playful teasing');
-    expect(buildAnimationCatalogInstruction(DEFAULT_ANIMATIONS)).toContain(
-      'Use these only to choose matching emotion metadata',
-    );
   });
 
   it('does not select disabled animation entries', () => {

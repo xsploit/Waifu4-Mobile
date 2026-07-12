@@ -990,6 +990,8 @@ export function normalizeDiscordSettings(value: unknown): DiscordSettings {
     listenEnabled:
       typeof source.listenEnabled === 'boolean' ? source.listenEnabled : defaults.listenEnabled,
     speakEnabled: typeof source.speakEnabled === 'boolean' ? source.speakEnabled : defaults.speakEnabled,
+    sendReplyText:
+      typeof source.sendReplyText === 'boolean' ? source.sendReplyText : defaults.sendReplyText,
     interruptionPolicy:
       source.interruptionPolicy === 'ignore' ||
       source.interruptionPolicy === 'stop-speaking' ||

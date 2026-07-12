@@ -178,21 +178,6 @@ Use square-bracket natural-language cues for Fish S2/S2-Pro, such as [happy], [s
       </cp>
     </if>
 
-    <if condition="{{ animation_catalog_context }}">
-      <cp caption="Avatar Animation Catalog" captionStyle="header" syntax="markdown" whiteSpace="pre">
-{{ animation_catalog_context }}
-      </cp>
-    </if>
-
-    <if condition="{{ has_animation_catalog }}">
-      <cp caption="Emotion Selection" captionStyle="header">
-Choose the emotion you genuinely feel toward the current message and your reply.
-Use neutral only when there is no clear emotional color.
-Prefer a real emotion when the reply is teasing, playful, caring, irritated, surprised, embarrassed, or excited.
-Do not name animations, motions, gestures, poses, expression ids, or implementation details.
-      </cp>
-    </if>
-
     <if condition="{{ turn_metadata_context }}">
       <cp caption="Current Scene" captionStyle="header" syntax="markdown" whiteSpace="pre">
 {{ turn_metadata_context }}

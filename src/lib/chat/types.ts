@@ -301,6 +301,7 @@ export type DiscordSettings = {
   vadMaxSpeechMs: number;
   listenEnabled: boolean;
   speakEnabled: boolean;
+  sendReplyText: boolean;
   interruptionPolicy: DiscordInterruptionPolicy;
 };
 
