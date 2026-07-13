@@ -1,5 +1,7 @@
 <div align="center">
 
+<img src="./public/assets/branding/webwaifu4-wordmark.svg" alt="WebWaifu4" width="100%" />
+
 # WebWaifu4 Rebuild
 
 ### _Local-first VTuber AI companion with browser, desktop, Twitch, and collaboration voice._
