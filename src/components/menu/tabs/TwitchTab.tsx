@@ -374,8 +374,8 @@ export function TwitchTab({
           </select>
         </label>
         <div className="field-hint">
-          OpenRouter ASR uses the Account-tab OpenRouter key. Fish ASR uses the Account-tab Fish
-          key.
+          OpenRouter ASR uses the OpenRouter key in Keys &amp; Data. Fish ASR uses the Fish Audio
+          key there.
         </div>
         <NumberField
           label="Sample seconds"

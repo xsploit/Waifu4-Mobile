@@ -9,18 +9,49 @@ type AccountTabProps = {
 };
 
 type LocalProviderKeyConfig = {
+  description: string;
   keyName: string;
   label: string;
   provider: ProviderKind;
 };
 
 const LOCAL_PROVIDER_KEYS: LocalProviderKeyConfig[] = [
-  { provider: 'openai', keyName: 'openai.apiKey', label: 'OpenAI Utility' },
-  { provider: 'openrouter', keyName: 'openrouter.apiKey', label: 'OpenRouter' },
-  { provider: 'custom', keyName: 'aiGateway.apiKey', label: 'Vercel AI Gateway' },
-  { provider: 'fish_speech', keyName: 'fishSpeech.apiKey', label: 'Fish Speech' },
-  { provider: 'inworld', keyName: 'inworld.apiKey', label: 'Inworld' },
-  { provider: 'tavily', keyName: 'tavily.apiKey', label: 'Tavily' },
+  {
+    provider: 'openai',
+    keyName: 'openai.apiKey',
+    label: 'OpenAI Utility',
+    description: 'Optional Whisper transcription and Vercel Gateway BYOK helpers.',
+  },
+  {
+    provider: 'openrouter',
+    keyName: 'openrouter.apiKey',
+    label: 'OpenRouter',
+    description: 'Chat, model discovery, embeddings, and OpenRouter transcription.',
+  },
+  {
+    provider: 'custom',
+    keyName: 'aiGateway.apiKey',
+    label: 'Vercel AI Gateway',
+    description: 'Gateway chat, model routing, and supported transcription lanes.',
+  },
+  {
+    provider: 'fish_speech',
+    keyName: 'fishSpeech.apiKey',
+    label: 'Fish Audio',
+    description: 'Realtime TTS, Timestamp SSE, Voice Lab, and Fish transcription.',
+  },
+  {
+    provider: 'inworld',
+    keyName: 'inworld.apiKey',
+    label: 'Inworld',
+    description: 'Inworld TTS transports, voices, and Voice Lab operations.',
+  },
+  {
+    provider: 'tavily',
+    keyName: 'tavily.apiKey',
+    label: 'Tavily',
+    description: 'Web search requests made by enabled AI tools.',
+  },
 ];
 
 function findProviderDescriptor(
@@ -108,33 +139,32 @@ export function AccountTab({
   return (
     <>
       <div className="control-group">
-        <div className="control-label">Local Mode</div>
+        <div className="control-label">Browser Workspace</div>
         <div className="status-grid">
           <div className="status-copy">
-            Storage: <strong>IndexedDB + browser-local key storage</strong>
+            App data: <strong>IndexedDB</strong>
           </div>
           <div className="status-copy">
-            Cloud sync: <strong>disabled</strong>
+            Provider keys: <strong>browser local</strong>
           </div>
           <div className="status-copy">
-            Login: <strong>not required</strong>
+            WebWaifu account: <strong>not required</strong>
           </div>
           <div className="status-copy">
-            Provider keys: <strong>local only</strong>
+            Cloud sync: <strong>off</strong>
           </div>
         </div>
         <div className="field-hint">
-          Web Waifu 4 is a local streaming app. Settings, memories, saved VRMs, voices, and provider
-          keys stay on this machine unless you export a backup JSON.
+          This tab manages access keys and portable app data. Settings, memories, chats, saved VRMs,
+          voices, and credentials stay in this browser unless you export them.
         </div>
       </div>
 
       <div className="control-group">
-        <div className="control-label">Browser Provider Keys</div>
+        <div className="control-label">Provider Access</div>
         <div className="field-hint">
-          Main chat uses Vercel AI Gateway or OpenRouter. The OpenAI utility key is only for
-          OpenAI-specific helpers such as Whisper/transcription and Gateway BYOK; provider keys are
-          sent only to the local backend for the current request.
+          Add only the services you use. A saved key is sent to the local backend only when a
+          request needs that provider.
         </div>
         <div className="provider-key-list">
           {LOCAL_PROVIDER_KEYS.map((config) => {
@@ -146,6 +176,7 @@ export function AccountTab({
                   <span>{config.label}</span>
                   <strong>{descriptor?.redactedLabel ?? 'not set'}</strong>
                 </div>
+                <div className="provider-key-description">{config.description}</div>
                 <input
                   autoComplete="off"
                   className="input-tech"
@@ -186,10 +217,10 @@ export function AccountTab({
       </div>
 
       <div className="control-group">
-        <div className="control-label">Local Transfer Backup</div>
+        <div className="control-label">Transfer &amp; Backup</div>
         <div className="field-hint">
-          Export a 1:1 JSON backup for another streaming PC. It includes local app settings,
-          provider keys, chat and memory state, and saved custom VRM files.
+          Move the complete browser workspace to another PC or keep a restorable snapshot. The JSON
+          includes settings, provider keys, scoped chats and memory, voices, and saved custom VRMs.
         </div>
         <div className="btn-row">
           <button

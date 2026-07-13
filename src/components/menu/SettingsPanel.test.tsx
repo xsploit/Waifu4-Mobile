@@ -154,7 +154,7 @@ function createProps(activeTab: SettingsTabId): SettingsPanelProps {
 
 describe('SettingsPanel tab smoke', () => {
   const tabMarkers: Array<[SettingsTabId, string]> = [
-    ['account', 'Browser Provider Keys'],
+    ['account', 'Provider Access'],
     ['vrm', 'Avatar Source'],
     ['background', 'Scene Background'],
     ['anim', 'Now Playing'],
@@ -273,7 +273,7 @@ describe('SettingsPanel tab smoke', () => {
     expect(html).toContain('ASR:');
     expect(html).toContain('ASR model');
     expect(html).toContain('Fish ASR');
-    expect(html).toContain('OpenRouter ASR uses the Account-tab OpenRouter key');
+    expect(html).toContain('OpenRouter ASR uses the OpenRouter key in Keys &amp; Data');
     expect(html).toContain('Attach Twitch stream frame to vision models');
     expect(html).toContain('Captures one JPEG frame from the Twitch stream');
   });

@@ -191,7 +191,7 @@ type SettingsPanelProps = {
 };
 
 const TABS: { id: SettingsTabId; label: string }[] = [
-  { id: 'account', label: 'Account' },
+  { id: 'account', label: 'Keys & Data' },
   { id: 'vrm', label: 'Avatar' },
   { id: 'background', label: 'Background' },
   { id: 'anim', label: 'Animation' },

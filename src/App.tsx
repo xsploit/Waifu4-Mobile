@@ -2978,7 +2978,7 @@ function App() {
           providerKeyVaultWorkspaceId,
         );
         if (!providerApiKey) {
-          const message = `${getTtsProviderLabel(provider)} voice catalog needs an Account tab API key.`;
+          const message = `${getTtsProviderLabel(provider)} voice catalog needs an API key in Keys & Data.`;
           if (force) {
             throw new Error(message);
           }

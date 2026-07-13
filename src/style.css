@@ -1405,6 +1405,12 @@ input[type='range']::-webkit-slider-thumb:hover {
   overflow-wrap: anywhere;
 }
 
+.provider-key-description {
+  color: var(--text-dim);
+  font-size: 0.7rem;
+  line-height: 1.45;
+}
+
 .provider-key-actions .btn-tech {
   flex-basis: 120px;
 }
