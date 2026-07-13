@@ -410,7 +410,9 @@ function normalizeAiSettings(value: unknown): AiSettings {
         ? source.ttsOutputMode
         : defaults.ttsOutputMode;
   const ttsProvider =
-    source.ttsProvider === 'fish-speech' || source.ttsProvider === 'inworld'
+    source.ttsProvider === 'piper' ||
+    source.ttsProvider === 'fish-speech' ||
+    source.ttsProvider === 'inworld'
       ? source.ttsProvider
       : defaults.ttsProvider;
   const fishSpeechLatency =

@@ -45,10 +45,14 @@ describe('chat settings persistence', () => {
     const aiSettings = {
       ...createDefaultAiSettings(),
       aiTransportMode: 'http-stream',
+      embeddingLocalModel: 'onnx-community/bge-small-en-v1.5-ONNX',
+      embeddingMode: 'auto',
+      embeddingModel: 'qwen/qwen3-embedding-0.6b',
       fishSpeechChunkLength: 220,
       fishSpeechConditionOnPreviousChunks: false,
       fishSpeechLatency: 'normal',
-      fishSpeechModel: 's2',
+      fishSpeechLiveChunkingStrategy: 'eager',
+      fishSpeechModel: 's2.1-pro-free',
       fishSpeechTransport: 'timestamp-sse',
       fishSpeechFormat: 'wav',
       fishSpeechSampleRate: 48000,
@@ -65,25 +69,37 @@ describe('chat settings persistence', () => {
       inworldTransport: 'websocket',
       inworldVoiceId: 'inworld-voice',
       llmProvider: 'openrouter-responses',
+      lipSyncGain: 1.35,
+      lipSyncMode: 'direct',
+      lipSyncSmoothing: 0.25,
+      lipSyncVolumeInfluence: 0.65,
       maxToolRounds: 18,
       maxTokens: 420,
-      memoryAgentIntervalMessages: 7,
+      memoryAgentIntervalMessages: 13,
       memoryAgentModel: DEFAULT_OPENROUTER_MODEL,
       model: DEFAULT_OPENROUTER_MODEL,
       openAiStateMode: 'stateless',
+      openRouterAllowFallbacks: false,
+      openRouterProviderSlugs: 'fireworks',
+      openRouterRoutingMode: 'pinned',
       replyLength: 'yap',
       remoteTtsMode: 'sentence-chunks',
+      runtimeSituation: 'Recording a live product demo.',
       temperature: 1.1,
       toolChoiceMode: 'auto',
       ttsAutoSpeak: false,
       ttsEnabled: true,
       ttsExpressionTagsEnabled: true,
+      ttsExternalOutputDeviceId: 'virtual-cable-output',
       ttsOutputMode: 'local+discord',
       ttsPlaybackRate: 1.15,
       ttsProvider: 'fish-speech',
       ttsSimulatedStreaming: false,
       ttsVoice: 'custom-voice',
       ttsVolume: 1.4,
+      vercelAllowFallbacks: false,
+      vercelProviderSlugs: 'vertex,bedrock',
+      vercelRoutingMode: 'cost',
     } satisfies PersistedChatState['aiSettings'];
     const sequencerSettings = {
       ...createDefaultSequencerSettings(),
@@ -156,8 +172,13 @@ describe('chat settings persistence', () => {
       pbrSpecularIntensity: 0.7,
       realisticMode: true,
       rimLight: 0.9,
+      sceneBackgroundFilter: 'brightness(0.8) contrast(1.1)',
+      sceneBackgroundImage: 'https://example.test/background.png',
       sceneBackgroundMode: 'transparent',
+      sceneBackgroundOverlay: 'linear-gradient(#00000011, #00000033)',
+      sceneChromaColor: '#11ee22',
       sceneExposure: 1.25,
+      toonShaderPreset: 'custom',
     } satisfies PersistedChatState['visualSettings'];
     const state: PersistedChatState = {
       activePersonaId: DEFAULT_PERSONA.id,
@@ -225,11 +246,19 @@ describe('chat settings persistence', () => {
       twitchChannel: '#CohhCarnage',
       twitchSettings: {
         ...createDefaultTwitchSettings(),
+        aiEnabled: false,
+        batchFastWaitMs: 50000,
+        batchHighSize: 60,
         batchLowSize: 7,
+        batchMaxSize: 150,
+        batchMidSize: 25,
+        batchWaitMs: 35000,
         commandsEnabled: false,
         contextLimit: 120,
         directChatterLimit: 12,
         localDisplayName: 'Subby',
+        localTrustedControls: false,
+        maxBatchMessages: 150,
         maxPendingJobs: 5,
         mentionRequiredUnderThreshold: false,
         replyGapMs: 1500,
@@ -238,6 +267,7 @@ describe('chat settings persistence', () => {
         streamTranscriptionIntervalSeconds: 120,
         streamTranscriptionModel: 'openai/whisper-large-v3',
         streamTranscriptionSampleSeconds: 20,
+        streamModeEnabled: true,
         streamVisionContextEnabled: true,
         streamVisionDetail: 'auto',
         streamVisionIntervalSeconds: 150,
@@ -303,25 +333,7 @@ describe('chat settings persistence', () => {
       resolvedExpressionNames: ['happy', 'relaxed'],
     });
     expect(loaded.twitchChannel).toBe('cohhcarnage');
-    expect(loaded.twitchSettings).toMatchObject({
-      batchLowSize: 7,
-      commandsEnabled: false,
-      contextLimit: 120,
-      directChatterLimit: 12,
-      localDisplayName: 'Subby',
-      maxPendingJobs: 5,
-      mentionRequiredUnderThreshold: false,
-      replyGapMs: 1500,
-      streamTranscriptionContextLimit: 6,
-      streamTranscriptionEnabled: true,
-      streamTranscriptionIntervalSeconds: 120,
-      streamTranscriptionModel: 'openai/whisper-large-v3',
-      streamTranscriptionSampleSeconds: 20,
-      streamVisionContextEnabled: true,
-      streamVisionDetail: 'auto',
-      streamVisionIntervalSeconds: 150,
-      streamVisionMaxAgeSeconds: 240,
-    });
+    expect(loaded.twitchSettings).toEqual(state.twitchSettings);
     expect(loaded.uiState).toEqual({
       ...state.uiState,
       menuOpen: false,
@@ -495,25 +507,33 @@ describe('chat settings persistence', () => {
   });
 
   it('keeps Discord settings in normalized import and export snapshots', async () => {
+    const discordSettings = {
+      ...createDefaultDiscordSettings(),
+      asrProvider: 'fish' as const,
+      botToken: 'local-discord-token',
+      connectOnStart: true,
+      enabled: true,
+      guildId: '123456789012345678',
+      interruptionPolicy: 'barge-in' as const,
+      languageHint: 'en-US',
+      listenEnabled: false,
+      sendReplyText: false,
+      speakEnabled: false,
+      transcriptionModel: 'fish-audio/asr',
+      trustedControllerUserIds: ['987654321098765432'],
+      vadEndSilenceMs: 1200,
+      vadMaxSpeechMs: 20000,
+      vadMinSpeechMs: 400,
+      vadThreshold: 0.08,
+      voiceChannelId: '234567890123456789',
+    };
     const snapshot = normalizePersistedChatStateSnapshot({
       activeTab: 'discord',
-      discordSettings: {
-        ...createDefaultDiscordSettings(),
-        botToken: 'local-discord-token',
-        guildId: '123456789012345678',
-        trustedControllerUserIds: ['987654321098765432'],
-        voiceChannelId: '234567890123456789',
-      },
+      discordSettings,
     });
 
     expect(snapshot.activeTab).toBe('discord');
-    expect(snapshot.discordSettings).toEqual({
-      ...createDefaultDiscordSettings(),
-      botToken: 'local-discord-token',
-      guildId: '123456789012345678',
-      trustedControllerUserIds: ['987654321098765432'],
-      voiceChannelId: '234567890123456789',
-    });
+    expect(snapshot.discordSettings).toEqual(discordSettings);
 
     await savePersistedChatState(snapshot);
     const loaded = await loadPersistedChatState();
@@ -533,6 +553,24 @@ describe('chat settings persistence', () => {
     const loaded = await loadPersistedChatState();
 
     expect(loaded.aiSettings.fishSpeechModel).toBe('s2');
+  });
+
+  it('preserves Piper as the selected TTS provider across reloads and imports', async () => {
+    const snapshot = normalizePersistedChatStateSnapshot({
+      aiSettings: {
+        ...createDefaultAiSettings(),
+        ttsProvider: 'piper',
+        ttsVoice: 'hikari-en-us',
+      },
+    });
+
+    expect(snapshot.aiSettings.ttsProvider).toBe('piper');
+    await savePersistedChatState(snapshot);
+    const loaded = await loadPersistedChatState();
+    expect(loaded.aiSettings).toMatchObject({
+      ttsProvider: 'piper',
+      ttsVoice: 'hikari-en-us',
+    });
   });
 
   it('keeps legacy Fish s2-pro saves compatible with the frontend s2 value', async () => {

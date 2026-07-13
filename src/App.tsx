@@ -4389,48 +4389,49 @@ function App() {
 
     let cancelled = false;
     let idleHandle: number | null = null;
-    const persistTimer = window.setTimeout(() => {
-      const persist = () => {
-        if (cancelled) {
-          return;
-        }
+    const persist = () => {
+      if (cancelled) {
+        return;
+      }
 
-        const nextPersistedState = {
-          personas,
-          activePersonaId: activePersona?.id ?? DEFAULT_PERSONA.id,
-          aiSettings,
-          chatHistory,
-          chatHistories,
-          relationshipMemory,
-          relationshipMemories,
-          personaVoiceBindings,
-          voiceLabVoices,
-          uiState: {
-            menuOpen: false,
-            chatLogOpen,
-            chatDraft: chatInput,
-          },
-          activeTab,
-          currentBundledModelId,
-          currentCustomVrmModelId,
-          emotionTelemetryEvents,
-          twitchChannel,
-          twitchSettings,
-          discordSettings,
-          sequencerSettings,
-          visualSettings,
-        };
-
-        void savePersistedChatState(nextPersistedState).catch((error) => {
-          console.warn('[App] Failed to persist chat state', error);
-        });
-        void saveLadybugRelationshipMemories(nextPersistedState.relationshipMemories).catch(
-          (error) => {
-            console.warn('[App] Failed to persist Ladybug relationship graph', error);
-          },
-        );
+      const nextPersistedState = {
+        personas,
+        activePersonaId: activePersona?.id ?? DEFAULT_PERSONA.id,
+        aiSettings,
+        chatHistory,
+        chatHistories,
+        relationshipMemory,
+        relationshipMemories,
+        personaVoiceBindings,
+        voiceLabVoices,
+        uiState: {
+          menuOpen: false,
+          chatLogOpen,
+          chatDraft: chatInput,
+        },
+        activeTab,
+        currentBundledModelId,
+        currentCustomVrmModelId,
+        emotionTelemetryEvents,
+        twitchChannel,
+        twitchSettings,
+        discordSettings,
+        sequencerSettings,
+        visualSettings,
       };
 
+      void savePersistedChatState(nextPersistedState).catch((error) => {
+        console.warn('[App] Failed to persist chat state', error);
+      });
+      void saveLadybugRelationshipMemories(nextPersistedState.relationshipMemories).catch(
+        (error) => {
+          console.warn('[App] Failed to persist Ladybug relationship graph', error);
+        },
+      );
+    };
+    const persistOnPageHide = () => persist();
+    window.addEventListener('pagehide', persistOnPageHide);
+    const persistTimer = window.setTimeout(() => {
       if ('requestIdleCallback' in window) {
         idleHandle = window.requestIdleCallback(
           () => {
@@ -4446,6 +4447,7 @@ function App() {
 
     return () => {
       cancelled = true;
+      window.removeEventListener('pagehide', persistOnPageHide);
       window.clearTimeout(persistTimer);
       if (idleHandle !== null) {
         window.cancelIdleCallback(idleHandle);
@@ -7565,6 +7567,7 @@ function App() {
         setTwitchChannel(next.twitchChannel);
         setTwitchSettings(next.twitchSettings);
         setDiscordSettings(next.discordSettings ?? createDefaultDiscordSettings());
+        setEmotionTelemetryEvents(next.emotionTelemetryEvents);
         setSequencerSettings(next.sequencerSettings);
         setVisualSettings(next.visualSettings);
 
