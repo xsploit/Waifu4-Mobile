@@ -356,7 +356,7 @@ export function createAssistantReplyStreamFilter() {
 export function resolveAnimationIndexForReplyMetadata(
   metadata: AssistantReplyMetadata | null,
   playlist: AnimationEntry[],
-  options: { recentAnimationIds?: readonly string[] } = {},
+  options: { random?: () => number; recentAnimationIds?: readonly string[] } = {},
 ) {
   if (!metadata || metadata.emotion === 'neutral' || playlist.length === 0) {
     return -1;
@@ -399,11 +399,23 @@ export function resolveAnimationIndexForReplyMetadata(
   });
 
   const recentIds = new Set(options.recentAnimationIds ?? []);
-  return (
-    candidates.find((candidate) => !recentIds.has(candidate.entry.id))?.index ??
-    candidates[0]?.index ??
-    -1
+  const nonRecentCandidates = candidates.filter(
+    (candidate) => !recentIds.has(candidate.entry.id),
   );
+  const availableCandidates = nonRecentCandidates.length > 0 ? nonRecentCandidates : candidates;
+  const stableCandidates = availableCandidates.filter((candidate) => !candidate.entry.experimental);
+  const stabilityPool = stableCandidates.length > 0 ? stableCandidates : availableCandidates;
+  const bestScore = stabilityPool[0]?.score ?? 0;
+  const qualityPool = stabilityPool.filter((candidate) => candidate.score >= bestScore - 2);
+  const random = options.random;
+  if (!random || qualityPool.length <= 1) {
+    return qualityPool[0]?.index ?? -1;
+  }
+  const randomIndex = Math.min(
+    qualityPool.length - 1,
+    Math.floor(Math.max(0, random()) * qualityPool.length),
+  );
+  return qualityPool[randomIndex]?.index ?? -1;
 }
 
 export function resolveFacialExpressionForReplyMetadata(metadata: AssistantReplyMetadata | null) {

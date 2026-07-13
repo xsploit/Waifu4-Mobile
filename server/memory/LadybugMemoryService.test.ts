@@ -1,6 +1,6 @@
-import { readFile, rm, writeFile } from 'node:fs/promises';
+import { readFile, readdir, rm, writeFile } from 'node:fs/promises';
 import { randomUUID } from 'node:crypto';
-import { join } from 'node:path';
+import { basename, dirname, join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { afterEach, describe, expect, it } from 'vitest';
 import { LadybugMemoryService } from './LadybugMemoryService';
@@ -24,6 +24,46 @@ afterEach(async () => {
 });
 
 describe('LadybugMemoryService', () => {
+  it('quarantines a corrupt WAL and retries native initialization once', async () => {
+    const service = createService();
+    const walPath = `${service.dbDir}.wal`;
+    await writeFile(walPath, 'corrupt wal bytes', 'utf8');
+    const nativeState = {
+      connection: { close: async () => undefined },
+      database: { close: async () => undefined },
+      initialized: true,
+    };
+    let initCalls = 0;
+    const internals = service as unknown as {
+      init: () => Promise<typeof nativeState>;
+      open: () => Promise<typeof nativeState>;
+    };
+    internals.init = async () => {
+      initCalls += 1;
+      if (initCalls === 1) {
+        throw new Error('Runtime exception: Corrupted wal file. Invalid WAL record type.');
+      }
+      return nativeState;
+    };
+
+    try {
+      await expect(internals.open()).resolves.toBe(nativeState);
+      expect(initCalls).toBe(2);
+      const files = await readdir(dirname(service.dbDir));
+      expect(
+        files.some((file) => file.startsWith(`${basename(service.dbDir)}.wal.corrupt-`)),
+      ).toBe(true);
+    } finally {
+      await service.close();
+      const files = await readdir(dirname(service.dbDir));
+      await Promise.all(
+        files
+          .filter((file) => file.startsWith(`${basename(service.dbDir)}.wal.corrupt-`))
+          .map((file) => rm(join(dirname(service.dbDir), file), { force: true })),
+      );
+    }
+  });
+
   it('stores native GRILLO repository records in Ladybug graph rows', async () => {
     const service = createService();
     const scopeKey = 'local:persona:neuro-sama';
@@ -749,6 +789,52 @@ describe('LadybugMemoryService', () => {
         },
         [secondRelationshipScope]: { facts: ['second fact'] },
       });
+    } finally {
+      await service.close();
+    }
+  });
+
+  it('rebuilds mixed-dimension semantic vectors without collapsing the graph', async () => {
+    const service = createService();
+    const scopeKey = 'local:persona:mixed-embeddings';
+    try {
+      await service.saveSemanticRecords(scopeKey, [
+        {
+          assistantText: 'Local answer.',
+          createdAt: 10,
+          embedding: [1, 0],
+          id: 'semantic-local',
+          personaId: 'mixed-embeddings',
+          scopeKey,
+          text: 'Local embedding memory.',
+          userText: 'Remember locally.',
+        },
+      ]);
+      await service.saveSemanticRecords(scopeKey, [
+        {
+          assistantText: 'Provider answer.',
+          createdAt: 11,
+          embedding: [1, 0, 0],
+          id: 'semantic-provider',
+          personaId: 'mixed-embeddings',
+          scopeKey,
+          text: 'Provider embedding memory.',
+          userText: 'Remember through provider.',
+        },
+      ]);
+
+      const semanticIds = (await service.loadSemanticRecords(scopeKey))?.map((record) => record.id);
+      expect(semanticIds).toHaveLength(2);
+      expect(semanticIds).toEqual(
+        expect.arrayContaining(['semantic-local', 'semantic-provider']),
+      );
+      const graph = await service.getGraphSummary();
+      expect(graph.recent.semantic.map((record) => record.id)).toEqual(
+        expect.arrayContaining(['semantic-local', 'semantic-provider']),
+      );
+      expect(graph.recent.vectors.map((record) => record.id)).toEqual(
+        expect.arrayContaining(['semantic-local', 'semantic-provider']),
+      );
     } finally {
       await service.close();
     }

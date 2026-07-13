@@ -3,9 +3,17 @@ import {
   createRemoteTtsProxyRequest,
   parseRemoteTtsStreamEvent,
   remoteTtsStreamEventToAudioChunk,
+  shouldRetrySilentLiveBridge,
 } from './remote';
 
 describe('remote TTS proxy compatibility', () => {
+  it('retries only a live bridge that completed with text and zero audio', () => {
+    expect(shouldRetrySilentLiveBridge(true, 0, 'Hello from Hikari.')).toBe(true);
+    expect(shouldRetrySilentLiveBridge(true, 1, 'Hello from Hikari.')).toBe(false);
+    expect(shouldRetrySilentLiveBridge(false, 0, 'Hello from Hikari.')).toBe(false);
+    expect(shouldRetrySilentLiveBridge(true, 0, '   ')).toBe(false);
+  });
+
   it('maps copied Fish frontend requests onto the rebuilt backend stream schema', () => {
     expect(
       createRemoteTtsProxyRequest({

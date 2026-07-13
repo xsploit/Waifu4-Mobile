@@ -491,8 +491,6 @@ export class LadybugMemoryService {
     );
   }
 
-  // Called through the Express singleton getter; Fallow does not resolve that chain.
-  // fallow-ignore-next-line unused-class-member
   async mergeRelationshipProfiles(profiles: Record<string, unknown>) {
     const incoming = normalizeRelationshipProfiles(profiles);
     await this.enqueueMemoryMutation('relationships', async () => {
@@ -1040,7 +1038,7 @@ export class LadybugMemoryService {
       backend: 'json-fallback',
       dbDir: this.dbDir,
       fallbackFile: this.fallbackStorePath,
-      fallbackReason: store.reason ?? this.fallbackReason,
+      fallbackReason: this.fallbackReason ?? store.reason,
       initialized: true,
       snapshots: snapshots.length,
       grilloScopes: new Set(grilloStates.map((snapshot) => snapshot.scopeKey)).size,
@@ -1743,6 +1741,9 @@ export class LadybugMemoryService {
 
   async close() {
     const state = this.state;
+    if (state?.initialized) {
+      await this.exec('CHECKPOINT').catch(() => undefined);
+    }
     this.state = null;
     this.initPromise = null;
     await state?.connection.close().catch(() => undefined);
@@ -1756,9 +1757,39 @@ export class LadybugMemoryService {
     if (this.state?.initialized) {
       return this.state;
     }
-    this.initPromise ??= this.init();
-    this.state = await this.initPromise;
-    return this.state;
+    this.initPromise ??= this.initWithWalRecovery();
+    try {
+      this.state = await this.initPromise;
+      return this.state;
+    } catch (error) {
+      this.initPromise = null;
+      throw error;
+    }
+  }
+
+  private async initWithWalRecovery() {
+    try {
+      return await this.init();
+    } catch (error) {
+      if (!isCorruptedWalError(error)) {
+        throw error;
+      }
+
+      const state = this.state;
+      this.state = null;
+      await state?.connection.close().catch(() => undefined);
+      await state?.database.close().catch(() => undefined);
+      const walPath = `${this.dbDir}.wal`;
+      const quarantinedWalPath = `${walPath}.corrupt-${Date.now()}`;
+      try {
+        await rename(walPath, quarantinedWalPath);
+      } catch (renameError) {
+        if (!isMissingFileError(renameError)) {
+          throw renameError;
+        }
+      }
+      return this.init();
+    }
   }
 
   private async init(): Promise<LadybugState> {
@@ -2124,6 +2155,10 @@ export class LadybugMemoryService {
   private async replaceSemanticGraph(scopeKey: string, records: LadybugSemanticMemoryRecord[]) {
     const normalizedScopeKey = normalizeScopeKey(scopeKey);
     await this.ensureScopeNode(normalizedScopeKey);
+    if (records.some((record) => normalizeEmbeddingArray(record.embedding).length > 0)) {
+      await this.exec('INSTALL VECTOR').catch(() => undefined);
+      await this.exec('LOAD VECTOR');
+    }
     await this.deleteGraphRowsForScope(
       normalizedScopeKey,
       ['SemanticRecord', 'SemanticVector'],
@@ -2145,6 +2180,11 @@ export class LadybugMemoryService {
       if (embedding.length > 0) {
         await this.ensureSemanticVectorTable(embedding.length);
         const vectorTable = semanticVectorTableName(embedding.length);
+        // Older graph snapshots did not always retain vectorTable on SemanticVector.
+        // Remove a same-id dimensional row explicitly before rebuilding it.
+        await this.exec(`MATCH (m:${vectorTable}) WHERE m.id = ${q(record.id)} DELETE m`).catch(
+          () => undefined,
+        );
         await this.exec(
           `CREATE (:SemanticVector {id: ${q(record.id)}, scopeKey: ${q(normalizedScopeKey)}, personaId: ${q(record.personaId)}, text: ${q(record.text)}, userText: ${q(record.userText)}, assistantText: ${q(record.assistantText)}, dimension: ${embedding.length}, vectorTable: ${q(vectorTable)}, createdAt: ${intValue(record.createdAt)}})`,
         );
@@ -2897,6 +2937,20 @@ function normalizeEmbeddingArray(value: unknown) {
   return value
     .map((item) => (typeof item === 'number' && Number.isFinite(item) ? item : null))
     .filter((item): item is number => item !== null);
+}
+
+function isCorruptedWalError(error: unknown) {
+  const message = error instanceof Error ? error.message : String(error);
+  return /corrupt(?:ed)? wal file|invalid wal record/i.test(message);
+}
+
+function isMissingFileError(error: unknown) {
+  return Boolean(
+    error &&
+      typeof error === 'object' &&
+      'code' in error &&
+      (error as { code?: unknown }).code === 'ENOENT',
+  );
 }
 
 function selectCompatibleSemanticMatches(

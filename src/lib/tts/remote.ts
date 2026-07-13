@@ -279,6 +279,14 @@ export function createRemoteTtsProxyRequest(request: RemoteTtsRequest): RemoteTt
   };
 }
 
+export function shouldRetrySilentLiveBridge(
+  liveBridgeActive: boolean,
+  audioChunkCount: number,
+  finalSpeechText: string,
+) {
+  return liveBridgeActive && audioChunkCount === 0 && finalSpeechText.trim().length > 0;
+}
+
 export function remoteTtsStreamEventToAudioChunk(
   event: RemoteTtsStreamEvent,
 ): RemoteTtsAudioChunk | null {

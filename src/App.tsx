@@ -187,6 +187,7 @@ import {
   designRemoteTtsVoice,
   fetchRemoteTtsVoices,
   publishDesignedRemoteTtsVoice,
+  shouldRetrySilentLiveBridge,
 } from './lib/tts/remote';
 import type {
   CreateRemoteTtsVoiceRequest,
@@ -3171,6 +3172,7 @@ function App() {
       let sawDelta = false;
       let queuedSpeech = false;
       let liveBridgeSink: RemotePcmPushStream | null = null;
+      let liveBridgeAudioChunkCount = 0;
       let ttsSegmentIndex = 0;
       const speechPromises: Promise<void>[] = [];
       const displaySettledResolvers: Array<() => void> = [];
@@ -3390,6 +3392,7 @@ function App() {
         if (!liveBridgeSink || isStale()) {
           return;
         }
+        liveBridgeAudioChunkCount += 1;
         if (latencyTrace.firstAudioAt === null) {
           latencyTrace.firstAudioAt = performance.now();
           if (isAppDiagnosticsEnabled()) {
@@ -3529,6 +3532,7 @@ function App() {
           updateAssistantMessageContent(assistantMessage.id, fullText.trim());
         }
 
+        const finalSpeechText = (fullText.trim() || normalizedFinal).trim();
         if (liveBridgeTts) {
           if (liveSubtitlePumpTimer !== null && queuedLiveSubtitleText.length > 0) {
             window.clearTimeout(liveSubtitlePumpTimer);
@@ -3545,11 +3549,20 @@ function App() {
           if (liveBridgeSink) {
             speechPromises.push(liveBridgeSink.close());
           }
+          if (
+            shouldRetrySilentLiveBridge(
+              liveBridgeTts,
+              liveBridgeAudioChunkCount,
+              finalSpeechText,
+            )
+          ) {
+            console.warn('[TTS] Fish live bridge returned no audio; retrying the final reply.');
+            enqueueSpeech(finalSpeechText);
+          }
           liveBridgeSubtitleActiveRef.current = false;
         } else if (chunkTtsRequests) {
           consumeSpeakableChunks(true);
         } else {
-          const finalSpeechText = (fullText.trim() || normalizedFinal).trim();
           if (finalSpeechText) {
             enqueueSpeech(finalSpeechText);
           }
@@ -5548,6 +5561,7 @@ function App() {
       );
       const playlist = sequencerSettingsRef.current.playlist;
       const index = resolveAnimationIndexForReplyMetadata(metadata, playlist, {
+        random: Math.random,
         recentAnimationIds: recentReactionAnimationIdsRef.current,
       });
       const animationEntry = index >= 0 ? playlist[index] ?? null : null;
@@ -5555,7 +5569,7 @@ function App() {
         recentReactionAnimationIdsRef.current = [
           animationEntry.id,
           ...recentReactionAnimationIdsRef.current.filter((id) => id !== animationEntry.id),
-        ].slice(0, 4);
+        ].slice(0, 6);
       }
       setEmotionTelemetryEvents((current) =>
         [
@@ -6607,6 +6621,10 @@ function App() {
           }));
         }
 
+        const responseReplyMetadata = response.replyMetadata ?? null;
+        if (responseReplyMetadata) {
+          playAssistantMetadataAnimation(responseReplyMetadata, stateKey);
+        }
         const assistantReply = await speechPlayer.finish(response.choices[0]?.message.content);
         if (chatRequestRunRef.current !== requestRun) {
           speechPlayer.cancel?.();
@@ -6631,7 +6649,9 @@ function App() {
             console.warn('[Discord] Reply text delivery failed:', error);
           });
         }
-        playAssistantMetadataAnimation(response.replyMetadata ?? assistantReply.metadata, stateKey);
+        if (!responseReplyMetadata) {
+          playAssistantMetadataAnimation(assistantReply.metadata, stateKey);
+        }
         const completedAssistantMessage = {
           ...assistantMessage,
           content: assistantContent,

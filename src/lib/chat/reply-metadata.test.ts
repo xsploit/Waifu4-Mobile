@@ -335,6 +335,48 @@ describe('assistant reply metadata', () => {
     ).toBe(1);
   });
 
+  it('can randomize among equally strong stable reactions without selecting recent ones', () => {
+    const playlist: AnimationEntry[] = [
+      {
+        enabled: true,
+        experimental: false,
+        format: 'vrma',
+        id: 'happy-one',
+        name: 'Happy one',
+        purpose: 'emotion',
+        tags: ['happy', 'amused'],
+        url: '/happy-one.vrma',
+      },
+      {
+        enabled: true,
+        experimental: false,
+        format: 'vrma',
+        id: 'happy-two',
+        name: 'Happy two',
+        purpose: 'emotion',
+        tags: ['happy', 'amused'],
+        url: '/happy-two.vrma',
+      },
+      {
+        enabled: true,
+        experimental: false,
+        format: 'vrma',
+        id: 'happy-three',
+        name: 'Happy three',
+        purpose: 'emotion',
+        tags: ['happy', 'amused'],
+        url: '/happy-three.vrma',
+      },
+    ];
+
+    expect(
+      resolveAnimationIndexForReplyMetadata(metadata('amused'), playlist, {
+        random: () => 0.99,
+        recentAnimationIds: ['happy-three'],
+      }),
+    ).toBe(1);
+  });
+
   it('falls back to experimental animation entries when no stable match exists', () => {
     const playlist: AnimationEntry[] = [
       {

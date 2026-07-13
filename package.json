@@ -25,6 +25,7 @@
     "build:server": "esbuild server/index.ts --bundle --platform=node --format=esm --target=node22 --outfile=server/dist/index.js --packages=external",
     "bench:tts": "tsx scripts/bench-tts.ts",
     "bench:vercel-json": "tsx scripts/bench-vercel-json.ts",
+    "memory:recover-fallback": "tsx scripts/recover-ladybug-fallback.ts",
     "audit:dead-code": "fallow dead-code --fail-on-issues",
     "audit:dist": "tsx scripts/dist-audit.ts",
     "audit:release": "tsx scripts/release-audit.ts && npm run audit:dead-code && npm run typecheck && npm test -- --run && npm run build && npm run audit:dist && npm run smoke:runtime",
