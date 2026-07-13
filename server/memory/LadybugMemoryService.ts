@@ -94,8 +94,11 @@ type LadybugSnapshot = {
 };
 
 type LadybugQueryResult = {
+  close: () => void;
   getAll: () => Promise<Array<Record<string, unknown>>>;
 };
+
+type LadybugQueryOutput = LadybugQueryResult | LadybugQueryResult[];
 
 type LadybugState = {
   connection: Connection;
@@ -408,51 +411,47 @@ export class LadybugMemoryService {
     if (normalizedEmbedding.length === 0) {
       return [];
     }
-    const normalizedScopeKey = normalizeScopeKey(scopeKey);
-    try {
-      await this.open();
-      await this.ensureSemanticVectorIndex(normalizedEmbedding.length).catch(() => undefined);
-    } catch (error) {
-      return this.queryFallbackSemanticVectors(
-        normalizedScopeKey,
-        normalizedEmbedding,
-        limit,
-        identity,
-        error,
-      );
-    }
-    const vectorTable = semanticVectorTableName(normalizedEmbedding.length);
-    const vectorIndex = semanticVectorIndexName(normalizedEmbedding.length);
-    const rows = await this.all(
-      `CALL QUERY_VECTOR_INDEX('${vectorTable}', '${vectorIndex}', ${vectorLiteral(normalizedEmbedding)}, ${Math.max(limit * 8, limit)}) WITH node AS n, distance WHERE n.scopeKey = ${q(normalizedScopeKey)} RETURN n.id AS id, n.scopeKey AS scopeKey, n.personaId AS personaId, n.text AS text, n.userText AS userText, n.assistantText AS assistantText, n.embedding AS embedding, n.createdAt AS createdAt, distance ORDER BY distance LIMIT ${Math.max(1, Math.min(160, Math.trunc(limit) * 8))}`,
-    ).catch(() => []);
-    const semanticRecords = await this.loadSemanticRecords(normalizedScopeKey);
-    const semanticRecordById = new Map((semanticRecords ?? []).map((record) => [record.id, record]));
-    const matches = rows.map((row) => {
-      const distance = numberValue(row['distance'], 1);
-      const semanticRecord = semanticRecordById.get(stringValue(row['id']));
-      const embeddingValue = Array.isArray(row['embedding'])
-        ? normalizeEmbeddingArray(row['embedding'])
-        : [];
-      return {
-        assistantText: stringValue(row['assistantText']).slice(0, 1200),
-        createdAt: intValue(row['createdAt']),
-        distance,
-        embedding: embeddingValue.length ? embeddingValue : null,
-        embeddingModel: semanticRecord?.embeddingModel ?? '',
-        embeddingProvider: semanticRecord?.embeddingProvider ?? '',
-        embeddingVersion: semanticRecord?.embeddingVersion ?? '',
-        embeddingCompatibility: 'exact' as const,
-        id: stringValue(row['id']),
-        personaId: stringValue(row['personaId']) || 'unknown',
-        participantKeys: semanticRecord?.participantKeys ?? [],
-        scopeKey: stringValue(row['scopeKey']) || normalizedScopeKey,
-        score: Math.max(0, 1 - distance),
-        text: stringValue(row['text']),
-        userText: stringValue(row['userText']).slice(0, 1200),
-      };
-    });
+    const semanticRecords = await this.loadSemanticRecords(normalizeScopeKey(scopeKey));
+    const matches = (semanticRecords ?? [])
+      .map((record) => {
+        const distance = cosineDistance(
+          normalizedEmbedding,
+          normalizeEmbeddingArray(record.embedding),
+        );
+        return {
+          ...record,
+          distance,
+          embeddingCompatibility: 'exact' as const,
+          score: Math.max(0, 1 - distance),
+        };
+      })
+      .filter((record) => Number.isFinite(record.distance))
+      .sort((left, right) => left.distance - right.distance);
     return selectCompatibleSemanticMatches(matches, identity, limit);
+  }
+
+  async dropLegacySemanticVectorIndexes() {
+    await this.open();
+    const rows = await this.all(
+      'MATCH (m:SemanticVector) RETURN DISTINCT m.dimension AS dimension, m.vectorTable AS vectorTable',
+    ).catch(() => []);
+    await this.exec('INSTALL VECTOR').catch(() => undefined);
+    await this.exec('LOAD VECTOR').catch(() => undefined);
+    let dropped = 0;
+    for (const row of rows) {
+      const dimension = intValue(row['dimension']);
+      const vectorTable = stringValue(row['vectorTable']);
+      if (!dimension || vectorTable !== semanticVectorTableName(dimension)) continue;
+      const vectorIndex = semanticVectorIndexName(dimension);
+      const didDrop = await this.exec(
+        `CALL DROP_VECTOR_INDEX('${vectorTable}', '${vectorIndex}')`,
+      ).then(
+        () => true,
+        () => false,
+      );
+      if (didDrop) dropped += 1;
+    }
+    return dropped;
   }
 
   async deleteSemanticRecords(scopeKey: string) {
@@ -1626,30 +1625,6 @@ export class LadybugMemoryService {
     });
   }
 
-  private async queryFallbackSemanticVectors(
-    scopeKey: string,
-    embedding: number[],
-    limit: number,
-    identity: { model?: string; provider?: string; version?: string },
-    error: unknown,
-  ): Promise<LadybugSemanticMemoryMatch[]> {
-    await this.enableFallback(error);
-    const records = await this.loadSemanticRecords(scopeKey);
-    const matches = (records ?? [])
-      .map((record) => {
-        const distance = cosineDistance(embedding, normalizeEmbeddingArray(record.embedding));
-        return {
-          ...record,
-          distance,
-          embeddingCompatibility: 'exact' as const,
-          score: Math.max(0, 1 - distance),
-        };
-      })
-      .filter((record) => Number.isFinite(record.distance))
-      .sort((left, right) => left.distance - right.distance);
-    return selectCompatibleSemanticMatches(matches, identity, limit);
-  }
-
   private async enableFallback(error: unknown) {
     this.fallbackReason ??= error instanceof Error ? error.message : String(error);
     this.initPromise = null;
@@ -1959,7 +1934,12 @@ export class LadybugMemoryService {
   }
 
   private async ensureNodeTable(connection: Connection, name: string, columns: string) {
-    await connection.query(`CREATE NODE TABLE ${name}(${columns})`).catch((error) => {
+    try {
+      const result = (await connection.query(
+        `CREATE NODE TABLE ${name}(${columns})`,
+      )) as LadybugQueryOutput;
+      closeLadybugQueryOutput(result);
+    } catch (error) {
       if (
         !String(error instanceof Error ? error.message : error)
           .toLowerCase()
@@ -1967,11 +1947,16 @@ export class LadybugMemoryService {
       ) {
         throw error;
       }
-    });
+    }
   }
 
   private async ensureRelTable(connection: Connection, name: string, definition: string) {
-    await connection.query(`CREATE REL TABLE ${name}(${definition})`).catch((error) => {
+    try {
+      const result = (await connection.query(
+        `CREATE REL TABLE ${name}(${definition})`,
+      )) as LadybugQueryOutput;
+      closeLadybugQueryOutput(result);
+    } catch (error) {
       if (
         !String(error instanceof Error ? error.message : error)
           .toLowerCase()
@@ -1979,7 +1964,7 @@ export class LadybugMemoryService {
       ) {
         throw error;
       }
-    });
+    }
   }
 
   private async loadSnapshot(kind: LadybugSnapshotKind, scopeKey: string) {
@@ -2155,10 +2140,6 @@ export class LadybugMemoryService {
   private async replaceSemanticGraph(scopeKey: string, records: LadybugSemanticMemoryRecord[]) {
     const normalizedScopeKey = normalizeScopeKey(scopeKey);
     await this.ensureScopeNode(normalizedScopeKey);
-    if (records.some((record) => normalizeEmbeddingArray(record.embedding).length > 0)) {
-      await this.exec('INSTALL VECTOR').catch(() => undefined);
-      await this.exec('LOAD VECTOR');
-    }
     await this.deleteGraphRowsForScope(
       normalizedScopeKey,
       ['SemanticRecord', 'SemanticVector'],
@@ -2178,18 +2159,8 @@ export class LadybugMemoryService {
       await this.createSemanticPersonaRelation(record.id, record.personaId);
       const embedding = normalizeEmbeddingArray(record.embedding);
       if (embedding.length > 0) {
-        await this.ensureSemanticVectorTable(embedding.length);
-        const vectorTable = semanticVectorTableName(embedding.length);
-        // Older graph snapshots did not always retain vectorTable on SemanticVector.
-        // Remove a same-id dimensional row explicitly before rebuilding it.
-        await this.exec(`MATCH (m:${vectorTable}) WHERE m.id = ${q(record.id)} DELETE m`).catch(
-          () => undefined,
-        );
         await this.exec(
-          `CREATE (:SemanticVector {id: ${q(record.id)}, scopeKey: ${q(normalizedScopeKey)}, personaId: ${q(record.personaId)}, text: ${q(record.text)}, userText: ${q(record.userText)}, assistantText: ${q(record.assistantText)}, dimension: ${embedding.length}, vectorTable: ${q(vectorTable)}, createdAt: ${intValue(record.createdAt)}})`,
-        );
-        await this.exec(
-          `CREATE (:${vectorTable} {id: ${q(record.id)}, scopeKey: ${q(normalizedScopeKey)}, personaId: ${q(record.personaId)}, text: ${q(record.text)}, userText: ${q(record.userText)}, assistantText: ${q(record.assistantText)}, embedding: ${vectorLiteral(embedding)}, createdAt: ${intValue(record.createdAt)}})`,
+          `CREATE (:SemanticVector {id: ${q(record.id)}, scopeKey: ${q(normalizedScopeKey)}, personaId: ${q(record.personaId)}, text: ${q(record.text)}, userText: ${q(record.userText)}, assistantText: ${q(record.assistantText)}, dimension: ${embedding.length}, vectorTable: '', createdAt: ${intValue(record.createdAt)}})`,
         );
         await this.createScopeRelation(
           'HAS_VECTOR',
@@ -2200,7 +2171,6 @@ export class LadybugMemoryService {
         await this.createVectorPersonaRelation(record.id, record.personaId);
       }
     }
-    await this.rebuildSemanticVectorIndexes(records).catch(() => undefined);
   }
 
   private async replaceRelationshipGraph(profiles: Record<string, Record<string, unknown>>) {
@@ -2467,48 +2437,6 @@ export class LadybugMemoryService {
     );
   }
 
-  private async ensureSemanticVectorTable(dimension: number) {
-    const vectorTable = semanticVectorTableName(dimension);
-    const state = await this.open();
-    await this.ensureNodeTable(
-      state.connection,
-      vectorTable,
-      `id STRING PRIMARY KEY, scopeKey STRING, personaId STRING, text STRING, userText STRING, assistantText STRING, embedding FLOAT[${dimension}], createdAt INT64`,
-    );
-  }
-
-  private async rebuildSemanticVectorIndexes(records: LadybugSemanticMemoryRecord[]) {
-    const dimensions = new Set(
-      records
-        .map((record) => normalizeEmbeddingArray(record.embedding).length)
-        .filter((dimension) => dimension > 0),
-    );
-    for (const dimension of dimensions) {
-      await this.ensureSemanticVectorIndex(dimension, { rebuild: true });
-    }
-  }
-
-  private async ensureSemanticVectorIndex(dimension: number, options: { rebuild?: boolean } = {}) {
-    await this.ensureSemanticVectorTable(dimension);
-    const vectorTable = semanticVectorTableName(dimension);
-    const vectorIndex = semanticVectorIndexName(dimension);
-    await this.exec('INSTALL VECTOR').catch(() => undefined);
-    await this.exec('LOAD VECTOR');
-    if (options.rebuild) {
-      await this.exec(`CALL DROP_VECTOR_INDEX('${vectorTable}', '${vectorIndex}')`).catch(
-        () => undefined,
-      );
-    }
-    await this.exec(
-      `CALL CREATE_VECTOR_INDEX('${vectorTable}', '${vectorIndex}', 'embedding', metric := 'cosine')`,
-    ).catch((error) => {
-      const message = String(error instanceof Error ? error.message : error).toLowerCase();
-      if (!message.includes('exist') && !message.includes('already')) {
-        throw error;
-      }
-    });
-  }
-
   private async createNodeIfMissing(query: string) {
     await this.exec(query).catch((error) => {
       const message = String(error instanceof Error ? error.message : error).toLowerCase();
@@ -2530,13 +2458,19 @@ export class LadybugMemoryService {
 
   private async exec(query: string) {
     const state = await this.open();
-    await state.connection.query(query);
+    const result = (await state.connection.query(query)) as LadybugQueryOutput;
+    closeLadybugQueryOutput(result);
   }
 
   private async all(query: string) {
     const state = await this.open();
-    const result = (await state.connection.query(query)) as LadybugQueryResult;
-    return result.getAll();
+    const result = (await state.connection.query(query)) as LadybugQueryOutput;
+    const results = Array.isArray(result) ? result : [result];
+    try {
+      return (await Promise.all(results.map((item) => item.getAll()))).flat();
+    } finally {
+      closeLadybugQueryOutput(result);
+    }
   }
 }
 
@@ -2939,6 +2873,12 @@ function normalizeEmbeddingArray(value: unknown) {
     .filter((item): item is number => item !== null);
 }
 
+function closeLadybugQueryOutput(result: LadybugQueryOutput) {
+  for (const item of Array.isArray(result) ? result : [result]) {
+    item.close();
+  }
+}
+
 function isCorruptedWalError(error: unknown) {
   const message = error instanceof Error ? error.message : String(error);
   return /corrupt(?:ed)? wal file|invalid wal record/i.test(message);
@@ -2985,10 +2925,6 @@ function selectCompatibleSemanticMatches(
     )
     .map((record) => ({ ...record, embeddingCompatibility: 'legacy_unknown' as const }))
     .slice(0, boundedLimit);
-}
-
-function vectorLiteral(values: number[]) {
-  return `[${values.map((value) => (Number.isFinite(value) ? value : 0)).join(', ')}]`;
 }
 
 function semanticVectorTableName(dimension: number) {

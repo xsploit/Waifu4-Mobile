@@ -795,7 +795,8 @@ describe('LadybugMemoryService', () => {
   });
 
   it('rebuilds mixed-dimension semantic vectors without collapsing the graph', async () => {
-    const service = createService();
+    let service = createService();
+    const dbPath = service.dbDir;
     const scopeKey = 'local:persona:mixed-embeddings';
     try {
       await service.saveSemanticRecords(scopeKey, [
@@ -809,6 +810,12 @@ describe('LadybugMemoryService', () => {
           text: 'Local embedding memory.',
           userText: 'Remember locally.',
         },
+      ]);
+      await service.close();
+      service = new LadybugMemoryService(dbPath);
+      expect(await service.getStatus()).toMatchObject({ backend: 'ladybug' });
+      expect((await service.loadSemanticRecords(scopeKey))?.map((record) => record.id)).toEqual([
+        'semantic-local',
       ]);
       await service.saveSemanticRecords(scopeKey, [
         {

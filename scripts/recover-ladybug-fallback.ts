@@ -169,6 +169,8 @@ async function main() {
     if (status.backend !== 'ladybug') {
       throw new Error(`Native Ladybug is unavailable: ${status.fallbackReason ?? 'unknown error'}`);
     }
+    const droppedVectorIndexes = await service.dropLegacySemanticVectorIndexes();
+    console.log(`[memory-recovery] legacy vector indexes dropped: ${droppedVectorIndexes}`);
 
     console.log('[memory-recovery] merging ledger records');
     for (const snapshot of snapshots.filter((item) => item.kind === 'grillo-records')) {
