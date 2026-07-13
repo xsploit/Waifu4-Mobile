@@ -13,14 +13,19 @@ import {
 } from './GrilloEvidenceLedger.js';
 import { GrilloRepairQueue, type GrilloRepairTask } from './GrilloRepairQueue.js';
 import { assessGrilloMemorySufficiency } from './GrilloRetrievalController.js';
-import { buildGrilloLedgerProjection } from './GrilloLedgerProjector.js';
+import {
+  buildGrilloLedgerProjection,
+  type GrilloProjectedClaim,
+} from './GrilloLedgerProjector.js';
 import {
   executeGrilloMigrationPlan,
   type GrilloMigrationApplyInput,
   type GrilloMigrationApplyResult,
 } from './GrilloMigrationExecutor.js';
 import { buildGrilloMigrationPlan } from './GrilloMigrationPlan.js';
-import { auditGrilloProjectionCoverage } from './GrilloProjectionAudit.js';
+import {
+  auditGrilloProjectionCoverage,
+} from './GrilloProjectionAudit.js';
 import { buildGrilloShadowComparison } from './GrilloShadowComparison.js';
 import type {
   GrilloContextPacket,
@@ -1370,19 +1375,14 @@ export class GrilloWorkerService {
       version: normalizeText(input.embeddingVersion),
     });
     const [
+      ledgerReplay,
       turns,
-      candidates,
-      blocks,
-      slots,
       diary,
       semanticRecords,
       semanticVectorMatches,
-      relationshipProfiles,
     ] = await Promise.all([
+      this.evidenceLedger.replay(scopeKey),
       this.memory.readGrilloRecords<Record<string, unknown>>('turn_events'),
-      this.memory.readGrilloRecords<Record<string, unknown>>('memory_candidates'),
-      this.memory.readGrilloRecords<Record<string, unknown>>('memory_blocks'),
-      this.memory.readGrilloRecords<Record<string, unknown>>('memory_slots'),
       this.memory.readGrilloRecords<Record<string, unknown>>('diary_entries'),
       this.memory.loadSemanticRecords(scopeKey),
       queryEmbedding.length > 0
@@ -1392,33 +1392,11 @@ export class GrilloWorkerService {
             version: normalizeText(input.embeddingVersion),
           })
         : Promise.resolve([]),
-      this.memory.loadRelationshipProfiles(),
     ]);
     const sortedScopeTurns = turns
       .filter(inScope)
       .sort((left, right) => recordTimestamp(left) - recordTimestamp(right));
     const scopedTurns = sortedScopeTurns.slice(-14);
-    const sortedScopeCandidates = candidates
-      .filter(inScope)
-      .sort((left, right) => recordTimestamp(right) - recordTimestamp(left));
-    const participantCandidates = sortedScopeCandidates.filter((record) =>
-      includeParticipant(recordParticipantKey(record)),
-    );
-    const scopedCandidates = participantCandidates.slice(0, 8);
-    const sortedScopeBlocks = blocks
-      .filter(inScope)
-      .sort((left, right) => recordUpdatedAt(right) - recordUpdatedAt(left));
-    const participantBlocks = sortedScopeBlocks.filter((record) =>
-      includeParticipant(recordParticipantKey(record)),
-    );
-    const scopedBlocks = participantBlocks.slice(0, 8);
-    const sortedScopeSlots = slots
-      .filter(inScope)
-      .sort((left, right) => recordUpdatedAt(right) - recordUpdatedAt(left));
-    const participantSlots = sortedScopeSlots.filter((record) =>
-      includeParticipant(recordParticipantKey(record)),
-    );
-    const scopedSlots = participantSlots.slice(0, 8);
     const sortedScopeDiary = diary
       .filter(inScope)
       .sort((left, right) => recordTimestamp(right) - recordTimestamp(left));
@@ -1426,7 +1404,6 @@ export class GrilloWorkerService {
       includeParticipant(recordParticipantKey(record)),
     );
     const scopedDiary = participantDiary.slice(0, 5);
-    const relationshipProfile = asRecord(asRecord(relationshipProfiles)[scopeKey]);
     const normalizedSemanticRecords = (semanticRecords ?? []).filter((record) =>
       semanticRecordMatchesParticipants(record, participantSet),
     );
@@ -1459,34 +1436,35 @@ export class GrilloWorkerService {
           ? lexicalSemantic
           : [];
 
-    const relationshipProfileItems = formatRelationshipProfileItems(relationshipProfile, scopeKey);
+    const ledgerProjection = buildGrilloLedgerProjection(ledgerReplay);
+    const ledgerProjectionIsValid =
+      ledgerProjection.provenance.integrityIssues.length === 0 &&
+      ledgerProjection.provenance.invalidRecordIds.length === 0;
+    const allProjectedRelationshipItems = ledgerProjectionIsValid
+      ? ledgerProjection.slots.map((slot) => ({
+          item: formatProjectedClaimItem(slot.current),
+          participantKey: slot.current.participantKey,
+        }))
+      : [];
+    const projectedRelationshipItems = allProjectedRelationshipItems
+      .filter(({ participantKey }) => includeParticipant(participantKey))
+      .map(({ item }) => item);
+    const excludedProjectedRelationshipItems = allProjectedRelationshipItems
+      .filter(({ participantKey }) => !includeParticipant(participantKey))
+      .map(({ item }) => item);
     const includeProvenanceReceipt = input.includeProvenanceReceipt === true;
     const requestedRelationshipItems = includeProvenanceReceipt
-      ? [
-          ...relationshipProfileItems,
-          ...sortedScopeBlocks.flatMap((record) => formatMemoryBlockItems(record, Infinity)),
-          ...sortedScopeSlots.flatMap((record) => formatMemorySlotItems(record, Infinity)),
-        ]
+      ? allProjectedRelationshipItems.map(({ item }) => item)
       : [];
-    const eligibleRelationshipItems = [
-      ...relationshipProfileItems,
-      ...scopedBlocks.flatMap((record) => formatMemoryBlockItems(record)),
-      ...scopedSlots.flatMap((record) => formatMemorySlotItems(record)),
-    ];
+    const eligibleRelationshipItems = projectedRelationshipItems;
     const relationshipItems = eligibleRelationshipItems.slice(0, 16);
     const relationshipMemory = relationshipItems.map((item) => item.text);
     const channelItems = scopedTurns.map(formatTurnEventItem);
     const thoughtItems = scopedDiary.map(formatDiaryEntryItem);
     const recallSelection = selectRecallItems(
-      [
-        ...scopedCandidates.map((record) => formatCandidateRecallItem(record, scopeKey)),
-        ...semantic.map((record) => formatSemanticRecallItem(record, scopeKey)),
-      ].filter((item) => item.text.trim()),
+      semantic.map((record) => formatSemanticRecallItem(record, scopeKey)).filter((item) => item.text.trim()),
       12,
     );
-    const requestedCandidateItems = includeProvenanceReceipt
-      ? sortedScopeCandidates.map((record) => formatCandidateRecallItem(record, scopeKey))
-      : [];
     const requestedSemanticItems = includeProvenanceReceipt
       ? (vectorSemantic.length > 0
           ? vectorSemantic
@@ -1510,12 +1488,6 @@ export class GrilloWorkerService {
           },
           recalled: {
             dropped: [
-              ...participantCandidates
-                .slice(8)
-                .map((record) => provenanceDrop(formatCandidateRecallItem(record, scopeKey).id, 'record_limit')),
-              ...sortedScopeCandidates
-                .filter((record) => !includeParticipant(recordParticipantKey(record)))
-                .map((record) => provenanceDrop(formatCandidateRecallItem(record, scopeKey).id, 'participant_filter')),
               ...(vectorSemantic.length === 0 && query
                 ? requestedSemanticItems
                     .filter((item) => (item.score ?? 0) <= 0)
@@ -1536,41 +1508,14 @@ export class GrilloWorkerService {
             ],
             duplicateIds: recallSelection.receipt.duplicateIds,
             included: recallSelection.items.map((item) => ({ id: item.id, text: item.text })),
-            requested: [...requestedCandidateItems, ...requestedSemanticItems].map((item) => ({
+            requested: requestedSemanticItems.map((item) => ({
               id: item.id,
               text: item.text,
             })),
           },
           relationship: {
             dropped: [
-              ...droppedItems(
-                sortedScopeBlocks
-                  .filter((record) => !includeParticipant(recordParticipantKey(record)))
-                  .flatMap((record) => formatMemoryBlockItems(record, Infinity)),
-                'participant_filter',
-              ),
-              ...droppedItems(
-                sortedScopeSlots
-                  .filter((record) => !includeParticipant(recordParticipantKey(record)))
-                  .flatMap((record) => formatMemorySlotItems(record, Infinity)),
-                'participant_filter',
-              ),
-              ...droppedItems(
-                participantBlocks.slice(8).flatMap((record) => formatMemoryBlockItems(record, Infinity)),
-                'record_limit',
-              ),
-              ...droppedItems(
-                participantSlots.slice(8).flatMap((record) => formatMemorySlotItems(record, Infinity)),
-                'record_limit',
-              ),
-              ...droppedItems(
-                scopedBlocks.flatMap((record) => formatMemoryBlockItems(record, Infinity).slice(5)),
-                'item_limit',
-              ),
-              ...droppedItems(
-                scopedSlots.flatMap((record) => formatMemorySlotItems(record, Infinity).slice(5)),
-                'item_limit',
-              ),
+              ...droppedItems(excludedProjectedRelationshipItems, 'participant_filter'),
               ...droppedItems(eligibleRelationshipItems.slice(16), 'lane_limit'),
             ],
             included: relationshipItems,
@@ -1599,10 +1544,10 @@ export class GrilloWorkerService {
         `channel: ${inferChannel(scopeKey)}`,
         `participant_filter: ${participantKeys.length > 0 ? participantKeys.join(', ') : 'all'}`,
         `stored_turn_events: ${turns.filter(inScope).length}`,
-        `memory_candidates: ${candidates.filter(inScope).length}`,
-        `memory_slots: ${slots.filter(inScope).length}`,
         `semantic_records: ${semanticRecords?.length ?? 0}`,
         `semantic_retrieval: ${semanticStrategy}`,
+        `memory_authority: ${ledgerProjectionIsValid ? 'evidence_ledger' : 'evidence_ledger_quarantined'}`,
+        `active_ledger_claims: ${projectedRelationshipItems.length}`,
         query ? `query: ${query}` : '',
       ].filter(Boolean),
       channel_history: channelItems.map((item) => item.text),
@@ -1610,6 +1555,11 @@ export class GrilloWorkerService {
       output_description: [
         'Use this GRILLO packet as scoped memory/context for the current reply.',
         'Treat channel_history as transcript, relationship_memory as durable participant context, recalled_memories as recall, and thoughts as private reflection.',
+        ...(projectedRelationshipItems.length > 0
+          ? [
+              'Evidence-backed [claim:] entries are the authoritative durable memory for this reply.',
+            ]
+          : []),
         'If memory conflicts with the current user turn, trust the current user turn first.',
       ],
       ...(provenanceReceipt ? { provenance_receipt: provenanceReceipt } : {}),
@@ -2241,32 +2191,6 @@ function createEmbeddingIdentity(input: {
     model,
     provider,
     version,
-  };
-}
-
-function formatCandidateRecallItem(
-  record: Record<string, unknown>,
-  scopeKey: string,
-): GrilloRecallItem {
-  const participantKey = recordParticipantKey(record);
-  const createdAt = recordTimestamp(record);
-  const content = normalizeText(record['summary'] ?? record['content']);
-  const id =
-    normalizeText(record['candidate_id'] ?? record['candidateId'] ?? record['id']) ||
-    provenanceFallbackId(record, 'candidate');
-  return {
-    createdAt,
-    evidenceIds: dedupeStrings([
-      ...readStringArray(record['evidence_turn_ids']),
-      ...readStringArray(record['sourceTurnIds']),
-      ...readStringArray(record['source_turn_ids']),
-    ]),
-    id,
-    participantKey: participantKey || undefined,
-    score: clampNumber(record['confidence'], 0, 1, 0.72),
-    scopeKey,
-    source: 'candidate',
-    text: `[candidate:${normalizeText(record['type']) || 'thread'} ${participantKey || 'unknown'}] ${content}`,
   };
 }
 
@@ -3116,36 +3040,6 @@ function formatTurnEventItem(record: Record<string, unknown>): ServerProvenanceI
   };
 }
 
-function formatMemoryBlockItems(
-  record: Record<string, unknown>,
-  limit = 5,
-): ServerProvenanceItem[] {
-  const blockName = normalizeText(record['blockName'] ?? record['block_name']) || 'memory';
-  const participantKey = recordParticipantKey(record) || 'unknown';
-  const recordId = provenanceRecordId(record, 'block', ['blockId', 'block_id', 'id']);
-  return readJsonArray(record['itemsJson'] ?? record['items_json'] ?? record['items'])
-    .slice(0, limit)
-    .map((item, index) => ({
-      id: `${recordId}:item:${index}`,
-      text: `[block:${blockName} ${participantKey}] ${item}`,
-    }));
-}
-
-function formatMemorySlotItems(
-  record: Record<string, unknown>,
-  limit = 5,
-): ServerProvenanceItem[] {
-  const slotName = normalizeText(record['slotName'] ?? record['slot_name']) || 'slot';
-  const participantKey = recordParticipantKey(record) || 'scope';
-  const recordId = provenanceRecordId(record, 'slot', ['slotId', 'slot_id', 'id']);
-  return readJsonArray(record['contentJson'] ?? record['content_json'])
-    .slice(0, limit)
-    .map((item, index) => ({
-      id: `${recordId}:item:${index}`,
-      text: `[slot:${slotName} ${participantKey}] ${item}`,
-    }));
-}
-
 function formatDiaryEntryItem(record: Record<string, unknown>): ServerProvenanceItem {
   const beatType = normalizeText(record['beatType'] ?? record['beat_type']) || 'reflection';
   const participantKey = recordParticipantKey(record) || 'unknown';
@@ -3157,26 +3051,12 @@ function formatDiaryEntryItem(record: Record<string, unknown>): ServerProvenance
   };
 }
 
-function formatRelationshipProfileItems(
-  profile: Record<string, unknown>,
-  scopeKey: string,
-): ServerProvenanceItem[] {
-  if (Object.keys(profile).length === 0) {
-    return [];
-  }
-  const facts = readStringArray(profile['facts'] ?? profile['storedFacts']);
-  return [
-    {
-      id: `profile:${scopeKey}:state`,
-      text: `stage=${normalizeText(profile['relationshipStage']) || 'new'} mood=${normalizeText(profile['mood']) || 'neutral'}`,
-    },
-    normalizeText(profile['summary'])
-      ? { id: `profile:${scopeKey}:summary`, text: `summary=${normalizeText(profile['summary'])}` }
-      : null,
-    facts.length > 0
-      ? { id: `profile:${scopeKey}:facts`, text: `known_facts=${JSON.stringify(facts.slice(0, 12))}` }
-      : null,
-  ].filter((item): item is ServerProvenanceItem => item !== null);
+function formatProjectedClaimItem(claim: GrilloProjectedClaim): ServerProvenanceItem {
+  const corrected = claim.status === 'corrected' ? ' (corrected)' : '';
+  return {
+    id: `claim:${claim.claimId}`,
+    text: `[claim:${claim.kind} ${claim.participantKey ?? 'scope'}] ${claim.subject}.${claim.predicate} = ${JSON.stringify(claim.effectiveValue)}${corrected}`,
+  };
 }
 
 function provenanceRecordId(

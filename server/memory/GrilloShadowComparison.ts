@@ -56,8 +56,8 @@ const LANE_ITEMS_PER_RECORD = 5;
  * Read-only shadow comparison between the legacy relationship-memory prompt
  * lane and the evidence-ledger projection. The legacy rendering below is a
  * byte-for-byte mirror of the `relationship_memory` lane assembled by
- * GrilloWorkerService.buildContextPacket for the requested participants; it
- * never feeds live prompt injection and never writes anything.
+ * GrilloWorkerService.buildContextPacket used before the canonical-first live
+ * lane was enabled. The report remains read-only and never writes anything.
  */
 export function buildGrilloShadowComparison(
   input: GrilloShadowComparisonInput,
@@ -128,9 +128,9 @@ export function buildGrilloShadowComparison(
     invalidRecordIds: [...input.replay.invalidRecordIds],
     safeToSwitch,
     notes: [
-      'Read-only shadow report: live prompt injection still uses the legacy lane.',
+      'Read-only comparison: live prompt injection uses canonical ledger claims only.',
       'Legacy and ledger lines are rendered in different formats; value-level parity is measured by the coverage audit, not by string equality.',
-      'No backfill is performed; uncovered legacy items require explicit evidence-backed claims before switching.',
+      'No claim backfill is performed; legacy items are retained only for migration inspection and are not prompt context.',
     ],
   };
 }

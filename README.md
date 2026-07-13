@@ -381,9 +381,18 @@ application/receipts, context provenance, and memory-sufficiency diagnostics.
 
 These boundaries are intentional and important:
 
-- The live prompt still uses the established blocks, slots, relationships, diary,
-  and semantic projections. The canonical ledger is inspectable but has not replaced
-  the live prompt source.
+- Active canonical claims from the evidence-ledger projection are the only durable
+  relationship-memory records admitted to the live POML prompt. Corrections and
+  supersessions therefore change future replies through the same deterministic
+  projection used by the inspection API.
+- Candidate memories are unverified staging records. Legacy blocks, slots, and
+  relationship-profile prose remain available for migration inspection, but none of
+  them influence live replies unless they are promoted into evidence-backed claims.
+- Query-ranked semantic turn recall and reflective diary thoughts remain separate
+  context lanes. They can supply relevant conversation history or reflection, but
+  they are not presented as canonical relationship facts.
+- A projection with invalid records or integrity errors is quarantined instead of
+  falling back to potentially stale legacy relationship memory.
 - Migration backfills deterministic turn evidence only. It does not invent claims.
 - Memory-sufficiency diagnostics are opt-in, do not run during normal chat preflight,
   do not trigger a second retrieval, and do not write repair events.
@@ -392,8 +401,6 @@ These boundaries are intentional and important:
 - Extraction and semantic-index watermarks are per scope. A real cross-process
   atomic worker lease is not implemented, so multi-instance GRILLO workers should
   not be treated as coordinated.
-- Switching the live prompt to ledger projections requires a separate, reversible,
-  per-scope migration decision.
 
 ---
 

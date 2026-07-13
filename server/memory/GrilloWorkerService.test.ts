@@ -169,6 +169,34 @@ describe('GrilloWorkerService', () => {
           userText: 'native GRILLO packet',
         },
       ]);
+      await memory.appendGrilloRecord('evidence_records', {
+        content: 'Subsect wants backend-owned GRILLO memory.',
+        createdAt: 1770000002001,
+        id: 'canonical-memory-evidence',
+        kind: 'observation',
+        metadata: {},
+        participantKey: 'local:local:subsect',
+        role: 'user',
+        scopeKey: 'local:persona:hikari-chan',
+        source: 'test',
+        sourceRecordIds: [],
+      });
+      await memory.appendGrilloRecord('memory_claims', {
+        confidence: 0.98,
+        createdAt: 1770000002002,
+        evidenceIds: ['canonical-memory-evidence'],
+        id: 'canonical-memory-claim',
+        kind: 'goal',
+        operation: 'ADD',
+        participantKey: 'local:local:subsect',
+        predicate: 'memory_architecture',
+        scopeKey: 'local:persona:hikari-chan',
+        subject: 'local:local:subsect',
+        supersedesRecordIds: [],
+        validFrom: 1770000002001,
+        validTo: null,
+        value: 'Subsect wants backend-owned GRILLO memory.',
+      });
 
       const packet = await grillo.buildContextPacket({
         includeProvenanceReceipt: true,
@@ -184,13 +212,14 @@ describe('GrilloWorkerService', () => {
 
       expect(packet.background_information).toContain('scope_key: local:persona:hikari-chan');
       expect(packet.relationship_memory.join('\n')).toContain(
+        '[claim:goal local:local:subsect] local:local:subsect.memory_architecture = "Subsect wants backend-owned GRILLO memory."',
+      );
+      expect(packet.relationship_memory.join('\n')).not.toContain('[slot:ongoing_threads');
+      expect(packet.relationship_memory.join('\n')).not.toContain(
         'Subsect is verifying native GRILLO context packets.',
       );
-      expect(packet.relationship_memory.join('\n')).toContain(
-        '[slot:ongoing_threads local:local:subsect] Subsect wants backend-owned GRILLO memory.',
-      );
-      expect(packet.recalled_memories.map((item) => item.text).join('\n')).toContain(
-        'Subsect wants GRILLO owned by the backend.',
+      expect(packet.recalled_memories.map((item) => item.text).join('\n')).not.toContain(
+        '[candidate:',
       );
       expect(packet.recalled_memories.map((item) => item.text).join('\n')).toContain(
         'Native context packet acknowledged.',
@@ -216,11 +245,7 @@ describe('GrilloWorkerService', () => {
         packet.channel_history.length,
       );
       expect(packet.provenance_receipt?.lanes.relationship_memory.includedIds).toEqual(
-        expect.arrayContaining([
-          'profile:local:persona:hikari-chan:state',
-          'profile:local:persona:hikari-chan:summary',
-          'profile:local:persona:hikari-chan:facts',
-        ]),
+        ['claim:canonical-memory-claim'],
       );
       expect(packet.provenance_receipt?.lanes.recalled_memories.includedIds).toEqual(
         packet.recalled_memories.map((item) => item.id),
@@ -242,6 +267,117 @@ describe('GrilloWorkerService', () => {
         relationship_memory: defaultPacket.relationship_memory,
         thoughts: defaultPacket.thoughts,
       });
+    } finally {
+      await memory.close();
+    }
+  });
+
+  it('injects corrected active claims and excludes superseded and legacy memory', async () => {
+    const { grillo, memory } = createServices();
+    const scopeKey = 'local:persona:canonical-live-memory';
+    const participantKey = 'local:local:subsect';
+    try {
+      for (const evidence of [
+        { id: 'evidence-color', content: 'My favorite color is blue.', createdAt: 10 },
+        { id: 'evidence-color-correction', content: 'Correction: my favorite color is green.', createdAt: 20 },
+        { id: 'evidence-drink-old', content: 'I prefer coffee.', createdAt: 30 },
+        { id: 'evidence-drink-new', content: 'I prefer tea now.', createdAt: 40 },
+      ]) {
+        await memory.appendGrilloRecord('evidence_records', {
+          ...evidence,
+          kind: 'turn',
+          metadata: {},
+          participantKey,
+          role: 'user',
+          scopeKey,
+          source: 'test',
+          sourceRecordIds: [],
+        });
+      }
+      await memory.appendGrilloRecord('memory_claims', {
+        confidence: 0.95,
+        createdAt: 11,
+        evidenceIds: ['evidence-color'],
+        id: 'claim-color',
+        kind: 'preference',
+        operation: 'ADD',
+        participantKey,
+        predicate: 'favorite_color',
+        scopeKey,
+        subject: participantKey,
+        supersedesRecordIds: [],
+        validFrom: 10,
+        validTo: null,
+        value: 'blue',
+      });
+      await memory.appendGrilloRecord('memory_corrections', {
+        correctedValue: 'green',
+        createdAt: 21,
+        evidenceIds: ['evidence-color-correction'],
+        id: 'correction-color',
+        participantKey,
+        reason: 'The user explicitly corrected the earlier color.',
+        scopeKey,
+        targetClaimId: 'claim-color',
+      });
+      await memory.appendGrilloRecord('memory_claims', {
+        confidence: 0.9,
+        createdAt: 31,
+        evidenceIds: ['evidence-drink-old'],
+        id: 'claim-drink-old',
+        kind: 'preference',
+        operation: 'ADD',
+        participantKey,
+        predicate: 'preferred_drink',
+        scopeKey,
+        subject: participantKey,
+        supersedesRecordIds: [],
+        validFrom: 30,
+        validTo: null,
+        value: 'coffee',
+      });
+      await memory.appendGrilloRecord('memory_claims', {
+        confidence: 0.98,
+        createdAt: 41,
+        evidenceIds: ['evidence-drink-new'],
+        id: 'claim-drink-new',
+        kind: 'preference',
+        operation: 'SUPERSEDE',
+        participantKey,
+        predicate: 'preferred_drink',
+        scopeKey,
+        subject: participantKey,
+        supersedesRecordIds: ['claim-drink-old'],
+        validFrom: 40,
+        validTo: null,
+        value: 'tea',
+      });
+      await memory.saveRelationshipProfiles({
+        [scopeKey]: {
+          facts: ['Legacy says the favorite color is orange.'],
+          mood: 'legacy',
+          relationshipStage: 'legacy',
+          summary: 'Legacy profile must not reach the prompt.',
+        },
+      });
+
+      const packet = await grillo.buildContextPacket({
+        includeProvenanceReceipt: true,
+        participantKeys: [participantKey],
+        scopeKey,
+      });
+      const rendered = packet.relationship_memory.join('\n');
+
+      expect(rendered).toContain(`${participantKey}.favorite_color = "green" (corrected)`);
+      expect(rendered).toContain(`${participantKey}.preferred_drink = "tea"`);
+      expect(rendered).not.toContain('blue');
+      expect(rendered).not.toContain('coffee');
+      expect(rendered).not.toContain('Legacy');
+      expect(packet.background_information).toContain('memory_authority: evidence_ledger');
+      expect(packet.provenance_receipt?.lanes.relationship_memory.includedIds).toEqual([
+        'claim:claim-color',
+        'claim:claim-drink-new',
+      ]);
     } finally {
       await memory.close();
     }
@@ -315,6 +451,64 @@ describe('GrilloWorkerService', () => {
         personal_thought: 'other participant thought',
         scope_key: scopeKey,
       });
+      for (let index = 0; index < 18; index += 1) {
+        await memory.appendGrilloRecord('evidence_records', {
+          content: `canonical preference ${index}`,
+          createdAt: 300 + index * 2,
+          id: `evidence-${index}`,
+          kind: 'observation',
+          metadata: {},
+          participantKey,
+          role: 'user',
+          scopeKey,
+          source: 'test',
+          sourceRecordIds: [],
+        });
+        await memory.appendGrilloRecord('memory_claims', {
+          confidence: 0.9,
+          createdAt: 301 + index * 2,
+          evidenceIds: [`evidence-${index}`],
+          id: `claim-${index}`,
+          kind: 'preference',
+          operation: 'ADD',
+          participantKey,
+          predicate: `preference_${index.toString().padStart(2, '0')}`,
+          scopeKey,
+          subject: participantKey,
+          supersedesRecordIds: [],
+          validFrom: 300 + index * 2,
+          validTo: null,
+          value: `canonical preference ${index}`,
+        });
+      }
+      await memory.appendGrilloRecord('evidence_records', {
+        content: 'other participant preference',
+        createdAt: 400,
+        id: 'evidence-other',
+        kind: 'observation',
+        metadata: {},
+        participantKey: 'local:local:other',
+        role: 'user',
+        scopeKey,
+        source: 'test',
+        sourceRecordIds: [],
+      });
+      await memory.appendGrilloRecord('memory_claims', {
+        confidence: 0.9,
+        createdAt: 401,
+        evidenceIds: ['evidence-other'],
+        id: 'claim-other',
+        kind: 'preference',
+        operation: 'ADD',
+        participantKey: 'local:local:other',
+        predicate: 'preference_other',
+        scopeKey,
+        subject: 'local:local:other',
+        supersedesRecordIds: [],
+        validFrom: 400,
+        validTo: null,
+        value: 'other participant preference',
+      });
 
       const packet = await grillo.buildContextPacket({
         includeProvenanceReceipt: true,
@@ -331,13 +525,12 @@ describe('GrilloWorkerService', () => {
       expect(packet.relationship_memory).toHaveLength(16);
       expect(receipt.lanes.relationship_memory.dropped).toEqual(
         expect.arrayContaining([
-          expect.objectContaining({ id: 'block:block-other:item:0', reason: 'participant_filter' }),
-          expect.objectContaining({ id: 'block:block-8:item:0', reason: 'record_limit' }),
-          expect.objectContaining({ id: 'block:block-9:item:0', reason: 'record_limit' }),
-          expect.objectContaining({ id: 'block:block-0:item:5', reason: 'item_limit' }),
-          expect.objectContaining({ id: 'block:block-3:item:1', reason: 'lane_limit' }),
+          expect.objectContaining({ id: 'claim:claim-other', reason: 'participant_filter' }),
+          expect.objectContaining({ id: 'claim:claim-16', reason: 'lane_limit' }),
+          expect.objectContaining({ id: 'claim:claim-17', reason: 'lane_limit' }),
         ]),
       );
+      expect(packet.relationship_memory.join('\n')).not.toContain('[block:');
       expect(packet.thoughts).toHaveLength(5);
       expect(receipt.lanes.thoughts.dropped).toEqual(
         expect.arrayContaining([
@@ -349,13 +542,8 @@ describe('GrilloWorkerService', () => {
       expect(receipt.lanes.relationship_memory.includedOccurrences).toHaveLength(
         packet.relationship_memory.length,
       );
-      expect(receipt.lanes.recalled_memories.dropped).toEqual(
-        expect.arrayContaining([
-          expect.objectContaining({ id: 'candidate-other', reason: 'participant_filter' }),
-          expect.objectContaining({ id: 'candidate-8', reason: 'record_limit' }),
-          expect.objectContaining({ id: 'candidate-9', reason: 'record_limit' }),
-        ]),
-      );
+      expect(packet.recalled_memories).toEqual([]);
+      expect(receipt.lanes.recalled_memories.dropped).toEqual([]);
     } finally {
       await memory.close();
     }
@@ -545,7 +733,7 @@ describe('GrilloWorkerService', () => {
       expect(packet.relationship_memory.join('\n')).toContain(
         'Subsect likes direct technical memory checks.',
       );
-      expect(packet.recalled_memories.map((item) => item.text).join('\n')).toContain(
+      expect(packet.recalled_memories.map((item) => item.text).join('\n')).not.toContain(
         'Subsect wants native Ladybug worker tools.',
       );
       expect(packet.thoughts.join('\n')).toContain(
@@ -641,7 +829,7 @@ describe('GrilloWorkerService', () => {
     }
   });
 
-  it('runs backend extraction ticks from native turn pairs into context-visible memory', async () => {
+  it('keeps native extraction candidates out of live context until they become claims', async () => {
     const { grillo, memory } = createServices();
     try {
       const scopeKey = 'local:persona:hikari-chan';
@@ -695,10 +883,8 @@ describe('GrilloWorkerService', () => {
         query: 'backend grillo extraction',
         scopeKey,
       });
-      expect(packet.recalled_memories.map((item) => item.text).join('\n')).toContain(
-        'backend grillo extraction should remember this thread',
-      );
-      expect(packet.relationship_memory.join('\n')).toContain('[slot:open_threads');
+      expect(packet.recalled_memories).toEqual([]);
+      expect(packet.relationship_memory).toEqual([]);
       expect(packet.thoughts.join('\n')).toContain(
         'I should remember this recent exchange with Subsect',
       );
