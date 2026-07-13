@@ -167,6 +167,7 @@ import {
   saveVrmModelBlob,
   saveVrmModelFile,
 } from './lib/vrm/custom-vrm-library';
+import { setLipSyncTuning } from './lib/vrm/lipsync';
 import {
   CUSTOM_RIKO_PIPER_VOICES,
   HIKARI_PIPER_VOICE_KEY,
@@ -4505,6 +4506,20 @@ function App() {
   }, [ttsRuntimeSettings.ttsEnabled, stopTtsPlayback, ttsManager]);
 
   useEffect(() => {
+    setLipSyncTuning({
+      mode: aiSettings.lipSyncMode,
+      smoothing: aiSettings.lipSyncSmoothing,
+      gain: aiSettings.lipSyncGain,
+      volumeInfluence: aiSettings.lipSyncVolumeInfluence,
+    });
+  }, [
+    aiSettings.lipSyncMode,
+    aiSettings.lipSyncSmoothing,
+    aiSettings.lipSyncGain,
+    aiSettings.lipSyncVolumeInfluence,
+  ]);
+
+  useEffect(() => {
     ttsManager.setPlaybackRate(aiSettings.ttsPlaybackRate);
     ttsManager.setVolume(aiSettings.ttsVolume);
     ttsManager.setOutputRoute(
@@ -6911,7 +6926,7 @@ function App() {
 
       const interruptionAction = resolveDiscordInterruptionAction(
         settings.interruptionPolicy,
-        assistantReplyLockedRef.current || ttsManager.isPlaying,
+        assistantReplyLockedRef.current || ttsManager.isPlaying || ttsManager.isPlaybackActive(),
       );
       if (interruptionAction === 'stop-speaking') {
         ttsManager.enableTts = false;

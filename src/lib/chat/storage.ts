@@ -589,6 +589,23 @@ function normalizeAiSettings(value: unknown): AiSettings {
       typeof source.inworldAutoMode === 'boolean' ? source.inworldAutoMode : defaults.inworldAutoMode,
     ttsPlaybackRate: playbackRate,
     ttsVolume,
+    lipSyncMode:
+      source.lipSyncMode === 'hybrid' || source.lipSyncMode === 'direct'
+        ? source.lipSyncMode
+        : defaults.lipSyncMode,
+    lipSyncSmoothing:
+      typeof source.lipSyncSmoothing === 'number' && Number.isFinite(source.lipSyncSmoothing)
+        ? Math.max(0, Math.min(0.9, source.lipSyncSmoothing))
+        : defaults.lipSyncSmoothing,
+    lipSyncGain:
+      typeof source.lipSyncGain === 'number' && Number.isFinite(source.lipSyncGain)
+        ? Math.max(0.1, Math.min(2, source.lipSyncGain))
+        : defaults.lipSyncGain,
+    lipSyncVolumeInfluence:
+      typeof source.lipSyncVolumeInfluence === 'number' &&
+      Number.isFinite(source.lipSyncVolumeInfluence)
+        ? Math.max(0, Math.min(2, source.lipSyncVolumeInfluence))
+        : defaults.lipSyncVolumeInfluence,
   });
 }
 

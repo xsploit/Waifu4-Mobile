@@ -108,6 +108,7 @@ export class TtsManager {
   currentSource: AudioBufferSourceNode | null = null;
   currentAudio: HTMLAudioElement | null = null;
   private currentStreamSources = new Set<AudioBufferSourceNode>();
+  private currentStreamSourceTimes = new Map<AudioBufferSourceNode, { startAt: number; endAt: number }>();
   private currentStreamGains = new Set<GainNode>();
   private streamPlaybackEndTime = 0;
   private streamPlaybackStartTime = 0;
@@ -179,6 +180,38 @@ export class TtsManager {
     this.wordBoundaryStartTime = null;
   }
 
+  isPlaybackActive(): boolean {
+    if (this.currentAudio && !this.currentAudio.paused && !this.currentAudio.ended) {
+      return true;
+    }
+
+    if (this.streamScheduledChunkCount > 0 && this.audioContext) {
+      if (this.audioContext.state !== 'running') {
+        return false;
+      }
+      const currentTime = this.audioContext.currentTime;
+      for (const { startAt, endAt } of this.currentStreamSourceTimes.values()) {
+        if (currentTime >= startAt && currentTime < endAt) {
+          return true;
+        }
+      }
+      return false;
+    }
+
+    if (this.currentAudio) {
+      return false;
+    }
+
+    return this.isPlaying;
+  }
+
+  private clearStreamStartedTimer() {
+    if (this.streamStartedTimer !== null) {
+      window.clearTimeout(this.streamStartedTimer);
+      this.streamStartedTimer = null;
+    }
+  }
+
   private teardownCurrentAudio(audioUrl?: string | null) {
     const nextAudioUrl =
       audioUrl ?? (this.currentAudio?.src?.startsWith('blob:') ? this.currentAudio.src : null);
@@ -210,6 +243,7 @@ export class TtsManager {
       }
     }
     this.currentStreamSources.clear();
+    this.currentStreamSourceTimes.clear();
     for (const gain of this.currentStreamGains) {
       try {
         gain.disconnect();
@@ -218,10 +252,7 @@ export class TtsManager {
       }
     }
     this.currentStreamGains.clear();
-    if (this.streamStartedTimer !== null) {
-      window.clearTimeout(this.streamStartedTimer);
-      this.streamStartedTimer = null;
-    }
+    this.clearStreamStartedTimer();
     this.streamPlaybackEndTime = 0;
     this.streamPlaybackStartTime = 0;
     this.streamScheduledChunkCount = 0;
@@ -358,6 +389,7 @@ export class TtsManager {
         await playbackTail.catch(() => {});
         this.remoteAbortControllers.delete(abortController);
         if (generation === this.queueGeneration && !abortController.signal.aborted) {
+          this.clearStreamStartedTimer();
           this.onSpeechFinished?.();
           this.clearPlaybackState();
         }
@@ -491,6 +523,7 @@ export class TtsManager {
           await pcmScheduleTail;
           await pcmStreamTail;
           if (generation === this.queueGeneration && !abortController.signal.aborted) {
+            this.clearStreamStartedTimer();
             this.onSpeechFinished?.();
             this.clearPlaybackState();
           }
@@ -603,8 +636,9 @@ export class TtsManager {
     this.ensureAnalyserConnected();
 
     const duration = audioBuffer.duration / Math.max(0.01, this.playbackRate);
+    const isFirstScheduledChunk = this.streamScheduledChunkCount === 0;
     const canCrossfade =
-      this.streamScheduledChunkCount > 0 &&
+      !isFirstScheduledChunk &&
       this.streamPlaybackEndTime > this.audioContext.currentTime + REMOTE_PCM_CROSSFADE_SECONDS;
     const overlap = canCrossfade
       ? Math.min(REMOTE_PCM_CROSSFADE_SECONDS, Math.max(0, duration * 0.35))
@@ -614,6 +648,10 @@ export class TtsManager {
       this.audioContext.currentTime + REMOTE_PCM_MIN_LEAD_SECONDS,
     );
     const endAt = startAt + duration;
+    if (isFirstScheduledChunk) {
+      this.streamPlaybackStartTime = startAt;
+      this.wordBoundaryStartTime = startAt;
+    }
     const fadeSeconds = Math.min(REMOTE_PCM_FADE_SECONDS, Math.max(0, duration / 3));
     const fadeInEnd = startAt + fadeSeconds;
     const fadeOutStart = Math.max(fadeInEnd, endAt - fadeSeconds);
@@ -639,12 +677,14 @@ export class TtsManager {
       this.onLipSyncData?.({ wordBoundaries: this.wordBoundaries, phonemes: null, text });
     }
     this.currentStreamSources.add(source);
+    this.currentStreamSourceTimes.set(source, { startAt, endAt });
     this.currentStreamGains.add(frameGain);
     this.streamScheduledChunkCount += 1;
 
     const ended = new Promise<void>((resolve) => {
       source.onended = () => {
         this.currentStreamSources.delete(source);
+        this.currentStreamSourceTimes.delete(source);
         this.currentStreamGains.delete(frameGain);
         try {
           source.disconnect();
@@ -660,14 +700,13 @@ export class TtsManager {
       };
     });
 
-    if (!this.isPlaying) {
+    if (isFirstScheduledChunk && this.streamStartedTimer === null) {
       const delayMs = Math.max(0, (startAt - this.audioContext.currentTime) * 1000);
       this.streamStartedTimer = window.setTimeout(() => {
         this.streamStartedTimer = null;
-        if (generation !== this.queueGeneration || signal.aborted) {
+        if (generation !== this.queueGeneration || signal.aborted || !this.isPlaybackActive()) {
           return;
         }
-        this.wordBoundaryStartTime = 0;
         this.isPlaying = true;
         this.onSpeechStarted?.();
         this.onLipSyncData?.({ wordBoundaries: [], phonemes: null, text });
@@ -981,12 +1020,9 @@ export class TtsManager {
 
   getAudioAmplitude(): number {
     if (!this.audioAnalyser || !this.audioDataArray) {
-      return this.isPlaying ? 0.5 : 0;
+      return this.isPlaybackActive() ? 0.5 : 0;
     }
-    if (!this.isPlaying) {
-      return 0;
-    }
-    if (this.currentAudio && this.currentAudio.paused) {
+    if (!this.isPlaybackActive()) {
       return 0;
     }
 
@@ -1012,10 +1048,7 @@ export class TtsManager {
     if (!this.audioAnalyser || !this.audioDataArray) {
       return null;
     }
-    if (!this.isPlaying) {
-      return null;
-    }
-    if (this.currentAudio && this.currentAudio.paused) {
+    if (!this.isPlaybackActive()) {
       return null;
     }
 
@@ -1045,7 +1078,7 @@ export class TtsManager {
   }
 
   getLipSyncWeights(): { A: number; I: number; U: number; E: number; O: number } | null {
-    if (!this.lipsyncNode || !this.isPlaying) {
+    if (!this.lipsyncNode || !this.isPlaybackActive()) {
       return null;
     }
 

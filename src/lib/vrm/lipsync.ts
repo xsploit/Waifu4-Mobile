@@ -1,5 +1,24 @@
 import type { VRM } from '@pixiv/three-vrm';
+import type { LipSyncMode } from '../chat/types';
 import type { TtsManager } from '../tts/manager';
+
+export type LipSyncTuning = {
+  mode: LipSyncMode;
+  smoothing: number;
+  gain: number;
+  volumeInfluence: number;
+};
+
+let tuning: LipSyncTuning = {
+  mode: 'hybrid',
+  smoothing: 0.44,
+  gain: 1,
+  volumeInfluence: 1,
+};
+
+export function setLipSyncTuning(next: LipSyncTuning) {
+  tuning = next;
+}
 
 const PHONEME_TO_BLEND_SHAPE: Record<string, Record<string, number>> = {
   // Vowels
@@ -53,20 +72,40 @@ let previousOu = 0;
 let previousEe = 0;
 let previousOh = 0;
 
-const MOUTH_SMOOTHING = 0.44;
-const MOUTH_CLOSE_SMOOTHING = 0.16;
 const PHONEME_GAIN = 0.39;
 const VISEME_DEADZONE = 0.045;
 const CLOSE_GATE_START = 0.035;
 const CLOSE_GATE_END = 0.16;
+// Closing motion tracks faster than opening; ratio of the historical
+// 0.16 close / 0.44 open smoothing pair.
+const CLOSE_SMOOTHING_RATIO = 0.36;
+
+// Direct mode: raw wLipSync output, minimal shaping. The AudioWorklet already
+// applies smoothness 0.03, so only the shared tuning lerp is added here.
+const DIRECT_GAIN = 0.9;
 
 function clamp01(value: number) {
   return Math.min(Math.max(value, 0), 1);
 }
 
 function smoothViseme(previous: number, target: number) {
-  const smoothing = target < previous ? MOUTH_CLOSE_SMOOTHING : MOUTH_SMOOTHING;
+  const smoothing =
+    target < previous ? tuning.smoothing * CLOSE_SMOOTHING_RATIO : tuning.smoothing;
   return previous + (target - previous) * (1 - smoothing);
+}
+
+// Power curve on loudness: <1 flattens dynamics (shape dominates), 1 = as-is,
+// >1 exaggerates loud/quiet contrast. Preserves 0 -> 0 so pauses stay closed.
+function applyVolumeInfluence(amplitude: number) {
+  const influence = tuning.volumeInfluence;
+  if (influence === 1) {
+    return amplitude;
+  }
+  const clamped = clamp01(amplitude);
+  if (clamped <= 0) {
+    return 0;
+  }
+  return Math.pow(clamped, Math.max(influence, 0.05));
 }
 
 function applyVisemeDeadzone(value: number) {
@@ -108,9 +147,8 @@ export function updateLipSync(vrm: VRM | null, ttsManager: TtsManager) {
   const isHtmlAudioActive = hasHtmlAudio
     ? !ttsManager.currentAudio?.paused && !ttsManager.currentAudio?.ended
     : false;
-  const isPlaybackActive = isHtmlAudioActive || ttsManager.isPlaying;
 
-  if (!isPlaybackActive) {
+  if (!ttsManager.isPlaybackActive()) {
     manager.setValue('aa', 0);
     manager.setValue('ih', 0);
     manager.setValue('ou', 0);
@@ -120,13 +158,41 @@ export function updateLipSync(vrm: VRM | null, ttsManager: TtsManager) {
     return;
   }
 
+  if (tuning.mode === 'direct') {
+    const directWeights = ttsManager.getLipSyncWeights();
+    // Weights arrive volume-scaled from the worklet; volume influence rescales
+    // that loudness component while leaving the A/I/U/E/O shape untouched.
+    let scale = DIRECT_GAIN * tuning.gain;
+    if (directWeights && tuning.volumeInfluence !== 1) {
+      const loudness = clamp01(
+        directWeights.A + directWeights.I + directWeights.U + directWeights.E + directWeights.O,
+      );
+      if (loudness > 0.0001) {
+        scale *= applyVolumeInfluence(loudness) / loudness;
+      }
+    }
+    const lerp = 1 - tuning.smoothing;
+    previousAa += (clamp01((directWeights?.A ?? 0) * scale) - previousAa) * lerp;
+    previousIh += (clamp01((directWeights?.I ?? 0) * scale) - previousIh) * lerp;
+    previousOu += (clamp01((directWeights?.U ?? 0) * scale) - previousOu) * lerp;
+    previousEe += (clamp01((directWeights?.E ?? 0) * scale) - previousEe) * lerp;
+    previousOh += (clamp01((directWeights?.O ?? 0) * scale) - previousOh) * lerp;
+    manager.setValue('aa', previousAa);
+    manager.setValue('ih', previousIh);
+    manager.setValue('ou', previousOu);
+    manager.setValue('ee', previousEe);
+    manager.setValue('oh', previousOh);
+    return;
+  }
+
   const mfccWeights = ttsManager.getLipSyncWeights();
   const mfccEnergy = mfccWeights
     ? mfccWeights.A + mfccWeights.I + mfccWeights.U + mfccWeights.E + mfccWeights.O
     : 0;
 
-  const audioAmplitude = ttsManager.getAudioAmplitude();
-  const isAudioActive = audioAmplitude > 0.01 || mfccEnergy > 0.02;
+  const rawAmplitude = ttsManager.getAudioAmplitude();
+  const isAudioActive = rawAmplitude > 0.01 || mfccEnergy > 0.02;
+  const audioAmplitude = applyVolumeInfluence(rawAmplitude);
 
   if (!isAudioActive) {
     manager.setValue('aa', 0);
@@ -190,7 +256,7 @@ export function updateLipSync(vrm: VRM | null, ttsManager: TtsManager) {
     const rawE = clamp01(mfccWeights.E);
     const rawO = clamp01(mfccWeights.O);
     const rawTotal = rawA + rawI + rawU + rawE + rawO;
-    const loudness = clamp01(rawTotal);
+    const loudness = applyVolumeInfluence(clamp01(rawTotal));
     const invTotal = rawTotal > 0.00001 ? 1 / rawTotal : 0;
 
     targetAa = rawA * invTotal * loudness * 1.45 * phonemeGain + audioAmplitude * 0.1;
@@ -351,13 +417,14 @@ export function updateLipSync(vrm: VRM | null, ttsManager: TtsManager) {
     }
   }
 
-  const closeGateSource = Math.max(audioAmplitude, mfccEnergy * 0.72);
+  const closeGateSource = Math.max(rawAmplitude, mfccEnergy * 0.72);
   const closeGate = clamp01((closeGateSource - CLOSE_GATE_START) / (CLOSE_GATE_END - CLOSE_GATE_START));
-  targetAa *= closeGate;
-  targetIh *= closeGate;
-  targetOu *= closeGate;
-  targetEe *= closeGate;
-  targetOh *= closeGate;
+  const masterGain = closeGate * tuning.gain;
+  targetAa = clamp01(targetAa * masterGain);
+  targetIh = clamp01(targetIh * masterGain);
+  targetOu = clamp01(targetOu * masterGain);
+  targetEe = clamp01(targetEe * masterGain);
+  targetOh = clamp01(targetOh * masterGain);
 
   const smoothedAa = applyVisemeDeadzone(smoothViseme(previousAa, targetAa));
   const smoothedIh = applyVisemeDeadzone(smoothViseme(previousIh, targetIh));

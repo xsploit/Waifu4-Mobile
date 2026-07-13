@@ -148,6 +148,10 @@ export function createDefaultAiSettings(): AiSettings {
     inworldAutoMode: true,
     ttsPlaybackRate: 1,
     ttsVolume: 1,
+    lipSyncMode: 'hybrid',
+    lipSyncSmoothing: 0.44,
+    lipSyncGain: 1,
+    lipSyncVolumeInfluence: 1,
   };
 }
 

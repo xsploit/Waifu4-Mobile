@@ -1097,12 +1097,7 @@ function updateArmClipGuard(vrm: VRM, settings: VisualSettings) {
 }
 
 function isTtsPlaybackActive(ttsManager: TtsManager) {
-  return (
-    (!!ttsManager.currentAudio &&
-      !ttsManager.currentAudio.paused &&
-      !ttsManager.currentAudio.ended) ||
-    ttsManager.isPlaying
-  );
+  return ttsManager.isPlaybackActive();
 }
 
 function updateVrmFrame(

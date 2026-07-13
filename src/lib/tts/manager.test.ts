@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { getRemotePcmChunkSchedule, remoteSpeechTimingToWordBoundaries } from './manager';
 import { TtsManager } from './manager';
 import { synthesizePiperChunk } from './piper';
@@ -14,6 +14,10 @@ beforeEach(() => {
   vi.clearAllMocks();
 });
 
+afterEach(() => {
+  vi.unstubAllGlobals();
+});
+
 function createPcm16Blob(samples: number[]) {
   const bytes = new Uint8Array(samples.length * 2);
   const view = new DataView(bytes.buffer);
@@ -21,6 +25,137 @@ function createPcm16Blob(samples: number[]) {
     view.setInt16(index * 2, sample, true);
   });
   return new Blob([bytes], { type: 'audio/pcm' });
+}
+
+function createRemotePcmHarness() {
+  let nextTimerId = 1;
+  const timers = new Map<number, { callback: () => void; delay: number }>();
+  vi.stubGlobal('window', {
+    setTimeout: (callback: () => void, delay = 0) => {
+      const id = nextTimerId;
+      nextTimerId += 1;
+      timers.set(id, { callback, delay });
+      return id;
+    },
+    clearTimeout: (id: number) => {
+      timers.delete(id);
+    },
+  });
+
+  const sources: Array<{
+    buffer: { duration: number } | null;
+    connections: unknown[];
+    disconnected: boolean;
+    onended: (() => void) | null;
+    playbackRate: { value: number };
+    startAt: number | null;
+    stopped: boolean;
+  }> = [];
+  const gains: Array<{
+    connections: unknown[];
+    disconnected: boolean;
+    events: Array<{ type: string; value?: number; time: number }>;
+  }> = [];
+  const context = {
+    currentTime: 10,
+    createBuffer: (_channels: number, length: number, sampleRate: number) => ({
+      duration: length / sampleRate,
+      getChannelData: () => new Float32Array(length),
+    }),
+    createBufferSource: () => {
+      const source = {
+        buffer: null as { duration: number } | null,
+        connections: [] as unknown[],
+        disconnected: false,
+        onended: null as (() => void) | null,
+        playbackRate: { value: 1 },
+        startAt: null as number | null,
+        stopped: false,
+        connect(destination: unknown) {
+          this.connections.push(destination);
+        },
+        disconnect() {
+          this.disconnected = true;
+        },
+        start(when: number) {
+          this.startAt = when;
+        },
+        stop() {
+          this.stopped = true;
+        },
+      };
+      sources.push(source);
+      return source;
+    },
+    createGain: () => {
+      const gain = {
+        connections: [] as unknown[],
+        disconnected: false,
+        events: [] as Array<{ type: string; value?: number; time: number }>,
+        connect(destination: unknown) {
+          this.connections.push(destination);
+        },
+        disconnect() {
+          this.disconnected = true;
+        },
+        gain: {
+          cancelScheduledValues: (time: number) => {
+            gain.events.push({ type: 'cancel', time });
+          },
+          linearRampToValueAtTime: (value: number, time: number) => {
+            gain.events.push({ type: 'ramp', value, time });
+          },
+          setValueAtTime: (value: number, time: number) => {
+            gain.events.push({ type: 'set', value, time });
+          },
+          value: 1,
+        },
+      };
+      gains.push(gain);
+      return gain;
+    },
+    destination: {},
+    state: 'running',
+  };
+  const audioAnalyser = {
+    connect: vi.fn(),
+    disconnect: vi.fn(),
+    getByteFrequencyData: vi.fn(),
+  };
+  const masterGain = { connect: vi.fn(), disconnect: vi.fn(), gain: { value: 1 } };
+  const streamGain = { connect: vi.fn(), disconnect: vi.fn(), gain: { value: 1 } };
+  const lipsyncNode = {
+    volume: 1,
+    weights: { A: 0.8, I: 0.1, U: 0, E: 0, O: 0 },
+  };
+  const manager = new TtsManager();
+  Object.assign(manager, {
+    audioAnalyser,
+    audioContext: context,
+    audioDataArray: new Uint8Array(32),
+    lipsyncNode,
+    masterGain,
+    streamGain,
+  });
+
+  return {
+    audioAnalyser,
+    context,
+    fireTimer(id: number) {
+      const timer = timers.get(id);
+      if (!timer) {
+        throw new Error(`Unknown timer ${id}`);
+      }
+      timers.delete(id);
+      timer.callback();
+    },
+    gains,
+    lipsyncNode,
+    manager,
+    sources,
+    streamGain,
+    timers,
+  };
 }
 
 describe('TtsManager remote PCM scheduling', () => {
@@ -51,6 +186,126 @@ describe('TtsManager remote PCM scheduling', () => {
     expect(first).toEqual({ startAt: 10, endAt: 11 });
     expect(second).toEqual({ startAt: 11, endAt: 12 });
     expect(third).toEqual({ startAt: 12.5, endAt: 13 });
+  });
+
+  it('activates remote PCM lip sync from the audio clock even when the start notification timer is late', async () => {
+    const harness = createRemotePcmHarness();
+    const onSpeechStarted = vi.fn();
+    harness.manager.onSpeechStarted = onSpeechStarted;
+
+    const stream = harness.manager.startRemotePcmPushStream('hello');
+    await stream.push({
+      audioBlob: createPcm16Blob([100, 200, 300, 400]),
+      mimeType: 'audio/pcm',
+      sampleRate: 4,
+    });
+
+    const startAt = harness.sources[0]?.startAt;
+    expect(startAt).toBeCloseTo(10.05);
+    expect(harness.timers.size).toBe(1);
+    expect(harness.manager.getLipSyncWeights()).toBeNull();
+
+    harness.context.currentTime = startAt ?? 0;
+    expect(harness.manager.getLipSyncWeights()).toEqual({ A: 0.8, I: 0.1, U: 0, E: 0, O: 0 });
+    expect(onSpeechStarted).not.toHaveBeenCalled();
+
+    const timerId = [...harness.timers.keys()][0];
+    expect(timerId).toBeDefined();
+    harness.context.currentTime += 0.2;
+    harness.fireTimer(timerId!);
+    expect(onSpeechStarted).toHaveBeenCalledTimes(1);
+    expect(harness.manager.getLipSyncWeights()).toEqual({ A: 0.8, I: 0.1, U: 0, E: 0, O: 0 });
+  });
+
+  it('keeps lip sync inactive during an underrun until the late chunk actually starts', async () => {
+    const harness = createRemotePcmHarness();
+    const stream = harness.manager.startRemotePcmPushStream('hello again');
+    const chunk = {
+      audioBlob: createPcm16Blob([100, 200, 300, 400]),
+      mimeType: 'audio/pcm',
+      sampleRate: 4,
+    } as const;
+
+    await stream.push(chunk);
+    harness.context.currentTime = 11.2;
+    harness.sources[0]?.onended?.();
+    await stream.push(chunk);
+
+    const secondStartAt = harness.sources[1]?.startAt;
+    expect(secondStartAt).toBeCloseTo(11.22);
+    expect(harness.manager.isPlaybackActive()).toBe(false);
+    expect(harness.manager.getLipSyncWeights()).toBeNull();
+
+    harness.context.currentTime = secondStartAt ?? 0;
+    expect(harness.manager.isPlaybackActive()).toBe(true);
+    expect(harness.manager.getLipSyncWeights()).toEqual({ A: 0.8, I: 0.1, U: 0, E: 0, O: 0 });
+  });
+
+  it('cancels a late start notification when the PCM stream finishes first', async () => {
+    const harness = createRemotePcmHarness();
+    const onSpeechStarted = vi.fn();
+    const onSpeechFinished = vi.fn();
+    harness.manager.onSpeechStarted = onSpeechStarted;
+    harness.manager.onSpeechFinished = onSpeechFinished;
+
+    const stream = harness.manager.startRemotePcmPushStream('brief');
+    await stream.push({
+      audioBlob: createPcm16Blob([100, 200]),
+      mimeType: 'audio/pcm',
+      sampleRate: 4,
+    });
+
+    expect(harness.timers.size).toBe(1);
+    harness.context.currentTime = 11;
+    harness.sources[0]?.onended?.();
+    await stream.close();
+
+    expect(onSpeechFinished).toHaveBeenCalledTimes(1);
+    expect(harness.timers.size).toBe(0);
+    expect(onSpeechStarted).not.toHaveBeenCalled();
+    expect(harness.manager.isPlaying).toBe(false);
+  });
+
+  it('preserves remote PCM fades, overlap, graph routing, and one start notification', async () => {
+    const harness = createRemotePcmHarness();
+    const onSpeechStarted = vi.fn();
+    harness.manager.onSpeechStarted = onSpeechStarted;
+    const stream = harness.manager.startRemotePcmPushStream('hello world');
+    const chunk = {
+      audioBlob: createPcm16Blob([100, 200, 300, 400]),
+      mimeType: 'audio/pcm',
+      sampleRate: 4,
+    } as const;
+
+    await stream.push(chunk);
+    await stream.push(chunk);
+
+    expect(harness.sources).toHaveLength(2);
+    expect(harness.gains).toHaveLength(2);
+    expect(harness.sources[0]?.startAt).toBeCloseTo(10.05);
+    expect(harness.sources[1]?.startAt).toBeCloseTo(11.046);
+    expect(harness.gains[0]?.events.map(({ type, value }) => ({ type, value }))).toEqual([
+      { type: 'cancel', value: undefined },
+      { type: 'set', value: 0 },
+      { type: 'ramp', value: 1 },
+      { type: 'set', value: 1 },
+      { type: 'ramp', value: 0 },
+    ]);
+    [10.05, 10.05, 10.056, 11.044, 11.05].forEach((time, index) => {
+      expect(harness.gains[0]?.events[index]?.time).toBeCloseTo(time);
+    });
+    expect(harness.sources[0]?.connections[0]).toBe(harness.gains[0]);
+    expect(harness.gains[0]?.connections).toContain(harness.audioAnalyser);
+    expect(harness.gains[0]?.connections).toContain(harness.lipsyncNode);
+    expect(harness.gains[1]?.connections).toContain(harness.audioAnalyser);
+    expect(harness.gains[1]?.connections).toContain(harness.lipsyncNode);
+    expect(harness.timers.size).toBe(1);
+
+    const timerId = [...harness.timers.keys()][0];
+    expect(timerId).toBeDefined();
+    harness.context.currentTime = harness.sources[0]?.startAt ?? harness.context.currentTime;
+    harness.fireTimer(timerId!);
+    expect(onSpeechStarted).toHaveBeenCalledTimes(1);
   });
 
   it('resolves live push after scheduling instead of waiting for playback to end', async () => {

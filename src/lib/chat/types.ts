@@ -46,6 +46,7 @@ export type OpenAiStateMode = 'stateless';
 export type ReplyLengthMode = 'short' | 'balanced' | 'yap';
 export type ToolChoiceMode = 'off' | 'auto' | 'required';
 export type EmbeddingMode = 'auto' | 'browser' | 'provider';
+export type LipSyncMode = 'hybrid' | 'direct';
 
 export type AiSettings = {
   llmProvider: LlmProvider;
@@ -100,6 +101,10 @@ export type AiSettings = {
   inworldAutoMode: boolean;
   ttsPlaybackRate: number;
   ttsVolume: number;
+  lipSyncMode: LipSyncMode;
+  lipSyncSmoothing: number;
+  lipSyncGain: number;
+  lipSyncVolumeInfluence: number;
 };
 
 export type PersonaVoiceBinding = {

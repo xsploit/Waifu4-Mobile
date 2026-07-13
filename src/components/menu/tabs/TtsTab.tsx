@@ -800,6 +800,68 @@ export function TtsTab({
           server-side generation settings.
         </div>
       </div>
+
+      <div className="control-group">
+        <div className="control-label">Lip Sync Mode</div>
+        <select
+          className="select-tech"
+          onChange={(event) =>
+            updateAiSettings(setAiSettings, {
+              lipSyncMode: event.target.value as AiSettings['lipSyncMode'],
+            })
+          }
+          value={aiSettings.lipSyncMode}
+        >
+          <option value="hybrid">Hybrid (analyser blend)</option>
+          <option value="direct">wLipSync Direct (raw)</option>
+        </select>
+        <div className="field-hint">
+          Hybrid shapes wLipSync output with volume, frequency bands, and smoothing. Direct feeds
+          raw A/I/U/E/O weights to the mouth for A/B comparison. Audio playback is unaffected.
+        </div>
+        <Slider
+          label={`Smoothing ${aiSettings.lipSyncSmoothing.toFixed(2)}`}
+          max={0.9}
+          min={0}
+          onInput={(value) =>
+            updateAiSettings(setAiSettings, {
+              lipSyncSmoothing: Number(value.toFixed(2)),
+            })
+          }
+          step={0.02}
+          value={aiSettings.lipSyncSmoothing}
+        />
+        <Slider
+          label={`Mouth Gain ${aiSettings.lipSyncGain.toFixed(2)}x`}
+          max={2}
+          min={0.1}
+          onInput={(value) =>
+            updateAiSettings(setAiSettings, {
+              lipSyncGain: Number(value.toFixed(2)),
+            })
+          }
+          step={0.05}
+          value={aiSettings.lipSyncGain}
+        />
+        <Slider
+          label={`Volume Influence ${aiSettings.lipSyncVolumeInfluence.toFixed(2)}`}
+          max={2}
+          min={0}
+          onInput={(value) =>
+            updateAiSettings(setAiSettings, {
+              lipSyncVolumeInfluence: Number(value.toFixed(2)),
+            })
+          }
+          step={0.05}
+          value={aiSettings.lipSyncVolumeInfluence}
+        />
+        <div className="field-hint">
+          Smoothing: higher is slower, steadier mouth motion. Mouth Gain scales how wide the mouth
+          opens. Volume Influence bends loudness response: below 1 opens the mouth more evenly at
+          any loudness, above 1 exaggerates loud-vs-quiet contrast. All three apply in both modes;
+          defaults (0.44 / 1.00 / 1.00) match the previous behavior.
+        </div>
+      </div>
     </>
   );
 }
