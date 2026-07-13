@@ -83,7 +83,7 @@
     "esbuild": "^0.28.0",
     "fallow": "^2.88.3",
     "tsx": "^4.19.2",
-    "typescript": "^5.7.3",
+    "typescript": "^7.0.2",
     "vite": "^6.0.7",
     "vitest": "^3.0.2",
     "wait-on": "^9.0.10"
