@@ -13,6 +13,7 @@ and local backup restore while keeping the original frontend look and tab workfl
 ![local-first](https://img.shields.io/badge/local--first-browser_keys-ff3b6b?style=for-the-badge)
 ![react](https://img.shields.io/badge/react-18-61dafb?style=for-the-badge&logo=react&logoColor=black)
 ![vite](https://img.shields.io/badge/vite-6-646cff?style=for-the-badge&logo=vite&logoColor=white)
+![typescript](https://img.shields.io/badge/typescript-7-3178c6?style=for-the-badge&logo=typescript&logoColor=white)
 ![three.js](https://img.shields.io/badge/three.js-VRM-000?style=for-the-badge&logo=three.js&logoColor=white)
 ![twitch](https://img.shields.io/badge/twitch-direct_IRC-9146ff?style=for-the-badge&logo=twitch&logoColor=white)
 ![tts](https://img.shields.io/badge/TTS-Fish_%2B_Inworld-00b8a9?style=for-the-badge)
@@ -46,7 +47,7 @@ and local backup restore while keeping the original frontend look and tab workfl
 <p align="center">
   The rebuild keeps the original WebWaifu4 UI shape: Account, Avatar, Background,
   Animation, Emotion Log, Character, Voice Lab, AI, Twitch, Discord, Memory,
-  TTS, and G.R.I.L.L.O.
+  and TTS, with the G.R.I.L.L.O. memory runtime behind the Memory tab.
   The browser remains the primary control surface. External providers supply
   chat, speech, transcription, search, and optional embeddings when selected.
 </p>
@@ -98,7 +99,8 @@ and local backup restore while keeping the original frontend look and tab workfl
       <ul>
         <li>VRM stage with bundled, uploaded, and saved local avatars.</li>
         <li>Three.js/VRM animation playback and non-repeating shuffle sequencing.</li>
-        <li>wLipSync/audio-reactive mouth ownership.</li>
+        <li>wLipSync/audio-reactive mouth ownership with audio-clock playback gating.</li>
+        <li>Hybrid and wLipSync Direct mouth modes plus smoothing, mouth gain, and volume influence tuning.</li>
         <li>Provider timing metadata routed toward captions/subtitles where available.</li>
         <li>Emotion telemetry with model emotion, VAD, expression, animation, mouth weights, and final expression snapshots.</li>
       </ul>
@@ -236,7 +238,7 @@ looks capable but then rejects the request shape at runtime.
   </tr>
   <tr>
     <td>Captions and Mouth</td>
-    <td>Provider word timing when available, estimated subtitles as fallback, wlipsync owns live mouth movement.</td>
+    <td>Provider word timing when available, estimated subtitles as fallback, wlipsync owns live mouth movement gated on the Web Audio clock, with Hybrid/Direct modes and smoothing/gain/volume-influence tuning in the TTS tab.</td>
   </tr>
   <tr>
     <td>Memory</td>
@@ -304,6 +306,15 @@ The desktop build produces an NSIS installer and a portable executable for a
 GitHub release.
 The desktop backend reuses a matching WebWaifu-owned process when available and
 selects another local port when the default port is occupied.
+
+If the repo lives in a OneDrive-synced or indexed folder (for example
+`Documents`), electron-builder can fail with `EPERM` renaming
+`win-unpacked.tmp`. Redirect the output to an unsynced path instead:
+
+```powershell
+npm run build; npm run desktop:runtime
+npx electron-builder --config.directories.output=C:/dev/ww4-release
+```
 
 ---
 
@@ -384,7 +395,7 @@ require their corresponding credentials and live-service verification.
   </tr>
   <tr>
     <td>Fish/Inworld as primary TTS providers.</td>
-    <td>Timing metadata, captions, silence-gap detection, and future mouth-flap experiments.</td>
+    <td>Timing metadata, captions, and silence-gap detection. Mouth interpretation now has Hybrid/Direct modes with user tuning.</td>
   </tr>
 </table>
 
