@@ -3,11 +3,13 @@
 <img src="./public/assets/branding/webwaifu4-wordmark.svg" alt="WebWaifu4" width="100%" />
 
 
-### _Local-first VTuber AI companion with browser, desktop, Twitch, and collaboration voice._
+### _A local-first VTuber AI companion for the browser, desktop, Twitch, and Discord collaboration voice._
 
-WebWaifu4 Rebuild combines an LLM chat runtime, Fish/Inworld/Piper TTS, a VRM
-avatar, Twitch intake, Discord collaboration voice, memory, tools, captions,
-and local backup restore while keeping the original frontend look and tab workflow.
+WebWaifu4 combines streamed LLM chat, realtime speech, a VRM avatar, emotion-driven
+animation, Twitch intake, Discord voice collaboration, persistent memory, tools,
+captions, and local backup restore. The rebuild keeps the original WebWaifu4 look
+and tab workflow while separating the backend services that need stricter provider
+compatibility and runtime testing.
 
 ### Watch WebWaifu4
 
@@ -20,24 +22,24 @@ https://github.com/user-attachments/assets/3579153a-26cf-45ba-b0b4-2de99c45b9fd
 ![vite](https://img.shields.io/badge/vite-6-646cff?style=for-the-badge&logo=vite&logoColor=white)
 ![typescript](https://img.shields.io/badge/typescript-7-3178c6?style=for-the-badge&logo=typescript&logoColor=white)
 ![three.js](https://img.shields.io/badge/three.js-VRM-000?style=for-the-badge&logo=three.js&logoColor=white)
-![twitch](https://img.shields.io/badge/twitch-direct_IRC-9146ff?style=for-the-badge&logo=twitch&logoColor=white)
-![tts](https://img.shields.io/badge/TTS-Fish_%2B_Inworld-00b8a9?style=for-the-badge)
+![fish](https://img.shields.io/badge/Fish-realtime_TTS-00b8a9?style=for-the-badge)
+![twitch](https://img.shields.io/badge/Twitch-direct_IRC-9146ff?style=for-the-badge&logo=twitch&logoColor=white)
 
 <br/>
 
 <a href="#what-this-is">What This Is</a>
 -
-<a href="#features">Features</a>
+<a href="#feature-map">Feature Map</a>
 -
-<a href="#provider-and-model-support">Providers</a>
+<a href="#ai-runtime">AI Runtime</a>
+-
+<a href="#realtime-voice-and-tts">Voice and TTS</a>
+-
+<a href="#grillo-memory">Memory</a>
 -
 <a href="#quick-start">Quick Start</a>
 -
-<a href="#desktop-release">Desktop</a>
--
-<a href="#vps-deploy">VPS Deploy</a>
--
-<a href="#status">Status</a>
+<a href="#release-status">Status</a>
 
 </div>
 
@@ -46,257 +48,409 @@ https://github.com/user-attachments/assets/3579153a-26cf-45ba-b0b4-2de99c45b9fd
 <h2 align="center" id="what-this-is">What This Is</h2>
 
 <p align="center">
-  <strong>A local-first AI co-host and companion with a VRM body, streamed voice, Twitch intake, Discord collaboration audio, and persistent memory.</strong>
+  <strong>A live AI co-host and companion with a VRM body, streamed voice,
+  participant-aware chat, and inspectable long-term memory.</strong>
 </p>
 
 <p align="center">
-  The rebuild keeps the original WebWaifu4 UI shape: Account, Avatar, Background,
-  Animation, Emotion Log, Character, Voice Lab, AI, Twitch, Discord, Memory,
-  and TTS, with the G.R.I.L.L.O. memory runtime behind the Memory tab.
-  The browser remains the primary control surface. External providers supply
-  chat, speech, transcription, search, and optional embeddings when selected.
+  The browser is the primary control surface. The Windows Electron build runs the
+  same app with an owned local backend, transparent avatar window, and OBS-friendly
+  overlay. External providers are used only for the selected chat, speech,
+  transcription, search, or embedding lane.
 </p>
 
-<p align="center">
-  Provider keys are stored through the browser Account tab. Backend environment
-  keys are fallback only. No hosted WebWaifu account is required.
-</p>
+The settings menu contains the following real surfaces:
+
+`Account` | `Avatar` | `Background` | `Animation` | `Emotion Log` | `Character` |
+`Voice Lab` | `AI` | `Twitch` | `Discord` | `Memory` | `TTS`
+
+Provider keys live in the browser Account tab and are sent with the request to the
+app backend. Environment variables are optional fallback values. There is no
+WebWaifu account or required cloud sync service.
 
 ---
 
-<h2 align="center" id="features">Features</h2>
+<h2 align="center" id="feature-map">Feature Map</h2>
 
-<table>
-  <tr>
-    <td width="50%" valign="top">
-      <h3 align="center">Brain</h3>
-      <ul>
-        <li>OpenRouter Responses and Vercel Gateway chat lanes.</li>
-        <li>AI SDK 7 provider integrations on Node.js 22.</li>
-        <li>OpenRouter Routing modes: Auto, Fastest latency, Highest throughput / Nitro, and Pinned provider slug.</li>
-        <li>OpenRouter model catalog loading with provider metadata displayed in the AI tab.</li>
-        <li>Structured/text reply routing from model capability metadata.</li>
-        <li>OpenRouter-aware model picker metadata: tools, reasoning, vision, images, files, context, max tokens, structured outputs, and embedding tags.</li>
-        <li>Defensive compatibility routing so models without structured outputs can stay on the text lane instead of failing JSON/schema requests.</li>
-        <li>POML-backed dynamic prompt rendering.</li>
-        <li>Main chat Tavily tools through Account-tab keys.</li>
-        <li>Visible streamed deltas with metadata kept out of spoken text.</li>
-      </ul>
-    </td>
-    <td width="50%" valign="top">
-      <h3 align="center">Voice</h3>
-      <ul>
-        <li>Fish Speech WebSocket realtime live bridge.</li>
-        <li>Fish Timestamp SSE over HTTP with timing metadata.</li>
-        <li>Per-provider TTS mode picking for Fish and Inworld transports.</li>
-        <li>Early Chunks mode for fast first speech without waiting for the full reply.</li>
-        <li>Fish S2-oriented controls: latency, chunk length, sample rate, format, transport, and continuity.</li>
-        <li>Inworld HTTP and WebSocket streaming with delivery, timestamp, and buffer controls.</li>
-        <li>Browser-local Piper synthesis with cached ONNX voices.</li>
-        <li>Always-on browser/Electron playback with optional Discord collab or external-device mirroring.</li>
-        <li>Audible browser benchmark for comparing transports and regressions.</li>
-      </ul>
-    </td>
-  </tr>
-  <tr>
-    <td width="50%" valign="top">
-      <h3 align="center">Avatar</h3>
-      <ul>
-        <li>VRM stage with bundled, uploaded, and saved local avatars.</li>
-        <li>Three.js/VRM animation playback and non-repeating shuffle sequencing.</li>
-        <li>wLipSync/audio-reactive mouth ownership with audio-clock playback gating.</li>
-        <li>Hybrid and wLipSync Direct mouth modes plus smoothing, mouth gain, and volume influence tuning.</li>
-        <li>Provider timing metadata routed toward captions/subtitles where available.</li>
-        <li>Emotion telemetry with model emotion, VAD, expression, animation, mouth weights, and final expression snapshots.</li>
-      </ul>
-    </td>
-    <td width="50%" valign="top">
-      <h3 align="center">Stream</h3>
-      <ul>
-        <li>Frontend Twitch direct IRC intake without Twitch API keys.</li>
-        <li>Local chat and Twitch chat queue behavior.</li>
-        <li>Command handling, membership events, and optional backend overlay runtime.</li>
-        <li>Stream transcription/ASR controls.</li>
-        <li>Discord collaboration voice receive with DAVE, VAD, speaker attribution, and Fish/OpenRouter/Vercel transcription.</li>
-        <li>Optional best-effort waifu speech output and readable reply text for collaborators in the connected voice session.</li>
-        <li>Video frame capture for vision-capable models.</li>
-      </ul>
-    </td>
-  </tr>
-  <tr>
-    <td width="50%" valign="top">
-      <h3 align="center">Memory</h3>
-      <ul>
-        <li>Ladybug/GRILLO backend memory runtime.</li>
-        <li>Relationship memory, diary/reflection entries, candidate memories, semantic records, vector records, and graph state.</li>
-        <li>Activity logs and worker context traces for GRILLO passes.</li>
-        <li>Local Transformers embedding mode plus provider embedding fallback/filtering.</li>
-        <li>Memory debug views and manual worker controls.</li>
-      </ul>
-    </td>
-    <td width="50%" valign="top">
-      <h3 align="center">Setup</h3>
-      <ul>
-        <li>Browser Account tab provider-key vault.</li>
-        <li>Voice Lab provider catalog, persona voice binding, and provider voice creation surfaces.</li>
-        <li>Local transfer backup import/export for keys, saved VRMs, personas, scoped chat histories, relationship memory, settings, and Voice Lab voices.</li>
-        <li>Import/export workers to avoid blocking the VRM stage on large backups.</li>
-      </ul>
-    </td>
-  </tr>
-</table>
-
----
-
-<h2 align="center" id="provider-and-model-support">Provider and Model Support</h2>
-
-<p align="center">
-  The rebuild treats provider metadata as runtime safety data, not just labels.
-  Model capabilities decide what the UI shows and which request shape the backend
-  should use.
-</p>
-
-### Provider Compatibility
-
-The OpenRouter lane loads model metadata
-and uses it to avoid the old failure mode where a model is selected because it
-looks capable but then rejects the request shape at runtime.
-
-- **Catalog-first model loading:** the AI tab can load OpenRouter's model list,
-  keep useful metadata beside each model, and use that metadata to annotate the
-  picker instead of treating every model as a generic chat endpoint.
-- **Provider-aware request lane:** OpenRouter Responses models and Vercel
-  Gateway models share the same UI flow, but the request body is shaped per
-  provider so compatibility fixes do not leak across lanes.
-- **OpenRouter Routing modes:** selected OpenRouter models can use Auto,
-  Fastest latency, Highest throughput / Nitro, or Pinned provider routing.
-  Fastest latency sends `provider.sort=latency`; throughput sends
-  `provider.sort=throughput`; pinned sends `provider.only` with a provider slug
-  or comma-separated slug list, with optional fallback if the pinned provider
-  fails.
-- **Structured output gating:** structured replies are only used for OpenRouter
-  models that advertise structured output support. Other models use the text
-  lane with metadata parsing.
-- **Capability tags:** the picker surfaces useful model traits such as tools,
-  reasoning, vision/image input, file input, context length, max tokens,
-  implicit caching, and embedding-model eligibility.
-- **Vision and file readiness:** model metadata is tracked so image/video-frame
-  context and future file-input surfaces can avoid unsupported models before the
-  request is sent.
-- **Tool compatibility:** main-chat Tavily tool requests are kept separate from
-  memory-worker tools and shaped for OpenRouter's stricter tool parameter rules.
-- **Embedding filtering:** embedding model selection can use provider metadata
-  while still supporting browser-local Transformers embeddings.
-- **Reasoning-aware memory backlog:** reasoning-capable models are detected now;
-  the next step is using provider-safe reasoning summaries as memory signals
-  without storing hidden chain-of-thought.
-- **Defensive fallback:** unknown or incomplete metadata falls back toward
-  plain text/meta parsing rather than forcing schema or tool modes that can
-  trigger provider validation errors.
-
-### High-Level Feature Surface
-
-| Surface | What it covers |
+| Surface | Implemented feature set |
 | --- | --- |
-| Account | Browser-stored provider keys for OpenRouter, Vercel Gateway, Fish, Inworld, Tavily, and other providers; backend env keys are fallback only. |
-| AI | OpenRouter Routing modes, model catalog refresh, OpenRouter capability badges, structured/text lane selection, POML prompt configuration, tool toggles, and streaming reply settings. |
-| TTS | Per-provider mode selection for Fish WebSocket, Fish Timestamp SSE, Inworld HTTP, Inworld WebSocket, Early Chunks, latency controls, timestamp controls, continuity controls, and audible benchmark comparison. |
-| Avatar | VRM loading/saving, stage controls, animation categories, expression resolution, talking/idle animation hooks, mouth ownership, and emotion telemetry. |
-| Twitch | Frontend direct IRC, local/Twitch queue intake, command handling, membership/event reactions, transcription hooks, and video-frame context for vision models. |
-| Discord Voice | Collaboration voice I/O only: DAVE receive, VAD, per-speaker transcription into the normal conversation pipeline, readable reply text, and optional TTS output. |
-| Memory | LadybugDB, GRILLO worker passes, relationship profile, candidate memories, diary/reflection, semantic/vector records, embeddings, graph view, activity logs, and worker traces. |
-| Voice Lab | Provider voice catalogs, persona voice binding, voice creation surfaces, and backup/restore of voice settings. |
-| Local Backup | Import/export of settings, provider keys, personas, chat scopes, saved VRMs, relationship memory, and voice lab data with worker-backed large-file handling. |
+| **Account** | Browser IndexedDB key vault for OpenAI utility, OpenRouter, Vercel AI Gateway, Fish Audio, Inworld, and Tavily; complete local transfer backup import/export. |
+| **AI** | OpenRouter Responses and Vercel AI Gateway, model catalog discovery, capability tags, provider routing, structured/text reply lanes, HTTP streaming, POML prompts, runtime situation injection, prompt-cache telemetry, and optional Tavily tools. |
+| **TTS** | Fish realtime WebSocket, Fish Timestamp SSE, Inworld HTTP/WebSocket, browser-local Piper, early speech chunking, audible benchmarks, browser/Electron playback, optional output mirroring, captions, and wLipSync. |
+| **Voice Lab** | Fish and Inworld catalogs, persona voice binding, Fish Voice Design, Fish zero-shot voice creation, Inworld Voice Design/publishing, Inworld cloning, sample audition, and backup/restore. |
+| **Avatar** | Bundled/uploaded/saved VRMs, camera and stage controls, gaze, spring bones, MToon/PBR tuning, lighting, outlines, color correction, blink, and framing. |
+| **Animation** | VRMA/BVH/FBX catalog, categorized idle/listening/talking/reaction/event clips, non-repeating shuffle, crossfades, imported animation review, and emotion-triggered playback. |
+| **Emotion Log** | Model emotion, requested face, VAD affect, resolved expression, reaction animation, applied/skipped state, peak weight, and live mouth telemetry. |
+| **Twitch** | Anonymous browser IRC without a Twitch API key, direct/all-chat queues, stream commands, adaptive batching, stream-audio transcription, and vision-frame context. |
+| **Discord** | Optional collaboration voice bridge with DAVE receive, Opus decode, energy VAD, overlapping-speaker handling, Fish/OpenRouter/Vercel transcription, interruptions, readable replies, and optional TTS mirroring. |
+| **Memory** | LadybugDB/JSON fallback, GRILLO background worker, semantic recall, evidence ledger, temporal claims, relationship state, diary, graph projections, provenance diagnostics, repair queue, migration tools, and detailed inspection UI. |
 
-<table align="center">
-  <tr>
-    <th>Area</th>
-    <th>Current Surface</th>
-  </tr>
-  <tr>
-    <td>LLM</td>
-    <td>OpenRouter Responses, Vercel Gateway, streamed text, OpenRouter Auto/latency/throughput/pinned-provider routing, structured/text lane gating, provider-specific request shaping.</td>
-  </tr>
-  <tr>
-    <td>OpenRouter Metadata</td>
-    <td>Model picker tags for structured outputs, tools, reasoning, implicit cache, vision/image input, file input, context length, max tokens, and embedding eligibility.</td>
-  </tr>
-  <tr>
-    <td>Structured Output Safety</td>
-    <td>Models that advertise structured output support can use the structured lane; unsupported or unknown OpenRouter models fall back to text/meta parsing to avoid provider errors.</td>
-  </tr>
-  <tr>
-    <td>Embedding Models</td>
-    <td>Embedding picker can filter provider catalogs by metadata while preserving browser-local Transformers embeddings as the local-first default.</td>
-  </tr>
-  <tr>
-    <td>Reasoning Models</td>
-    <td>Reasoning-capable models are tagged. Future memory work will capture provider-safe reasoning summaries as memory signals when available, without storing hidden chain-of-thought.</td>
-  </tr>
-  <tr>
-    <td>Tools</td>
-    <td>Main chat Tavily search/extract/crawl path plus GRILLO worker tools. OpenRouter tool requests are shaped for stricter provider compatibility.</td>
-  </tr>
-  <tr>
-    <td>TTS</td>
-    <td>Fish WebSocket, Fish Timestamp SSE, Inworld HTTP, Inworld WebSocket, browser-local Piper, additive output routing, and browser benchmark.</td>
-  </tr>
-  <tr>
-    <td>Captions and Mouth</td>
-    <td>Provider word timing when available, estimated subtitles as fallback, wlipsync owns live mouth movement gated on the Web Audio clock, with Hybrid/Direct modes and smoothing/gain/volume-influence tuning in the TTS tab.</td>
-  </tr>
-  <tr>
-    <td>Memory</td>
-    <td>Ladybug/GRILLO, semantic indexing, diary/reflection, relationship profile, activity logs, worker traces.</td>
-  </tr>
-</table>
+---
+
+<h2 align="center" id="ai-runtime">AI Runtime</h2>
+
+### Provider and model compatibility
+
+WebWaifu4 uses model metadata as runtime safety data, not decoration. The model
+picker displays capability tags for structured JSON, vision, files, video,
+reasoning, tools, implicit caching, model type, and context window. Image, video,
+embedding, OpenAI o1, and OpenAI pro entries are filtered out of the normal chat
+picker where they do not belong.
+
+- **OpenRouter Responses:** Auto, Fastest latency, Highest throughput/Nitro, or
+  pinned provider slug lists. Pinned routing can allow or reject provider fallback.
+- **Vercel AI Gateway:** Verified auto, fastest first token, highest throughput,
+  lowest cost, or pinned provider order with optional fallback.
+- **Provider-specific shaping:** OpenRouter and Vercel use separate provider
+  options. Compatibility work in one lane does not silently change the other.
+- **Structured reply gating:** OpenRouter uses structured output only when the
+  model metadata advertises it. Unsupported models use streamed text plus a
+  `<yw-meta>` metadata block. Vercel uses catalog metadata when present and its
+  provider-compatible structured lane otherwise.
+- **Reasoning defaults:** OpenRouter reasoning effort is disabled for chat.
+  DeepSeek thinking is disabled on Vercel, and other Vercel reasoning models use
+  minimal effort by default so visible replies are not starved by hidden work.
+- **Defensive provider routing:** Structured or tool requests require compatible
+  provider parameters. Verified DeepSeek V4 Flash/Pro provider orders are applied
+  by the Vercel lane unless the user chooses an explicit routing mode.
+
+### Conversation and prompt pipeline
+
+- Replies stream over HTTP as visible deltas. Metadata is parsed separately and
+  is never intentionally read aloud.
+- Conversation context is app-owned and stateless at the provider boundary. Each
+  local, Twitch, and Discord conversation has its own scoped state and a rolling
+  maximum of 36 normalized chat messages.
+- A **Runtime Situation** field can inject temporary scene context such as "we are
+  privately testing" or "we are live on stream" without turning it into durable
+  persona text.
+- POML renders the dynamic system prompt. The current animation catalog is not
+  dumped into the LLM context; the model emits emotion metadata and the app maps
+  that metadata to expressions and reactions downstream.
+- Reply length, temperature, maximum output, tool mode (`Off`, `Auto`, or
+  `Required`), and maximum tool rounds are adjustable.
+- Tavily search/extract/crawl tools are available to main chat and remain separate
+  from GRILLO's memory tools.
+- Prompt cache and cached-token telemetry are visible where the provider reports
+  them.
+
+---
+
+<h2 align="center" id="realtime-voice-and-tts">Realtime Voice and TTS</h2>
+
+Speech starts from the earliest acceptable streamed text chunk. Audio is decoded
+and scheduled in the browser/Electron Web Audio pipeline, which is also the source
+of truth for captions, mouth motion, and stream capture.
+
+### Engines and transports
+
+| Engine | Modes and controls |
+| --- | --- |
+| **Fish Audio** | Realtime WebSocket or Timestamp SSE over HTTP; `s2.1-pro-free`, `s2-pro`, and `s1`; personal/public/all voice catalogs or manual reference ID; PCM, MP3, WAV, or Opus; 16 kHz through 48 kHz sample rates; balanced/fastest latency; previous-chunk conditioning; fast phrase, safe phrase, or eager raw live chunking; 100-300 character chunk length. |
+| **Inworld** | HTTP streaming or WebSocket; catalog or manual voice ID; adjustable 8-96 kHz sample rate; model ID; Stable, Balanced, Creative, or Expressive delivery; word, character, or no timestamps; synchronous/asynchronous timestamp strategy; 20-300 character buffer threshold; 0-10,000 ms buffer delay; auto mode. |
+| **Piper Web** | Browser-local synthesis with a voice catalog and cached/loadable ONNX voice models. The UI reports the selected and active local voice. |
+
+Remote pacing modes are exposed rather than hidden:
+
+- **Fish live bridge:** one Fish realtime stream receives speakable LLM deltas.
+- **Stable Stream:** prioritizes continuity and natural phrase boundaries.
+- **Early Chunks:** lowers perceived latency by starting on an early safe phrase.
+- **Sentence Chunks:** waits for complete sentence boundaries.
+
+### Playback and output routing
+
+- Enable/disable speech and auto-speak assistant replies independently.
+- Test the selected voice, speak the last reply, or stop current audio.
+- Browser playback rate is adjustable from 0.7x to 1.35x and gain from 0x to 2x.
+- Browser/Electron playback always remains active because it drives the avatar and
+  is the audio source a local stream captures.
+- Optional outputs are additive: mirror to Discord for a remote collaborator or
+  mirror to a selected external device. These side outputs are best-effort and do
+  not block the primary browser audio path.
+- Discord TTS is intended for collaboration. Voice input can still come from
+  Discord while the reply plays only through the local browser/Electron app.
+
+### Timing, captions, and mouth motion
+
+- Fish Timestamp SSE and Inworld timestamp modes carry provider word timing when
+  available. The shared speech-timing pipeline derives phonemes/visemes where the
+  provider does not supply the final mouth representation.
+- NDJSON speech events carry audio, timing, and stream status through one playback
+  path. Captions use provider timing when possible and estimated timing as a
+  fallback.
+- **wLipSync Hybrid** blends analyser energy with A/I/U/E/O mouth weights.
+- **wLipSync Direct** uses the raw A/I/U/E/O output.
+- Smoothing, mouth gain, and volume influence are adjustable. Mouth updates are
+  gated by the Web Audio clock so queued speech does not animate early.
+
+### Audible benchmark
+
+The built-in benchmark is not a synthetic request timer. It plays each result and
+reports first-audio latency, total network time, playback time, chunk count, bytes,
+word/phoneme counts, and errors. Benchmark text and rounds (1-10) are adjustable,
+and the complete Markdown/JSON result can be copied for comparison.
+
+---
+
+<h2 align="center" id="voice-lab">Voice Lab</h2>
+
+Voice Lab is a provider-aware voice workspace, not only a voice ID textbox.
+
+### Fish Audio
+
+- Browse Fish voice catalogs and load an existing entry into the voice draft.
+- **Voice Design** calls Fish `voice-design-1` with a natural-language voice
+  description, optional preview sentence/language, and 1-4 candidates. Each
+  candidate can be auditioned before selection.
+- The backend request surface also validates design speed, generation steps,
+  guidance scales, and seed. The current UI intentionally exposes the core prompt,
+  preview text, language, and candidate count rather than every advanced field.
+- A selected designed candidate can become the reference sample for a reusable
+  private Fish voice.
+- Zero-shot/custom voice creation accepts an audio sample up to 20 MB plus an
+  optional transcript, language, description, and tags. Fast training and quality
+  enhancement are supported by the backend request surface.
+
+### Inworld
+
+- Browse the Inworld voice catalog or load an existing provider voice into a
+  reusable draft.
+- **Voice Design** accepts a 30-250 character design prompt, required preview text,
+  and 1-3 previews. A selected preview can be published as an Inworld voice.
+- Custom voice cloning accepts a sample up to 20 MB with language, transcript,
+  description, tags, and optional background-noise removal.
+
+Saved Voice Lab entries include provider/model IDs, notes, language/accent/style
+details, emotional tone, stability, and expressiveness. Voices can be attached to
+personas, made the persona default, auditioned, and included in local backup/restore.
+If a persona has no remote binding, it can fall back to its bundled Piper preset.
+
+---
+
+<h2 align="center" id="avatar-animation-and-emotion">Avatar, Animation, and Emotion</h2>
+
+### VRM stage
+
+- Load bundled avatars, upload a VRM, or reuse a locally saved avatar. Bundled
+  options include Riko variants, Hikari/Cool Hikky, Neuro-sama, and Neuro Clown.
+- Full-body and half-body framing, model position/scale/rotation, locked or custom
+  camera rigs, camera target/offset/FOV, pointer gaze, and audience gaze.
+- VRM spring bones update with the render loop. Auto blink, expression weight,
+  animation crossfade, and arm/torso clipping guards are adjustable.
+- Backgrounds support persona auto-selection, image/URL, chroma key, and transparent
+  output, with overlay/filter and transparency-test controls for OBS workflows.
+
+### Material and scene tuning
+
+- Shading presets retune the model's existing materials rather than replacing the
+  VRM material system.
+- Anime outline color, thickness, alpha, and scene exposure.
+- Optional PBR roughness, metalness, specular, clearcoat, clearcoat roughness, and
+  environment light controls.
+- Optional MToon shade color/shift, toony response, GI equalization, rim color,
+  rim lift/power, and light mix.
+- RGB color correction plus key, fill, rim, hemisphere, and ambient lighting.
+
+### Animation system
+
+- Built-in and imported VRMA, BVH, and FBX animation playback.
+- Catalog groups for base idle, listening, talking, emotion reactions, events,
+  gestures, movement/pose, and clips awaiting review.
+- Purpose, tags, loop eligibility, and experimental/review state are editable.
+- Safe ambient idle/talking clips use a non-repeating random-bag shuffle. Weighted
+  animation selection is not used.
+- Emotion clips trigger from model emotion metadata, then crossfade back into the
+  ambient sequence. The LLM does not need to know raw animation filenames.
+
+### Emotion telemetry
+
+The Emotion Log retains the latest 20 events and summarizes model emotion,
+requested face, valence/arousal/dominance affect, final resolved expressions,
+requested and peak weight, reaction animation, applied/pending/skipped status, and
+live A/I/U/E/O mouth weights. This is both a debugging surface and a way to verify
+that structured reply metadata reached the avatar.
+
+---
+
+<h2 align="center" id="live-surfaces">Twitch and Discord</h2>
+
+### Twitch
+
+- Anonymous, read-only Twitch IRC runs in the browser and does not require a
+  Twitch API key.
+- Switch channels, show overlay chat, keep a trusted local controller, and choose
+  direct-message or all-chat batching behavior.
+- Stream mode includes AI reply toggles, command handling, mention thresholds,
+  adaptive batching based on active chatters, queue limits, and cooldown controls.
+- Stream-audio ASR can use Fish or an OpenRouter transcription model. Sampling
+  length, interval, and transcript snippets are configurable. The backend requires
+  FFmpeg plus yt-dlp or streamlink for this lane.
+- Stream vision captures JPEG frames at adjustable detail/interval/age and only
+  attaches them when the selected chat model supports image input.
+- Stream transcripts are ambient context, not fake user chat messages.
+
+### Discord collaboration voice
+
+Discord is an optional voice surface for collaboration, not a replacement chat
+runtime or a required dependency.
+
+- Bot token, guild, and voice channel are configured from the Discord tab.
+- `@discordjs/voice` receives DAVE-encrypted voice; Opus is decoded locally.
+- Deterministic energy VAD separates speech, and per-speaker queues preserve each
+  speaker while allowing different speakers to overlap.
+- Fish, OpenRouter, or Vercel can transcribe the captured utterance. The model and
+  language hint are selectable.
+- VAD threshold, end silence, minimum speech, and maximum utterance length are
+  adjustable.
+- Interruption policy can ignore speech, stop the current reply, or barge in.
+  Trusted controller IDs can restrict who controls the character.
+- Reply text can be posted into Discord. TTS mirroring is optional and intended
+  for remote collaborators; local browser/Electron audio and lip sync remain live.
+
+Discord voice and all ASR lanes are off until explicitly configured and enabled.
+
+---
+
+<h2 align="center" id="grillo-memory">GRILLO Memory</h2>
+
+GRILLO is an optional background memory worker backed by LadybugDB, with a pinned
+JSON fallback when the native backend is unavailable. It is deliberately isolated:
+a memory failure must not break chat streaming, TTS, mouth motion, animation, or
+provider routing.
+
+### Working memory model
+
+- Scoped local, Twitch, and Discord turns preserve source and participant identity.
+- Context packets have separate lanes for background information, channel history,
+  relationship memory, recalled memories, thoughts, and output instructions.
+- Native semantic recall embeds the current query and filters vectors by exact
+  embedding model/provider/version generation. Known incompatible generations are
+  never mixed.
+- Browser-local Transformers embeddings are supported, with provider embedding
+  catalogs and fallback when selected.
+- Per-lane and global budgets produce deterministic inclusion/drop/duplicate
+  receipts through explicit diagnostic surfaces.
+
+### Background worker
+
+The worker can run automatically by message cadence or manually from the Memory
+tab. Available beats are:
+
+`extraction` | `relationship` | `reflection` | `consolidation` | `curiosity` |
+`tag_elaboration` | `compaction` | `semantic_indexing`
+
+Manual controls can run the complete worker, extraction only, an individual beat,
+consolidation, compaction, or semantic indexing. The tab also shows the configured
+worker provider/model, cadence, current-scope backlog, last embedding call, and
+backend runtime state.
+
+Its tools can read/search memory, list/write candidates, propose canonical claims,
+write diary entries and memory blocks, patch relationship profiles, read/update
+emotion, insert archival memory, and list/transition repair tasks. Worker model
+output uses provider-compatible JSON object mode followed by local Zod validation.
+
+Stored and inspectable records include turn events, candidate memories, memory
+blocks, slots, slot patches, diary entries, relationship profiles/facts, emotion
+state, semantic records, vectors, activity logs, and worker context traces.
+
+### Evidence ledger and temporal claims
+
+- Raw turn, observation, feedback, correction, and external evidence records are
+  append-only.
+- Canonical claims can represent facts, preferences, opinions, relationships,
+  decisions, goals, boundaries, threads, and bond signals.
+- Claim operations are `ADD`, `UPDATE`, `SUPERSEDE`, `NOOP`, `REJECT`, and `DEFER`.
+- Writes enforce evidence, scope, participant identity, temporal validity, exact
+  supersession targets, duplicate no-ops, and conflict handling.
+- The deterministic ledger projector rebuilds beliefs, relationship claims, slots,
+  and a provenance timeline with a stable SHA-256 generation.
+- Feedback/correction endpoints append immutable evidence and enqueue scoped repair
+  work. The repair queue replays open, deferred, and resolved state.
+
+### Inspection and migration
+
+The Memory tab exposes backend counts, graph scopes/participants/personas/edges,
+turns, candidates, slots/patches, diary, worker activity/traces, relationships,
+blocks, emotion, semantic/vector records, prompt context, and reset controls.
+
+The backend also exposes read-only ledger projections, coverage audits, prompt
+shadow comparison, deterministic evidence migration planning, append-only migration
+application/receipts, context provenance, and memory-sufficiency diagnostics.
+
+### Current boundaries
+
+These boundaries are intentional and important:
+
+- The live prompt still uses the established blocks, slots, relationships, diary,
+  and semantic projections. The canonical ledger is inspectable but has not replaced
+  the live prompt source.
+- Migration backfills deterministic turn evidence only. It does not invent claims.
+- Memory-sufficiency diagnostics are opt-in, do not run during normal chat preflight,
+  do not trigger a second retrieval, and do not write repair events.
+- Repair tasks from manual feedback/corrections work; automatic diagnosis for weak
+  grounding, missing lanes, dropped evidence, and unresolved questions is pending.
+- Extraction and semantic-index watermarks are per scope. A real cross-process
+  atomic worker lease is not implemented, so multi-instance GRILLO workers should
+  not be treated as coordinated.
+- Switching the live prompt to ledger projections requires a separate, reversible,
+  per-scope migration decision.
+
+---
+
+<h2 align="center" id="local-data-and-backups">Local Data and Backups</h2>
+
+The local transfer backup includes settings, browser provider keys, personas,
+scoped chat histories, relationship/memory state, saved custom VRMs, and Voice Lab
+entries. Large import/export work runs through workers so restoring a backup does
+not block the VRM render loop. The format is intended for moving one complete local
+setup between the browser and desktop app.
+
+Ladybug memory data is stored under `.webwaifu4` by the backend. Full scoped deletion
+removes only the requested scope across native and JSON-fallback record sets.
 
 ---
 
 <h2 align="center" id="quick-start">Quick Start</h2>
 
+Requires Node.js 22 or newer.
+
 ```powershell
+git clone https://github.com/xsploit/Waifu4.git
+cd Waifu4
 npm install
 npm run dev
 ```
 
-Requires Node.js 22 or newer.
+Open `http://localhost:5173/`.
 
-Open:
-
-```text
-http://localhost:5173/
-```
-
-Common checks:
+Common verification:
 
 ```powershell
 npm test -- --run
+npm run typecheck
 npm run build
 npm run smoke:runtime
 ```
 
-Release gate:
+Full release gate:
 
 ```powershell
 npm run audit:release
 ```
 
-The release audit checks tracked files for accidental build output, legacy
-reference folders, local backup JSON, database files, env files, and key-shaped
-literals, then runs dead-code audit, typecheck, the full test suite, the
-production build, built-dist artifact scanning, and the runtime smoke.
+The release audit scans tracked source and built output for local backups,
+databases, environment files, key-shaped literals, build artifacts, and legacy
+reference folders, then runs dead-code audit, typecheck, the full test suite,
+production build, distribution audit, and runtime smoke.
 
 ---
 
 <h2 align="center" id="desktop-release">Desktop Release</h2>
 
-The Windows Electron release packages the same web frontend with an owned local
-backend and bundled Node runtime. It supports the full editor window, a
-transparent desktop avatar window, and an OBS-friendly overlay window without
-changing the browser Account-tab key flow.
-
-Build and verify locally:
+The Windows Electron release packages the same frontend with an owned local backend
+and bundled Node runtime. It includes the full editor, a transparent desktop avatar
+window, and an OBS-friendly overlay window while preserving the Account-tab key
+flow.
 
 ```powershell
 npm run desktop:dist
@@ -307,14 +461,12 @@ npm run smoke:desktop-owned-backend-reuse
 npm run smoke:desktop-relaunch
 ```
 
-The desktop build produces an NSIS installer and a portable executable for a
-GitHub release.
-The desktop backend reuses a matching WebWaifu-owned process when available and
-selects another local port when the default port is occupied.
+The build produces an NSIS installer and portable executable. The desktop backend
+can reuse a matching WebWaifu-owned process and selects another local port when the
+default is occupied.
 
-If the repo lives in a OneDrive-synced or indexed folder (for example
-`Documents`), electron-builder can fail with `EPERM` renaming
-`win-unpacked.tmp`. Redirect the output to an unsynced path instead:
+If an indexed or synchronized `Documents` folder causes an electron-builder
+`EPERM` rename failure, redirect output to an unsynchronized path:
 
 ```powershell
 npm run build; npm run desktop:runtime
@@ -325,98 +477,56 @@ npx electron-builder --config.directories.output=C:/dev/ww4-release
 
 <h2 align="center" id="vps-deploy">VPS Deploy</h2>
 
-The intended hosted shape is a normal long-running VPS process, not serverless:
+WebWaifu4 expects a normal long-running process for hosted operation:
 
 ```text
-Oracle Cloud Always Free ARM VPS
-└── Docker Compose
-    ├── webwaifu app container
-    ├── Caddy reverse proxy
-    └── named volume for .webwaifu4 memory data
+VPS
+`-- Docker Compose
+    |-- WebWaifu4 app container
+    |-- Caddy reverse proxy
+    `-- named volume for .webwaifu4 memory data
 ```
 
-The app container builds the Vite frontend, serves `dist/` from the Node backend,
-and keeps `/api/*` compatible with the local Vite proxy shape. Caddy fronts the
-same container for HTTPS and WebSocket proxying.
-
-Minimal deploy:
-
 ```bash
-git clone https://github.com/xsploit/webwaifu4-rebuild.git /opt/waifu
+git clone https://github.com/xsploit/Waifu4.git /opt/waifu
 cd /opt/waifu
 WEBWAIFU_SITE_ADDRESS=waifu.example.com docker compose up -d --build
 ```
 
-For raw IP/local testing:
-
-```bash
-docker compose up -d --build
-```
-
-Production routes:
-
-```text
-https://waifu.example.com/
-wss://waifu.example.com/ws
-https://waifu.example.com/api/ai/chat
-https://waifu.example.com/api/tts/stream
-```
-
-Notes:
-
-- Browser Account-tab keys remain the normal provider-key path.
-- Compose environment keys are optional backend fallback values.
-- `.webwaifu4` memory data is persisted in the `webwaifu_data` Docker volume.
-- Caddy handles TLS and WebSocket upgrade proxying through `reverse_proxy`.
-- Set `WEBWAIFU_SITE_ADDRESS` to the real domain once DNS points at the VPS.
-
-Discord voice requires a bot token, guild ID, voice-channel ID, and a key for
-the selected Fish, OpenRouter, or Vercel transcription provider. Speech output
-to Discord is an optional collaboration mirror and a best-effort, nonblocking
-sidecar. Browser/Electron playback remains active for audio, stream capture,
-and lipsync, and never waits for the Discord sink.
+Caddy serves HTTPS and WebSocket upgrades while the Node backend serves the Vite
+build and `/api/*`. Browser Account-tab keys remain the normal provider-key path;
+Compose environment keys are optional fallbacks. The `webwaifu_data` volume
+persists `.webwaifu4` memory data.
 
 ---
 
-<h2 align="center" id="status">Status</h2>
+<h2 align="center" id="release-status">Release Status</h2>
 
-The main browser and desktop feature surfaces are implemented. Release checks
-cover source scanning, type safety, tests, production build output, runtime
-smoke tests, and packaged desktop behavior; provider-backed features still
-require their corresponding credentials and live-service verification.
+The main browser and Windows desktop surfaces are implemented. Local release gates
+cover source scanning, type safety, tests, production output, runtime startup, and
+packaged desktop behavior. Provider-backed features still require their matching
+credentials and live-provider verification; a passing unit test cannot guarantee
+that an external catalog or model has not changed.
 
-<table align="center">
-  <tr>
-    <th>Keep</th>
-    <th>Improve</th>
-  </tr>
-  <tr>
-    <td>Original frontend tab shape and visual workflow.</td>
-    <td>Provider compatibility, TTS latency, memory safety, and VRM ownership rules.</td>
-  </tr>
-  <tr>
-    <td>Browser Account-tab keys as the main provider-key path.</td>
-    <td>Model metadata, OpenRouter edge cases, and provider-specific request shaping.</td>
-  </tr>
-  <tr>
-    <td>Fish/Inworld as primary TTS providers.</td>
-    <td>Timing metadata, captions, and silence-gap detection. Mouth interpretation now has Hybrid/Direct modes with user tuning.</td>
-  </tr>
-</table>
+### Current backlog
 
-## Backlog
+- Add direct browser microphone voice chat. Discord voice intake exists; Twitch
+  transcription remains stream-audio sampling.
+- Add automatic GRILLO repair diagnosis and a real persistent cross-process lease.
+- Keep the ledger-to-live-prompt switch gated until repeated participant-aware
+  shadow reports prove parity and a rollback path exists.
+- Add silence/gap detection to the audible TTS benchmark.
+- Continue real-provider verification for Voice Lab, Tavily, Inworld, Fish,
+  OpenRouter, Vercel routing, and transcription models.
+- Continue Piper model packaging, external-device/Discord output checks, and
+  Windows transparent-window/GPU release testing.
 
-- Add browser microphone voice chat. Discord voice intake is implemented; Twitch transcription remains stream-audio sampling.
-- Capture provider-safe reasoning summaries as memory signals when models expose them; do not store hidden chain-of-thought.
-- Persist and expose richer GRILLO reasoning/debrief data where useful, beyond compact activity logs and worker traces.
-- Add silence/gap detection to the browser TTS benchmark.
-- Continue real-key verification for Voice Lab, Tavily tools, Inworld, and OpenRouter edge cases.
-- Continue validating Piper voice/model packaging and Discord output routing across browser and desktop builds.
-- Continue desktop release testing across Windows GPU and transparent-window configurations.
+### Ground rules
 
-## Ground Rules
-
-- Keep the look and tab layout close to the original app.
-- Do not replace browser Account-tab keys with backend-only environment configuration.
-- Benchmark and audible TTS results override code-shape guesses.
-- Do not publish local backup JSON files or real provider keys.
+- Preserve the original frontend shape and settings workflow.
+- Keep browser Account-tab keys as the primary credential path.
+- Keep chat and TTS latency paramount; optional memory and Discord side work must
+  not block the live response/audio path.
+- Let audible benchmarks and runtime traces settle TTS behavior instead of code
+  shape alone.
+- Do not publish local transfer backups, databases, or real provider keys.
