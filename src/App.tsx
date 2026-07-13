@@ -6622,9 +6622,6 @@ function App() {
         }
 
         const responseReplyMetadata = response.replyMetadata ?? null;
-        if (responseReplyMetadata) {
-          playAssistantMetadataAnimation(responseReplyMetadata, stateKey);
-        }
         const assistantReply = await speechPlayer.finish(response.choices[0]?.message.content);
         if (chatRequestRunRef.current !== requestRun) {
           speechPlayer.cancel?.();
@@ -6649,9 +6646,7 @@ function App() {
             console.warn('[Discord] Reply text delivery failed:', error);
           });
         }
-        if (!responseReplyMetadata) {
-          playAssistantMetadataAnimation(assistantReply.metadata, stateKey);
-        }
+        playAssistantMetadataAnimation(responseReplyMetadata ?? assistantReply.metadata, stateKey);
         const completedAssistantMessage = {
           ...assistantMessage,
           content: assistantContent,
