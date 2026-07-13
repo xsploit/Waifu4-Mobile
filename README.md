@@ -8,6 +8,10 @@ WebWaifu4 Rebuild combines an LLM chat runtime, Fish/Inworld/Piper TTS, a VRM
 avatar, Twitch intake, Discord collaboration voice, memory, tools, captions,
 and local backup restore while keeping the original frontend look and tab workflow.
 
+### Watch WebWaifu4
+
+https://github.com/user-attachments/assets/3579153a-26cf-45ba-b0b4-2de99c45b9fd
+
 <br/>
 
 ![local-first](https://img.shields.io/badge/local--first-browser_keys-ff3b6b?style=for-the-badge)
