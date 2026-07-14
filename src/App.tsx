@@ -216,6 +216,7 @@ import {
   parseDiscordStatus,
   shouldConnectOverlaySocket,
   type OverlayDiscordTranscript,
+  type OverlayDiscordStatus,
   type OverlayServerEvent,
 } from './lib/stream/overlay-events';
 import { DirectTwitchIrcClient, type DirectTwitchChatMessage } from './lib/twitch/direct-irc';
@@ -2202,6 +2203,7 @@ function App() {
   const [discordConnectionStatus, setDiscordConnectionStatus] =
     useState<DiscordConnectionStatus>('disconnected');
   const [discordStatusDetail, setDiscordStatusDetail] = useState('Discord bridge idle.');
+  const [discordRuntimeStatus, setDiscordRuntimeStatus] = useState<OverlayDiscordStatus | null>(null);
   const [twitchConnectionLabel, setTwitchConnectionLabel] = useState(
     DIRECT_TWITCH_CHAT_ENABLED ? 'Connecting' : 'Offline',
   );
@@ -6953,6 +6955,7 @@ function App() {
       }
       setDiscordConnectionStatus(status.status);
       setDiscordStatusDetail(status.detail || 'Discord bridge status updated.');
+      setDiscordRuntimeStatus(status);
     } catch (error) {
       setDiscordConnectionStatus('error');
       setDiscordStatusDetail(
@@ -6998,6 +7001,7 @@ function App() {
       const status = parseDiscordStatus(payload);
       setDiscordConnectionStatus(status?.status ?? 'connected');
       setDiscordStatusDetail(status?.detail || 'Discord voice bridge connected.');
+      setDiscordRuntimeStatus(status);
     } catch (error) {
       setDiscordConnectionStatus('error');
       setDiscordStatusDetail(
@@ -7021,6 +7025,7 @@ function App() {
           const status = parseDiscordStatus(await response.json().catch(() => null));
           setDiscordConnectionStatus(status?.status ?? 'disconnected');
           setDiscordStatusDetail(status?.detail || 'Discord voice bridge disconnected.');
+          setDiscordRuntimeStatus(status);
         }
       } catch (error) {
         if (!silent) {
@@ -7401,6 +7406,7 @@ function App() {
         if (parsed.type === 'discord-status') {
           setDiscordConnectionStatus(parsed.payload.status);
           setDiscordStatusDetail(parsed.payload.detail || 'Discord bridge status updated.');
+          setDiscordRuntimeStatus(parsed.payload);
           return;
         }
 
@@ -7895,6 +7901,7 @@ function App() {
               discordConnectionStatus={discordConnectionStatus}
               discordSettings={discordSettings}
               discordStatusDetail={discordStatusDetail}
+              discordRuntimeStatus={discordRuntimeStatus}
               emotionTelemetryEvents={emotionTelemetryEvents}
               vrmTelemetry={vrmTelemetry}
               localTransferStatus={localTransferStatus}

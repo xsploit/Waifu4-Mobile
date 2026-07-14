@@ -37,7 +37,7 @@ type VoiceReceiverLike = {
     off(event: 'start', listener: (userId: string) => void): unknown;
     on(event: 'start', listener: (userId: string) => void): unknown;
   };
-  subscribe(userId: string, options: { end: { behavior: EndBehaviorType.AfterSilence; duration: number } }): Readable;
+  subscribe(userId: string, options: { end: { behavior: EndBehaviorType.AfterInactivity; duration: number } }): Readable;
 };
 
 interface ReceiverSubscription {
@@ -144,7 +144,10 @@ export class DiscordVoiceReceive {
       if (!this.attached || this.subscriptions.has(userId) || !user || user.bot || this.options.isSelf(userId)) return;
 
       const stream = this.receiver.subscribe(userId, {
-        end: { behavior: EndBehaviorType.AfterSilence, duration: this.options.receiveSilenceMs ?? DEFAULT_RECEIVE_SILENCE_MS },
+        // Discord commonly stops sending packets when a speaker goes quiet. AfterSilence
+        // only observes explicit silence packets and can leave this subscription open
+        // forever, preventing the VAD from flushing the completed utterance.
+        end: { behavior: EndBehaviorType.AfterInactivity, duration: this.options.receiveSilenceMs ?? DEFAULT_RECEIVE_SILENCE_MS },
       });
       const decoder = this.options.createDecoder?.() ?? createPrismDecoder();
       const identity: DiscordVoiceIdentity = {

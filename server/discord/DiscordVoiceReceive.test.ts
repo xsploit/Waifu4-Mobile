@@ -1,5 +1,6 @@
 import { EventEmitter } from 'node:events';
 import { PassThrough, Transform } from 'node:stream';
+import { EndBehaviorType } from '@discordjs/voice';
 import { describe, expect, it } from 'vitest';
 import { DiscordVoiceReceive, type PcmDecoder } from './DiscordVoiceReceive';
 import { VoiceActivityDetector } from './VoiceActivityDetector';
@@ -14,10 +15,12 @@ class TestDecoder extends Transform implements PcmDecoder {
 class TestReceiver {
   public readonly speaking = new EventEmitter();
   public readonly streams = new Map<string, PassThrough>();
+  public readonly subscribeOptions = new Map<string, unknown>();
 
-  public subscribe(userId: string): PassThrough {
+  public subscribe(userId: string, options?: unknown): PassThrough {
     const stream = new PassThrough();
     this.streams.set(userId, stream);
+    this.subscribeOptions.set(userId, options);
     return stream;
   }
 }
@@ -56,6 +59,9 @@ describe('DiscordVoiceReceive', () => {
     await new Promise((resolve) => setImmediate(resolve));
     const human = receiver.streams.get('human');
     expect(receive.subscriptionCount).toBe(1);
+    expect(receiver.subscribeOptions.get('human')).toEqual({
+      end: { behavior: EndBehaviorType.AfterInactivity, duration: 1_200 },
+    });
     human?.write(Buffer.concat([stereoFrame(12_000), stereoFrame(0), stereoFrame(0)]));
     expect(utterances).toHaveLength(1);
     expect(utterances[0]?.userId).toBe('human');
@@ -64,6 +70,36 @@ describe('DiscordVoiceReceive', () => {
 
     receive.detach();
     expect(receive.subscriptionCount).toBe(0);
+  });
+
+  it('flushes voiced audio when Discord ends the stream without sending silence frames', async () => {
+    const receiver = new TestReceiver();
+    const utterances: number[] = [];
+    const receive = new DiscordVoiceReceive(receiver, {
+      createDecoder: () => new TestDecoder(),
+      createVad: () => new VoiceActivityDetector({
+        endSilenceMs: 850,
+        maxUtteranceMs: 1_000,
+        minSpeechMs: 20,
+        sampleRate: 48_000,
+        startThreshold: 0.02,
+      }),
+      getUser: (userId) => ({ bot: false, id: userId }),
+      identity: { channelId: 'channel', guildId: 'guild' },
+      isSelf: () => false,
+      onUtterance: (_identity, utterance) => utterances.push(utterance.speechDurationMs),
+    });
+
+    receive.attach();
+    receiver.speaking.emit('start', 'human');
+    await new Promise((resolve) => setImmediate(resolve));
+    receiver.streams.get('human')?.write(stereoFrame(12_000));
+    receiver.streams.get('human')?.end();
+    await new Promise((resolve) => setImmediate(resolve));
+
+    expect(utterances).toEqual([20]);
+    expect(receive.subscriptionCount).toBe(0);
+    receive.detach();
   });
 
   it('keeps overlapping speakers in independent receive and VAD sessions', async () => {

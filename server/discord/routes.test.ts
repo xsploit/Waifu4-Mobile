@@ -153,6 +153,15 @@ describe('DiscordVoiceController', () => {
       },
     });
     expect(events.some((event) => event.type === 'discord-status')).toBe(true);
+    expect(events).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        type: 'discord-status',
+        payload: expect.objectContaining({
+          asrProvider: 'openrouter',
+          transcriptionModel: 'openai/whisper-large-v3',
+        }),
+      }),
+    ]));
 
     runtimes[0]?.emitError('receive failed');
     expect(controller.status()).toMatchObject({ error: 'receive failed', status: 'error' });

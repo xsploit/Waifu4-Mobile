@@ -9,12 +9,14 @@ import { createDefaultDiscordSettings } from '../../../lib/chat/defaults';
 import { loadDiscordSettings, saveDiscordSettings } from '../../../lib/chat/storage';
 import { Slider } from '../ui/Slider';
 import { Toggle } from '../ui/Toggle';
+import type { OverlayDiscordStatus } from '../../../lib/stream/overlay-events';
 
 type DiscordTabProps = {
   connectionStatus?: DiscordConnectionStatus;
   discordSettings?: DiscordSettings;
   onConnect?: () => void;
   onDisconnect?: () => void;
+  runtimeStatus?: OverlayDiscordStatus | null;
   setDiscordSettings?: Dispatch<SetStateAction<DiscordSettings>>;
   statusDetail?: string;
 };
@@ -77,6 +79,7 @@ export function DiscordTab({
   discordSettings,
   onConnect,
   onDisconnect,
+  runtimeStatus,
   setDiscordSettings,
   statusDetail,
 }: DiscordTabProps) {
@@ -104,6 +107,11 @@ export function DiscordTab({
   }
 
   const transcriptionModels = TRANSCRIPTION_MODELS[settings.asrProvider];
+  const runtimeConfigurationChanged = Boolean(
+    runtimeStatus?.asrProvider &&
+      (runtimeStatus.asrProvider !== settings.asrProvider ||
+        runtimeStatus.transcriptionModel !== settings.transcriptionModel),
+  );
 
   return (
     <>
@@ -118,6 +126,14 @@ export function DiscordTab({
           </div>
         </div>
         <div className="status-copy">{detail}</div>
+        {runtimeStatus?.asrProvider ? (
+          <div className="status-copy">
+            Live ASR: <strong>{runtimeStatus.asrProvider} / {runtimeStatus.transcriptionModel ?? 'default'}</strong>
+          </div>
+        ) : null}
+        {runtimeConfigurationChanged ? (
+          <div className="error-copy">Saved ASR settings differ from the live bridge. Reconnect to apply them.</div>
+        ) : null}
         <div className="setting-row">
           <span>Enable Discord bridge</span>
           <Toggle checked={settings.enabled} onChange={(enabled) => updateSettings({ enabled })} />
@@ -131,7 +147,7 @@ export function DiscordTab({
         </div>
         <div className="btn-row">
           <button className="btn-tech secondary" disabled={!onConnect} onClick={onConnect} type="button">
-            Connect
+            {connectionStatus === 'disconnected' ? 'Connect' : 'Reconnect / Apply'}
           </button>
           <button
             className="btn-tech secondary"

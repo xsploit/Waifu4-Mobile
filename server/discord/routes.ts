@@ -262,6 +262,8 @@ export class DiscordVoiceController {
       type: 'discord-status',
       payload: {
         status: status.status,
+        ...(status.asrProvider ? { asrProvider: status.asrProvider } : {}),
+        ...(status.transcriptionModel ? { transcriptionModel: status.transcriptionModel } : {}),
         ...(status.guildId ? { guildId: status.guildId } : {}),
         ...(status.voiceChannelId ? { channelId: status.voiceChannelId } : {}),
         ...(status.runtime ? { subscriptions: status.runtime.subscriptions } : {}),

@@ -105,15 +105,16 @@ async function transcribeWithOpenRouter(options: TranscribeAudioOptions): Promis
 }
 
 async function transcribeWithFish(options: TranscribeAudioOptions): Promise<AudioTranscript> {
+  const body = new FormData();
+  body.append('audio', new Blob([Buffer.from(options.audio)], { type: 'audio/wav' }), 'speech.wav');
+  body.append('ignore_timestamps', 'true');
+  if (options.language?.trim()) {
+    body.append('language', options.language.trim());
+  }
   const response = await (options.fetch ?? globalThis.fetch)(resolveFishAsrUrl(options.apiBaseUrl), {
-    body: JSON.stringify({
-      audio: Buffer.from(options.audio).toString('base64'),
-      ignore_timestamps: true,
-      ...(options.language?.trim() ? { language: options.language.trim() } : {}),
-    }),
+    body,
     headers: {
       Authorization: `Bearer ${options.apiKey}`,
-      'Content-Type': 'application/json',
     },
     method: 'POST',
   });

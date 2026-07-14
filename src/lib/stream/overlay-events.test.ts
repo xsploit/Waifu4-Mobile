@@ -124,5 +124,17 @@ describe('overlay server events', () => {
       detail: 'Voice bridge failed.',
       status: 'error',
     });
+    expect(parseDiscordStatus({
+      status: {
+        asrProvider: 'vercel',
+        status: 'connected',
+        transcriptionModel: 'openai/whisper-1',
+      },
+    })).toEqual({
+      asrProvider: 'vercel',
+      detail: '',
+      status: 'connected',
+      transcriptionModel: 'openai/whisper-1',
+    });
   });
 });

@@ -92,6 +92,8 @@ export type StreamBotEvent<
       type: 'discord-status';
       payload: {
         status: 'disconnected' | 'connecting' | 'connected' | 'error';
+        asrProvider?: 'fish' | 'openrouter' | 'vercel';
+        transcriptionModel?: string;
         guildId?: string;
         channelId?: string;
         subscriptions?: number;

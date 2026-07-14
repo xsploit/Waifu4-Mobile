@@ -333,10 +333,18 @@ describe('SettingsPanel tab smoke', () => {
     props.discordConnectionStatus = 'connected';
     props.discordSettings = {
       ...createDefaultDiscordSettings(),
+      asrProvider: 'vercel',
       botToken: 'discord-test-token',
       guildId: '123456789012345678',
+      transcriptionModel: 'openai/whisper-1',
       trustedControllerUserIds: ['987654321098765432'],
       voiceChannelId: '234567890123456789',
+    };
+    props.discordRuntimeStatus = {
+      asrProvider: 'fish',
+      detail: 'Fish Speech transcription failed with HTTP 400.',
+      status: 'error',
+      transcriptionModel: 'fish-audio/asr',
     };
     props.discordStatusDetail = 'Connected to a test voice channel.';
     props.onConnectDiscord = noop;
@@ -353,6 +361,10 @@ describe('SettingsPanel tab smoke', () => {
     expect(html).toContain('VAD threshold');
     expect(html).toContain('Trusted controller user IDs');
     expect(html).toContain('987654321098765432');
+    expect(html).toContain('Live ASR:');
+    expect(html).toContain('fish / fish-audio/asr');
+    expect(html).toContain('Saved ASR settings differ from the live bridge');
+    expect(html).toContain('Reconnect / Apply');
   });
 
   it('keeps provider embedding picker filtered by metadata while allowing custom IDs', () => {

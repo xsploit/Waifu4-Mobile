@@ -39,7 +39,7 @@ describe('transcribeAudio', () => {
     });
   });
 
-  it('keeps the Fish ASR request contract', async () => {
+  it('uploads Fish ASR audio as multipart form data', async () => {
     const fetch = vi.fn(async () => new Response(JSON.stringify({ text: 'actual stream speech' })));
 
     await expect(
@@ -59,15 +59,18 @@ describe('transcribeAudio', () => {
     expect(init).toMatchObject({
       headers: {
         Authorization: 'Bearer fish-key',
-        'Content-Type': 'application/json',
       },
       method: 'POST',
     });
-    expect(JSON.parse(String(init.body))).toEqual({
-      audio: audio.toString('base64'),
-      ignore_timestamps: true,
-      language: 'ja',
-    });
+    expect(init.body).toBeInstanceOf(FormData);
+    const body = init.body as FormData;
+    expect(body.get('ignore_timestamps')).toBe('true');
+    expect(body.get('language')).toBe('ja');
+    const uploadedAudio = body.get('audio');
+    expect(uploadedAudio).toBeInstanceOf(Blob);
+    expect(await (uploadedAudio as Blob).arrayBuffer()).toEqual(
+      audio.buffer.slice(audio.byteOffset, audio.byteOffset + audio.byteLength),
+    );
   });
 
   it('uses the AI SDK Gateway transcription model', async () => {

@@ -40,6 +40,7 @@ import type {
 } from '../../lib/tts/remote';
 import { DEFAULT_PERSONA } from '../../lib/chat/defaults';
 import type { ProviderEndpointInfo, ProviderModelInfo } from '../../brain/modelCapability';
+import type { OverlayDiscordStatus } from '../../lib/stream/overlay-events';
 import type { GrilloMemoryState } from '../../lib/chat/grillo-memory';
 import type {
   LadybugGrilloRuntimeStatus,
@@ -79,6 +80,7 @@ type SettingsPanelProps = {
   discordConnectionStatus?: DiscordConnectionStatus;
   discordSettings?: DiscordSettings;
   discordStatusDetail?: string;
+  discordRuntimeStatus?: OverlayDiscordStatus | null;
   emotionTelemetryEvents: EmotionTelemetryEvent[];
   vrmTelemetry: VrmTelemetrySnapshot | null;
   localTransferStatus: string;
@@ -229,6 +231,7 @@ export function SettingsPanel({
   discordConnectionStatus,
   discordSettings,
   discordStatusDetail,
+  discordRuntimeStatus,
   emotionTelemetryEvents,
   localTransferStatus,
   onCacheVoice,
@@ -433,6 +436,7 @@ export function SettingsPanel({
         discordSettings={discordSettings}
         onConnect={onConnectDiscord}
         onDisconnect={onDisconnectDiscord}
+        runtimeStatus={discordRuntimeStatus}
         setDiscordSettings={setDiscordSettings}
         statusDetail={discordStatusDetail}
       />

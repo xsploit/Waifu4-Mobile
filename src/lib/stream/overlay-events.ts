@@ -1,6 +1,6 @@
 import { getDesktopOverlaySocketUrl } from '../desktop/runtime';
 import type { StreamBotEvent, StreamTwitchChatMessage, StreamTwitchMembershipEvent } from '../../shared/streamEvents';
-import type { DiscordConnectionStatus } from '../chat/types';
+import type { DiscordAsrProvider, DiscordConnectionStatus } from '../chat/types';
 
 type OverlayTwitchChatMessage = StreamTwitchChatMessage;
 
@@ -18,8 +18,10 @@ export type OverlayDiscordTranscript = {
 };
 
 export type OverlayDiscordStatus = {
+  asrProvider?: DiscordAsrProvider;
   detail: string;
   status: DiscordConnectionStatus;
+  transcriptionModel?: string;
 };
 
 type DiscordTranscriptServerEvent = {
@@ -177,7 +179,11 @@ export function parseDiscordStatus(value: unknown): OverlayDiscordStatus | null 
     return null;
   }
 
+  const asrProvider = statusSource.asrProvider;
   return {
+    ...(asrProvider === 'fish' || asrProvider === 'openrouter' || asrProvider === 'vercel'
+      ? { asrProvider }
+      : {}),
     detail:
       readString(statusSource.detail) ??
       readString(statusSource.message) ??
@@ -185,6 +191,9 @@ export function parseDiscordStatus(value: unknown): OverlayDiscordStatus | null 
       readString(value.error) ??
       '',
     status,
+    ...(readString(statusSource.transcriptionModel)
+      ? { transcriptionModel: readString(statusSource.transcriptionModel)! }
+      : {}),
   };
 }
 
