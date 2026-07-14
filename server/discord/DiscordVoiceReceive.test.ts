@@ -161,6 +161,38 @@ describe('DiscordVoiceReceive', () => {
     receive.detach();
   });
 
+  it('does not end a production utterance on PCM silence while Discord still reports speaking', async () => {
+    const receiver = new TestReceiver();
+    const utterances: number[] = [];
+    const receive = new DiscordVoiceReceive(receiver, {
+      createDecoder: () => new TestDecoder(),
+      getUser: (userId) => ({ bot: false, id: userId }),
+      identity: { channelId: 'channel', guildId: 'guild' },
+      isSelf: () => false,
+      onUtterance: (_identity, utterance) => utterances.push(utterance.speechDurationMs),
+      vad: {
+        endSilenceMs: 5,
+        maxUtteranceMs: 1_000,
+        minSpeechMs: 20,
+        startThreshold: 0.02,
+      },
+    });
+
+    receive.attach();
+    receiver.speaking.emit('start', 'human');
+    await new Promise((resolve) => setImmediate(resolve));
+    receiver.streams.get('human')?.write(
+      Buffer.concat([stereoFrame(12_000), stereoFrame(0), stereoFrame(0)]),
+    );
+    await new Promise((resolve) => setTimeout(resolve, 10));
+    expect(utterances).toEqual([]);
+
+    receiver.speaking.emit('end', 'human');
+    await new Promise((resolve) => setTimeout(resolve, 10));
+    expect(utterances).toEqual([20]);
+    receive.detach();
+  });
+
   it('keeps overlapping speakers in independent receive and VAD sessions', async () => {
     const receiver = new TestReceiver();
     const utterances: string[] = [];

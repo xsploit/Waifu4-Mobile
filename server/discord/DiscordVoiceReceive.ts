@@ -67,7 +67,7 @@ function createPrismDecoder(): PcmDecoder {
 }
 
 function createDefaultVad(overrides: DiscordVoiceReceiveOptions['vad']): VoiceActivityDetector {
-  return new VoiceActivityDetector({
+  const config = {
     endSilenceMs: 600,
     maxUtteranceMs: 20_000,
     minSpeechMs: 240,
@@ -75,6 +75,13 @@ function createDefaultVad(overrides: DiscordVoiceReceiveOptions['vad']): VoiceAc
     sampleRate: SAMPLE_RATE,
     startThreshold: 0.025,
     ...overrides,
+  };
+  return new VoiceActivityDetector({
+    ...config,
+    // Discord's packet stream owns utterance boundaries. In push-to-talk mode,
+    // silence PCM can continue while the key is held; energy silence must not
+    // submit early. The speaking-end debounce below flushes on packet stop.
+    endSilenceMs: config.maxUtteranceMs + FRAME_MS,
   });
 }
 
