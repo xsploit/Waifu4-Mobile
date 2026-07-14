@@ -9,11 +9,15 @@ describe('Vercel model endpoint discovery', () => {
           { provider_name: 'deepinfra', status: 2 },
           {
             context_length: 128000,
+            latency_last_1h: { p50: 593, p95: 12399.8 },
             max_completion_tokens: 8192,
             provider_name: 'deepinfra',
             status: 0,
             supported_parameters: ['tools', 'response_format'],
             supports_implicit_caching: true,
+            throughput_last_1h: { p50: 61 },
+            uptime_last_1d: 100,
+            uptime_last_1h: 99.99,
           },
           { provider_name: 'baseten', status: 0, supported_parameters: ['tools'] },
         ],
@@ -25,10 +29,15 @@ describe('Vercel model endpoint discovery', () => {
       expect.objectContaining({
         contextLength: 128000,
         maxCompletionTokens: 8192,
+        latencyP50Ms: 593,
+        latencyP95Ms: 12399.8,
         providerName: 'deepinfra',
         status: 0,
         supportedParameters: ['tools', 'response_format'],
         supportsImplicitCaching: true,
+        throughputP50: 61,
+        uptimeLastDay: 100,
+        uptimeLastHour: 99.99,
       }),
     ]);
   });

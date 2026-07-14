@@ -39,7 +39,7 @@ import type {
   RemoteTtsVoice,
 } from '../../lib/tts/remote';
 import { DEFAULT_PERSONA } from '../../lib/chat/defaults';
-import type { ProviderModelInfo } from '../../brain/modelCapability';
+import type { ProviderEndpointInfo, ProviderModelInfo } from '../../brain/modelCapability';
 import type { GrilloMemoryState } from '../../lib/chat/grillo-memory';
 import type {
   LadybugGrilloRuntimeStatus,
@@ -189,6 +189,7 @@ type SettingsPanelProps = {
   voicesError: string | null;
   voicesLoading: boolean;
   vercelProviderSlugs: string[];
+  vercelProviderEndpoints: ProviderEndpointInfo[];
   vercelProvidersError: string | null;
   vercelProvidersLoading: boolean;
 };
@@ -327,6 +328,7 @@ export function SettingsPanel({
   voicesError,
   voicesLoading,
   vercelProviderSlugs,
+  vercelProviderEndpoints,
   vercelProvidersError,
   vercelProvidersLoading,
 }: SettingsPanelProps) {
@@ -400,6 +402,7 @@ export function SettingsPanel({
         onRefreshModels={onRefreshModels}
         setAiSettings={setAiSettings}
         vercelProviderSlugs={vercelProviderSlugs}
+        vercelProviderEndpoints={vercelProviderEndpoints}
         vercelProvidersError={vercelProvidersError}
         vercelProvidersLoading={vercelProvidersLoading}
       />

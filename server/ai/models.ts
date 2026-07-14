@@ -2,6 +2,7 @@ import type { Request, Response } from 'express';
 import {
   parseOpenRouterModels,
   parseVercelGatewayModels,
+  type ProviderEndpointInfo,
   type ProviderModelInfo,
 } from '../../src/brain/modelCapability';
 import { readProviderKeys } from './providerKeys';
@@ -11,15 +12,6 @@ const log = createLogger('models');
 
 const OPENROUTER_MODELS_URL = 'https://openrouter.ai/api/v1/models';
 const VERCEL_GATEWAY_MODELS_URL = 'https://ai-gateway.vercel.sh/v1/models';
-
-export type VercelProviderEndpointInfo = {
-  contextLength?: number;
-  maxCompletionTokens?: number;
-  providerName: string;
-  status?: number;
-  supportedParameters: string[];
-  supportsImplicitCaching: boolean;
-};
 
 function asRecord(value: unknown): Record<string, unknown> | null {
   return value && typeof value === 'object' && !Array.isArray(value)
@@ -37,7 +29,7 @@ function asStringArray(value: unknown): string[] {
     : [];
 }
 
-export function parseVercelProviderEndpoints(payload: unknown): VercelProviderEndpointInfo[] {
+export function parseVercelProviderEndpoints(payload: unknown): ProviderEndpointInfo[] {
   const root = asRecord(payload);
   const data = asRecord(root?.data);
   const entries = Array.isArray(data?.endpoints)
@@ -45,7 +37,7 @@ export function parseVercelProviderEndpoints(payload: unknown): VercelProviderEn
     : Array.isArray(root?.endpoints)
       ? root.endpoints
       : [];
-  const byProvider = new Map<string, VercelProviderEndpointInfo>();
+  const byProvider = new Map<string, ProviderEndpointInfo>();
 
   for (const value of entries) {
     const entry = asRecord(value);
@@ -57,13 +49,21 @@ export function parseVercelProviderEndpoints(payload: unknown): VercelProviderEn
     if (!providerName) {
       continue;
     }
-    const next: VercelProviderEndpointInfo = {
+    const latency = asRecord(entry?.latency_last_1h);
+    const throughput = asRecord(entry?.throughput_last_1h);
+    const next: ProviderEndpointInfo = {
       contextLength: asFiniteNumber(entry?.context_length),
+      latencyP50Ms: asFiniteNumber(latency?.p50),
+      latencyP95Ms: asFiniteNumber(latency?.p95),
       maxCompletionTokens: asFiniteNumber(entry?.max_completion_tokens),
       providerName,
       status: asFiniteNumber(entry?.status),
       supportedParameters: asStringArray(entry?.supported_parameters),
       supportsImplicitCaching: entry?.supports_implicit_caching === true,
+      tags: asStringArray(entry?.tags),
+      throughputP50: asFiniteNumber(throughput?.p50),
+      uptimeLastDay: asFiniteNumber(entry?.uptime_last_1d),
+      uptimeLastHour: asFiniteNumber(entry?.uptime_last_1h),
     };
     const current = byProvider.get(providerName);
     if (!current || (current.status !== 0 && next.status === 0)) {

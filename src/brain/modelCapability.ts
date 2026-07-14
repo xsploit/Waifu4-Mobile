@@ -20,7 +20,27 @@ export type ProviderModelInfo = {
   type?: string;
 };
 
+export type ProviderEndpointInfo = {
+  contextLength?: number;
+  latencyP50Ms?: number;
+  latencyP95Ms?: number;
+  maxCompletionTokens?: number;
+  providerName: string;
+  status?: number;
+  supportedParameters: string[];
+  supportsImplicitCaching: boolean;
+  tags?: string[];
+  throughputP50?: number;
+  uptimeLastDay?: number;
+  uptimeLastHour?: number;
+};
+
 const STRUCTURED_PARAM = 'structured_outputs';
+const STRUCTURED_ENDPOINT_PARAMS = new Set([
+  STRUCTURED_PARAM,
+  'json_schema',
+  'response_format',
+]);
 const EMBEDDING_TAGS = new Set(['embed', 'embedding', 'embeddings', 'text-embedding']);
 const IMAGE_INPUT_TAGS = new Set(['image', 'image-input', 'vision']);
 const IMPLICIT_CACHE_TAGS = new Set(['cache', 'caching', 'implicit-caching', 'prompt-caching']);
@@ -35,6 +55,44 @@ function normalizeTags(values: string[]) {
 
 function asNumber(value: unknown) {
   return typeof value === 'number' && Number.isFinite(value) ? value : undefined;
+}
+
+export function endpointSupportsStructuredOutputs(endpoint: ProviderEndpointInfo): boolean {
+  return endpoint.supportedParameters.some((parameter) =>
+    STRUCTURED_ENDPOINT_PARAMS.has(parameter.trim().toLowerCase()),
+  );
+}
+
+export function selectVercelEndpointReplyFormat({
+  allowFallbacks,
+  endpoints,
+  pinnedProviders,
+}: {
+  allowFallbacks: boolean;
+  endpoints: readonly ProviderEndpointInfo[];
+  pinnedProviders: readonly string[];
+}): ReplyFormat {
+  const activeEndpoints = endpoints.filter(
+    (endpoint) => endpoint.status === undefined || endpoint.status === 0,
+  );
+  if (activeEndpoints.length === 0) {
+    return 'text';
+  }
+
+  const normalizedPinned = [...new Set(pinnedProviders.map((provider) => provider.trim()).filter(Boolean))];
+  const pinnedEndpoints = normalizedPinned
+    .map((provider) => activeEndpoints.find((endpoint) => endpoint.providerName === provider))
+    .filter((endpoint): endpoint is ProviderEndpointInfo => Boolean(endpoint));
+  if (normalizedPinned.length > 0 && pinnedEndpoints.length !== normalizedPinned.length) {
+    return 'text';
+  }
+
+  const eligibleEndpoints = normalizedPinned.length > 0 && !allowFallbacks
+    ? pinnedEndpoints
+    : activeEndpoints;
+  return eligibleEndpoints.length > 0 && eligibleEndpoints.every(endpointSupportsStructuredOutputs)
+    ? 'structured'
+    : 'text';
 }
 
 function collectEndpointSupportedParameters(value: unknown) {
@@ -164,7 +222,6 @@ export function parseVercelGatewayModels(payload: unknown): ProviderModelInfo[] 
     const inputModalities = normalizeTags(asStringArray(e.architecture?.input_modalities));
     const outputModalities = normalizeTags(asStringArray(e.architecture?.output_modalities));
     const tags = normalizeTags([...asStringArray(e.tags), ...inputModalities]);
-    const hasEndpointParams = supportedParameters.length > 0;
     models.push({
       ...(asNumber(e.context_window) !== undefined ? { contextWindow: asNumber(e.context_window) } : {}),
       ...(typeof e.description === 'string' ? { description: e.description } : {}),
@@ -176,11 +233,10 @@ export function parseVercelGatewayModels(payload: unknown): ProviderModelInfo[] 
       supportedParameters,
       supportsImplicitCaching:
         tags.some((tag) => IMPLICIT_CACHE_TAGS.has(tag)) || hasImplicitCachingEndpoint(e.endpoints),
-      // Gateway's basic model list exposes type/tags; endpoint metadata can add
-      // exact parameter support when present. Preserve the current language-model
-      // policy unless richer endpoint params explicitly prove otherwise.
       supportsStructuredOutputs:
-        type === 'language' && (!hasEndpointParams || supportedParameters.includes(STRUCTURED_PARAM)),
+        type === 'language' && supportedParameters.some((parameter) =>
+          STRUCTURED_ENDPOINT_PARAMS.has(parameter.trim().toLowerCase()),
+        ),
       tags,
       ...(type ? { type } : {}),
     });
@@ -192,7 +248,7 @@ export function parseVercelGatewayModels(payload: unknown): ProviderModelInfo[] 
  * The single, centralized lane decision (do not inline this at call sites).
  * - OpenRouter: structured iff the model/provider advertises structured_outputs,
  *   else Lane B (text + <yw-meta>) which never hard-fails.
- * - Vercel gateway: structured by default until real capability metadata exists.
+ * - Vercel gateway: structured only when capability metadata proves support.
  */
 export function selectReplyFormat(
   provider: GatewayId,
@@ -204,7 +260,7 @@ export function selectReplyFormat(
   if (info && info.supportedParameters.length > 0) {
     return info.supportsStructuredOutputs ? 'structured' : 'text';
   }
-  return 'structured';
+  return info?.supportsStructuredOutputs ? 'structured' : 'text';
 }
 
 export function isChatModel(info?: ProviderModelInfo | null) {

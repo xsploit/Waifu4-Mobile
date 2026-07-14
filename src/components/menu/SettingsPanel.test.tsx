@@ -149,6 +149,7 @@ function createProps(activeTab: SettingsTabId): SettingsPanelProps {
     voicesError: null,
     voicesLoading: false,
     vercelProviderSlugs: [],
+    vercelProviderEndpoints: [],
     vercelProvidersError: null,
     vercelProvidersLoading: false,
     vrmTelemetry: null,
@@ -236,7 +237,8 @@ describe('SettingsPanel tab smoke', () => {
     const html = renderToStaticMarkup(<SettingsPanel {...props} />);
 
     expect(html).toContain('vercel-gateway');
-    expect(html).toContain('Strict tool JSON');
+    expect(html).toContain('Streaming text + hidden emotion metadata');
+    expect(html).toContain('live chat uses streaming text metadata');
     expect(html).toContain('AI SDK HTTP stream');
     expect(html).toContain('not reported by the last response');
     expect(html).toContain('availability reported after the next reply');
@@ -253,6 +255,26 @@ describe('SettingsPanel tab smoke', () => {
       vercelProviderSlugs: 'baseten,deepseek',
     };
     props.vercelProviderSlugs = ['baseten', 'deepseek'];
+    props.vercelProviderEndpoints = [
+      {
+        contextLength: 1048600,
+        latencyP50Ms: 1219,
+        latencyP95Ms: 2754,
+        providerName: 'baseten',
+        status: 0,
+        supportedParameters: ['tools', 'tool_choice', 'reasoning'],
+        supportsImplicitCaching: true,
+        uptimeLastHour: 100,
+      },
+      {
+        contextLength: 1000000,
+        latencyP50Ms: 1813,
+        providerName: 'deepseek',
+        status: 0,
+        supportedParameters: ['tools', 'tool_choice'],
+        supportsImplicitCaching: true,
+      },
+    ];
 
     const html = renderToStaticMarkup(<SettingsPanel {...props} />);
 
@@ -261,6 +283,7 @@ describe('SettingsPanel tab smoke', () => {
     expect(html).toContain('baseten,deepseek');
     expect(html).toContain('Allow other providers after this order');
     expect(html).toContain("selected model&#x27;s live Vercel endpoint catalog");
+    expect(html).toContain('baseten [tools, reasoning, cache, 1M ctx, 1219ms]');
   });
 
   it('keeps toon shader presets mounted on the avatar tab', () => {

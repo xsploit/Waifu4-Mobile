@@ -1,7 +1,10 @@
 import type { Dispatch, SetStateAction } from 'react';
 import {
+  endpointSupportsStructuredOutputs,
   selectReplyFormat,
+  selectVercelEndpointReplyFormat,
   supportsImageInput,
+  type ProviderEndpointInfo,
   type ProviderModelInfo,
 } from '../../../brain/modelCapability';
 import type { AiProxyHealth, AiSettings } from '../../../lib/chat/types';
@@ -25,6 +28,7 @@ type AiTabProps = {
   onRefreshModels: () => void;
   setAiSettings: Dispatch<SetStateAction<AiSettings>>;
   vercelProviderSlugs: string[];
+  vercelProviderEndpoints: ProviderEndpointInfo[];
   vercelProvidersError: string | null;
   vercelProvidersLoading: boolean;
 };
@@ -39,8 +43,12 @@ function updateAiSettings(
   }));
 }
 
-function describeReplyLane(aiSettings: AiSettings, model: ProviderModelInfo | undefined) {
-  const format = selectReplyFormat(aiSettings.llmProvider, model ?? null);
+function describeReplyLane(
+  aiSettings: AiSettings,
+  model: ProviderModelInfo | undefined,
+  endpointFormat?: 'structured' | 'text',
+) {
+  const format = endpointFormat ?? selectReplyFormat(aiSettings.llmProvider, model ?? null);
   if (
     format === 'structured' &&
     aiSettings.llmProvider === 'vercel-gateway' &&
@@ -51,6 +59,24 @@ function describeReplyLane(aiSettings: AiSettings, model: ProviderModelInfo | un
   return format === 'structured'
     ? 'Structured output stream'
     : 'Streaming text + hidden emotion metadata';
+}
+
+function getEndpointCapabilityTags(endpoint: ProviderEndpointInfo) {
+  const parameters = new Set(endpoint.supportedParameters.map((parameter) => parameter.toLowerCase()));
+  const tags: string[] = [];
+  if (endpointSupportsStructuredOutputs(endpoint)) tags.push('json');
+  if (parameters.has('tools') || parameters.has('tool_choice')) tags.push('tools');
+  if (parameters.has('reasoning') || parameters.has('include_reasoning')) tags.push('reasoning');
+  if (endpoint.supportsImplicitCaching) tags.push('cache');
+  const context = formatModelCount(endpoint.contextLength);
+  if (context) tags.push(`${context} ctx`);
+  if (typeof endpoint.latencyP50Ms === 'number') tags.push(`${Math.round(endpoint.latencyP50Ms)}ms`);
+  return tags;
+}
+
+function formatEndpointOption(endpoint: ProviderEndpointInfo) {
+  const tags = getEndpointCapabilityTags(endpoint);
+  return tags.length > 0 ? `${endpoint.providerName} [${tags.join(', ')}]` : endpoint.providerName;
 }
 
 function describeToolStatus(
@@ -159,6 +185,7 @@ export function AiTab({
   onRefreshModels,
   setAiSettings,
   vercelProviderSlugs,
+  vercelProviderEndpoints,
   vercelProvidersError,
   vercelProvidersLoading,
 }: AiTabProps) {
@@ -178,6 +205,19 @@ export function AiTab({
     !vercelProviderSlugs.includes(selectedSingleVercelProvider)
     ? [selectedSingleVercelProvider, ...vercelProviderSlugs]
     : vercelProviderSlugs;
+  const endpointByProvider = new Map(
+    vercelProviderEndpoints.map((endpoint) => [endpoint.providerName, endpoint] as const),
+  );
+  const selectedVercelEndpoint = endpointByProvider.get(selectedSingleVercelProvider);
+  const pinnedVercelProviders = aiSettings.vercelRoutingMode === 'pinned'
+    ? savedVercelProvider.split(',').map((provider) => provider.trim()).filter(Boolean)
+    : [];
+  const vercelReplyFormat = selectVercelEndpointReplyFormat({
+    allowFallbacks:
+      aiSettings.vercelRoutingMode !== 'pinned' || aiSettings.vercelAllowFallbacks,
+    endpoints: vercelProviderEndpoints,
+    pinnedProviders: pinnedVercelProviders,
+  });
 
   return (
     <>
@@ -298,7 +338,11 @@ export function AiTab({
                   {vercelProvidersLoading ? 'Loading selected-model providers...' : 'Choose provider'}
                 </option>
                 {vercelProviderOptions.map((slug) => (
-                  <option key={slug} value={slug}>{slug}</option>
+                  <option key={slug} value={slug}>
+                    {endpointByProvider.has(slug)
+                      ? formatEndpointOption(endpointByProvider.get(slug)!)
+                      : `${slug} [saved; metadata unavailable]`}
+                  </option>
                 ))}
               </select>
               <input
@@ -327,10 +371,20 @@ export function AiTab({
             model's live Vercel endpoint catalog.
           </div>
           {vercelProvidersError ? <div className="error-copy">{vercelProvidersError}</div> : null}
+          {selectedVercelEndpoint ? (
+            <div className="status-copy">
+              Selected endpoint: <strong>{getEndpointCapabilityTags(selectedVercelEndpoint).join(', ') || 'text only'}</strong>
+              {' '}· uptime 1h <strong>{selectedVercelEndpoint.uptimeLastHour?.toFixed(2) ?? 'n/a'}%</strong>
+              {' '}· p95 <strong>{selectedVercelEndpoint.latencyP95Ms !== undefined
+                ? `${Math.round(selectedVercelEndpoint.latencyP95Ms)}ms`
+                : 'n/a'}</strong>
+            </div>
+          ) : null}
           {aiSettings.model === 'deepseek/deepseek-v4-pro' ? (
             <div className="field-hint">
-              Compatibility: Vercel DeepSeek V4 Pro keeps the tested strict-tool reply lane;
-              provider discovery does not change its structured-output handling.
+              Compatibility: {vercelReplyFormat === 'structured'
+                ? 'every eligible endpoint advertises structured output.'
+                : 'the eligible endpoints do not all advertise structured output, so live chat uses streaming text metadata.'}
             </div>
           ) : null}
         </div>
@@ -407,7 +461,14 @@ export function AiTab({
           Conversation: <strong>app-owned / provider stateless</strong>
         </div>
         <div className="status-copy">
-          Reply lane: <strong>{describeReplyLane(aiSettings, configuredModel)}</strong>
+          Reply lane:{' '}
+          <strong>
+            {describeReplyLane(
+              aiSettings,
+              configuredModel,
+              aiSettings.llmProvider === 'vercel-gateway' ? vercelReplyFormat : undefined,
+            )}
+          </strong>
         </div>
         <div className="status-copy">
           Transport: <strong>AI SDK HTTP stream</strong>

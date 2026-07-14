@@ -96,7 +96,9 @@ import {
   isEmbeddingModel,
   isChatModel,
   selectReplyFormat,
+  selectVercelEndpointReplyFormat,
   supportsImageInput,
+  type ProviderEndpointInfo,
   type ProviderModelInfo,
 } from './brain/modelCapability';
 import {
@@ -510,6 +512,7 @@ type AppModelsResponse = {
 };
 
 type AppModelEndpointsResponse = {
+  endpoints?: ProviderEndpointInfo[];
   error?: string;
   ok?: boolean;
   providerSlugs?: string[];
@@ -2225,6 +2228,7 @@ function App() {
   const [modelsLoading, setModelsLoading] = useState(false);
   const [modelsError, setModelsError] = useState<string | null>(null);
   const [vercelProviderSlugs, setVercelProviderSlugs] = useState<string[]>([]);
+  const [vercelProviderEndpoints, setVercelProviderEndpoints] = useState<ProviderEndpointInfo[]>([]);
   const [vercelProvidersLoading, setVercelProvidersLoading] = useState(false);
   const [vercelProvidersError, setVercelProvidersError] = useState<string | null>(null);
   const [aiProxyHealth, setAiProxyHealth] = useState<AiProxyHealth | null>(null);
@@ -2300,6 +2304,7 @@ function App() {
   const availableModelMetadataRef = useRef<Map<string, AppModelMetadata>>(new Map());
   const modelCatalogRequestRef = useRef(0);
   const vercelProviderRequestRef = useRef(0);
+  const vercelProviderEndpointsRef = useRef<ProviderEndpointInfo[]>([]);
   const sequencerSettingsRef = useRef(createDefaultSequencerSettings());
   const recentReactionAnimationIdsRef = useRef<string[]>([]);
   const directTwitchClientRef = useRef<DirectTwitchIrcClient | null>(null);
@@ -2884,6 +2889,8 @@ function App() {
     const { llmProvider, model } = aiSettingsRef.current;
     if (llmProvider !== 'vercel-gateway' || !model.trim()) {
       setVercelProviderSlugs([]);
+      setVercelProviderEndpoints([]);
+      vercelProviderEndpointsRef.current = [];
       setVercelProvidersError(null);
       setVercelProvidersLoading(false);
       return;
@@ -2891,6 +2898,9 @@ function App() {
 
     setVercelProvidersLoading(true);
     setVercelProvidersError(null);
+    setVercelProviderSlugs([]);
+    setVercelProviderEndpoints([]);
+    vercelProviderEndpointsRef.current = [];
     try {
       const response = await fetch(getAiModelEndpointsUrl(llmProvider, model), {
         cache: 'no-store',
@@ -2913,9 +2923,14 @@ function App() {
       setVercelProviderSlugs(
         Array.from(new Set((data.providerSlugs ?? []).filter((slug) => slug.trim()))),
       );
+      const endpoints = Array.isArray(data.endpoints) ? data.endpoints : [];
+      setVercelProviderEndpoints(endpoints);
+      vercelProviderEndpointsRef.current = endpoints;
     } catch (error) {
       if (vercelProviderRequestRef.current === requestId) {
         setVercelProviderSlugs([]);
+        setVercelProviderEndpoints([]);
+        vercelProviderEndpointsRef.current = [];
         setVercelProvidersError(
           error instanceof Error ? error.message : 'Vercel provider discovery failed.',
         );
@@ -6376,10 +6391,23 @@ function App() {
           ? DEFAULT_OPENROUTER_MODEL
           : DEFAULT_AI_GATEWAY_MODEL,
       );
-      const replyFormat = selectReplyFormat(
-        settings.llmProvider,
-        availableModelMetadataRef.current.get(selectedModel) ?? null,
-      );
+      const pinnedVercelProviders = settings.vercelRoutingMode === 'pinned'
+        ? settings.vercelProviderSlugs
+            .split(',')
+            .map((provider) => provider.trim())
+            .filter(Boolean)
+        : [];
+      const replyFormat = settings.llmProvider === 'vercel-gateway'
+        ? selectVercelEndpointReplyFormat({
+            allowFallbacks:
+              settings.vercelRoutingMode !== 'pinned' || settings.vercelAllowFallbacks,
+            endpoints: vercelProviderEndpointsRef.current,
+            pinnedProviders: pinnedVercelProviders,
+          })
+        : selectReplyFormat(
+            settings.llmProvider,
+            availableModelMetadataRef.current.get(selectedModel) ?? null,
+          );
       const assistantResponseFormat = replyFormat === 'structured'
         ? ASSISTANT_REPLY_JSON_FORMAT
         : undefined;
@@ -7876,6 +7904,7 @@ function App() {
               modelsError={modelsError}
               modelsLoading={modelsLoading}
               vercelProviderSlugs={vercelProviderSlugs}
+              vercelProviderEndpoints={vercelProviderEndpoints}
               vercelProvidersError={vercelProvidersError}
               vercelProvidersLoading={vercelProvidersLoading}
               onCacheVoice={() => {

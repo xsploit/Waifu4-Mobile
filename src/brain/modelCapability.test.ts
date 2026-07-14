@@ -1,10 +1,12 @@
 import { describe, expect, it } from 'vitest';
 import {
+  endpointSupportsStructuredOutputs,
   isChatModel,
   isEmbeddingModel,
   parseOpenRouterModels,
   parseVercelGatewayModels,
   selectReplyFormat,
+  selectVercelEndpointReplyFormat,
   supportsImageInput,
 } from './modelCapability';
 
@@ -68,6 +70,18 @@ describe('parseOpenRouterModels', () => {
 });
 
 describe('parseVercelGatewayModels', () => {
+  it('does not invent structured support without endpoint parameters', () => {
+    const [model] = parseVercelGatewayModels({
+      data: [{ id: 'deepseek/deepseek-v4-pro', type: 'language' }],
+    });
+
+    expect(model).toMatchObject({
+      id: 'deepseek/deepseek-v4-pro',
+      supportedParameters: [],
+      supportsStructuredOutputs: false,
+    });
+  });
+
   it('keeps model ids and Gateway capability metadata from /v1/models', () => {
     const models = parseVercelGatewayModels({
       data: [
@@ -146,9 +160,72 @@ describe('selectReplyFormat', () => {
     expect(selectReplyFormat('openrouter-responses')).toBe('text');
   });
 
-  it('vercel-gateway: structured by default regardless of info', () => {
-    expect(selectReplyFormat('vercel-gateway')).toBe('structured');
-    expect(selectReplyFormat('vercel-gateway', null)).toBe('structured');
+  it('vercel-gateway: text unless metadata proves structured output support', () => {
+    expect(selectReplyFormat('vercel-gateway')).toBe('text');
+    expect(selectReplyFormat('vercel-gateway', null)).toBe('text');
+  });
+
+  it('uses the pinned Vercel endpoint capabilities when fallback is disabled', () => {
+    const endpoints = [
+      {
+        providerName: 'schema-provider',
+        status: 0,
+        supportedParameters: ['response_format', 'tools'],
+        supportsImplicitCaching: false,
+      },
+      {
+        providerName: 'text-provider',
+        status: 0,
+        supportedParameters: ['tools'],
+        supportsImplicitCaching: true,
+      },
+    ];
+
+    expect(endpointSupportsStructuredOutputs(endpoints[0]!)).toBe(true);
+    expect(endpointSupportsStructuredOutputs(endpoints[1]!)).toBe(false);
+    expect(selectVercelEndpointReplyFormat({
+      allowFallbacks: false,
+      endpoints,
+      pinnedProviders: ['schema-provider'],
+    })).toBe('structured');
+    expect(selectVercelEndpointReplyFormat({
+      allowFallbacks: false,
+      endpoints,
+      pinnedProviders: ['text-provider'],
+    })).toBe('text');
+  });
+
+  it('requires every eligible Vercel fallback endpoint to support structured output', () => {
+    const endpoints = [
+      {
+        providerName: 'schema-provider',
+        status: 0,
+        supportedParameters: ['structured_outputs'],
+        supportsImplicitCaching: false,
+      },
+      {
+        providerName: 'text-provider',
+        status: 0,
+        supportedParameters: ['tools'],
+        supportsImplicitCaching: false,
+      },
+    ];
+
+    expect(selectVercelEndpointReplyFormat({
+      allowFallbacks: true,
+      endpoints,
+      pinnedProviders: ['schema-provider'],
+    })).toBe('text');
+    expect(selectVercelEndpointReplyFormat({
+      allowFallbacks: true,
+      endpoints: endpoints.slice(0, 1),
+      pinnedProviders: [],
+    })).toBe('structured');
+    expect(selectVercelEndpointReplyFormat({
+      allowFallbacks: false,
+      endpoints: [],
+      pinnedProviders: [],
+    })).toBe('text');
   });
 
   it('vercel-gateway: honors endpoint params when richer metadata is available', () => {
