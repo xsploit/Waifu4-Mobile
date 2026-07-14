@@ -16,8 +16,10 @@ class TestReceiver {
   public readonly speaking = new EventEmitter();
   public readonly streams = new Map<string, PassThrough>();
   public readonly subscribeOptions = new Map<string, unknown>();
+  public subscribeCalls = 0;
 
   public subscribe(userId: string, options?: unknown): PassThrough {
+    this.subscribeCalls += 1;
     const stream = new PassThrough();
     this.streams.set(userId, stream);
     this.subscribeOptions.set(userId, options);
@@ -60,7 +62,7 @@ describe('DiscordVoiceReceive', () => {
     const human = receiver.streams.get('human');
     expect(receive.subscriptionCount).toBe(1);
     expect(receiver.subscribeOptions.get('human')).toEqual({
-      end: { behavior: EndBehaviorType.AfterInactivity, duration: 1_200 },
+      end: { behavior: EndBehaviorType.Manual },
     });
     human?.write(Buffer.concat([stereoFrame(12_000), stereoFrame(0), stereoFrame(0)]));
     expect(utterances).toHaveLength(1);
@@ -118,6 +120,44 @@ describe('DiscordVoiceReceive', () => {
     await new Promise((resolve) => setTimeout(resolve, 15));
 
     expect(receive.subscriptionCount).toBe(0);
+    receive.detach();
+  });
+
+  it('reuses one receive stream across repeated utterances from the same speaker', async () => {
+    const receiver = new TestReceiver();
+    const utterances: number[] = [];
+    const receive = new DiscordVoiceReceive(receiver, {
+      createDecoder: () => new TestDecoder(),
+      createVad: () => new VoiceActivityDetector({
+        endSilenceMs: 500,
+        maxUtteranceMs: 5_000,
+        minSpeechMs: 20,
+        sampleRate: 48_000,
+        startThreshold: 0.02,
+      }),
+      getUser: (userId) => ({ bot: false, id: userId }),
+      identity: { channelId: 'channel', guildId: 'guild' },
+      isSelf: () => false,
+      onUtterance: (_identity, utterance) => utterances.push(utterance.speechDurationMs),
+      vad: { endSilenceMs: 5 },
+    });
+
+    receive.attach();
+    receiver.speaking.emit('start', 'human');
+    await new Promise((resolve) => setImmediate(resolve));
+    const stream = receiver.streams.get('human');
+    stream?.write(stereoFrame(12_000));
+    receiver.speaking.emit('end', 'human');
+    await new Promise((resolve) => setTimeout(resolve, 15));
+
+    receiver.speaking.emit('start', 'human');
+    stream?.write(stereoFrame(10_000));
+    receiver.speaking.emit('end', 'human');
+    await new Promise((resolve) => setTimeout(resolve, 15));
+
+    expect(utterances).toEqual([20, 20]);
+    expect(receiver.subscribeCalls).toBe(1);
+    expect(receive.subscriptionCount).toBe(1);
     receive.detach();
   });
 

@@ -34,10 +34,12 @@ export interface PcmDecoder {
 
 type VoiceReceiverLike = {
   speaking: {
+    off(event: 'end', listener: (userId: string) => void): unknown;
     off(event: 'start', listener: (userId: string) => void): unknown;
+    on(event: 'end', listener: (userId: string) => void): unknown;
     on(event: 'start', listener: (userId: string) => void): unknown;
   };
-  subscribe(userId: string, options: { end: { behavior: EndBehaviorType.AfterInactivity; duration: number } }): Readable;
+  subscribe(userId: string, options: { end: { behavior: EndBehaviorType.Manual } }): Readable;
 };
 
 interface ReceiverSubscription {
@@ -45,6 +47,7 @@ interface ReceiverSubscription {
   decodedPcmObserved: boolean;
   identity: DiscordVoiceIdentity;
   noAudioTimer?: ReturnType<typeof setTimeout>;
+  utteranceFlushTimer?: ReturnType<typeof setTimeout>;
   stream: Readable;
   trailing: Buffer;
   vad: VoiceActivityDetector;
@@ -110,12 +113,14 @@ export class DiscordVoiceReceive {
   public attach(): void {
     if (this.attached) return;
     this.receiver.speaking.on('start', this.handleSpeakingStart);
+    this.receiver.speaking.on('end', this.handleSpeakingEnd);
     this.attached = true;
   }
 
   public detach(): void {
     if (this.attached) {
       this.receiver.speaking.off('start', this.handleSpeakingStart);
+      this.receiver.speaking.off('end', this.handleSpeakingEnd);
       this.attached = false;
     }
     for (const userId of [...this.subscriptions.keys()]) {
@@ -128,6 +133,7 @@ export class DiscordVoiceReceive {
     if (!subscription) return;
     this.subscriptions.delete(userId);
     if (subscription.noAudioTimer) clearTimeout(subscription.noAudioTimer);
+    if (subscription.utteranceFlushTimer) clearTimeout(subscription.utteranceFlushTimer);
     subscription.stream.removeAllListeners();
     subscription.stream.destroy();
     subscription.decoder.removeAllListeners?.();
@@ -139,7 +145,24 @@ export class DiscordVoiceReceive {
 
   private readonly handleSpeakingStart = (userId: string): void => {
     console.info(`[DiscordVoice] speaking start user=${userId}`);
+    const existing = this.subscriptions.get(userId);
+    if (existing?.utteranceFlushTimer) {
+      clearTimeout(existing.utteranceFlushTimer);
+      existing.utteranceFlushTimer = undefined;
+    }
     void this.startUser(userId);
+  };
+
+  private readonly handleSpeakingEnd = (userId: string): void => {
+    const subscription = this.subscriptions.get(userId);
+    if (!subscription || subscription.utteranceFlushTimer) return;
+    const delayMs = this.options.vad?.endSilenceMs ?? 600;
+    subscription.utteranceFlushTimer = setTimeout(() => {
+      subscription.utteranceFlushTimer = undefined;
+      if (this.subscriptions.get(userId) !== subscription) return;
+      this.emitUtterances(subscription.identity, subscription.vad.flush(userId));
+    }, delayMs);
+    subscription.utteranceFlushTimer.unref?.();
   };
 
   private async startUser(userId: string): Promise<void> {
@@ -150,10 +173,9 @@ export class DiscordVoiceReceive {
       if (!this.attached || this.subscriptions.has(userId) || !user || user.bot || this.options.isSelf(userId)) return;
 
       const stream = this.receiver.subscribe(userId, {
-        // Discord commonly stops sending packets when a speaker goes quiet. AfterSilence
-        // only observes explicit silence packets and can leave this subscription open
-        // forever, preventing the VAD from flushing the completed utterance.
-        end: { behavior: EndBehaviorType.AfterInactivity, duration: this.options.receiveSilenceMs ?? DEFAULT_RECEIVE_SILENCE_MS },
+        // DAVE receive streams are kept for the connection lifetime. Re-subscribing
+        // after every utterance can produce a stream that never receives PCM.
+        end: { behavior: EndBehaviorType.Manual },
       });
       const decoder = this.options.createDecoder?.() ?? createPrismDecoder();
       const identity: DiscordVoiceIdentity = {
