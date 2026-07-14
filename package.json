@@ -24,6 +24,7 @@
     "build": "npm run typecheck && npm run build:server && vite build",
     "build:server": "esbuild server/index.ts --bundle --platform=node --format=esm --target=node22 --outfile=server/dist/index.js --packages=external",
     "bench:tts": "tsx scripts/bench-tts.ts",
+    "bench:memory-preflight": "tsx scripts/bench-memory-preflight.ts",
     "bench:vercel-json": "tsx scripts/bench-vercel-json.ts",
     "memory:recover-fallback": "tsx scripts/recover-ladybug-fallback.ts",
     "audit:dead-code": "fallow dead-code --fail-on-issues",
