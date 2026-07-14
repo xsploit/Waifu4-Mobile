@@ -138,6 +138,10 @@ type LedgerEntity = Extract<
 >;
 
 export class GrilloEvidenceLedger {
+  private readonly replayCache = new Map<
+    string,
+    { replay: GrilloLedgerReplay; revision: string }
+  >();
   private readonly nowMs: () => number;
   private readonly idFactory: (prefix: string) => string;
   private readonly scopeMutationQueues = new Map<string, Promise<void>>();
@@ -441,8 +445,20 @@ export class GrilloEvidenceLedger {
     return { correction: storedCorrection, decision: result.decision };
   }
 
-  async replay(scopeKey: string): Promise<GrilloLedgerReplay> {
+  async replay(
+    scopeKey: string,
+    options: { stableClaimsOnly?: boolean } = {},
+  ): Promise<GrilloLedgerReplay> {
     const normalizedScopeKey = scopeKeySchema.parse(scopeKey);
+    const stableClaimsOnly = options.stableClaimsOnly === true;
+    const revision = this.memory.getGrilloRevision(
+      stableClaimsOnly
+        ? ['memory_claims', 'memory_corrections']
+        : ['evidence_records', 'memory_claims', 'memory_corrections', 'worker_decisions'],
+    );
+    const cacheKey = `${stableClaimsOnly ? 'claims' : 'full'}:${normalizedScopeKey}`;
+    const cached = this.replayCache.get(cacheKey);
+    if (cached?.revision === revision) return cached.replay;
     const [evidenceResult, claimsResult, correctionsResult, decisionsResult] = await Promise.all([
       this.readValidWithInvalid('evidence_records', evidenceRecordSchema, normalizedScopeKey),
       this.readValidWithInvalid('memory_claims', memoryClaimSchema, normalizedScopeKey),
@@ -515,7 +531,7 @@ export class GrilloEvidenceLedger {
     }
 
     const claimStates = [...states.values()];
-    return {
+    const replay = {
       scopeKey: normalizedScopeKey,
       evidence,
       claims,
@@ -531,6 +547,12 @@ export class GrilloEvidenceLedger {
         ...decisionsResult.invalidIds,
       ]),
     };
+    this.replayCache.set(cacheKey, { replay, revision });
+    if (this.replayCache.size > 64) {
+      const oldestKey = this.replayCache.keys().next().value;
+      if (oldestKey) this.replayCache.delete(oldestKey);
+    }
+    return replay;
   }
 
   private async claimDecision(

@@ -625,6 +625,49 @@ describe('GrilloEvidenceLedger', () => {
       await memory.close();
     }
   });
+
+  it('keeps stable claim replays warm across evidence appends and invalidates them for claims', async () => {
+    const { ledger, memory } = createLedger();
+    const scopeKey = 'local:persona:hikari-chan';
+    try {
+      const firstEvidence = await ledger.appendEvidence({
+        content: 'The user prefers low-latency replies.',
+        kind: 'turn',
+        role: 'user',
+        scopeKey,
+        source: 'local',
+      });
+      const stableBefore = await ledger.replay(scopeKey, { stableClaimsOnly: true });
+      const fullBefore = await ledger.replay(scopeKey);
+
+      await ledger.appendEvidence({
+        content: 'A later chat turn should not rebuild the claim projection.',
+        kind: 'turn',
+        role: 'assistant',
+        scopeKey,
+        source: 'local',
+      });
+
+      expect(await ledger.replay(scopeKey, { stableClaimsOnly: true })).toBe(stableBefore);
+      expect(await ledger.replay(scopeKey)).not.toBe(fullBefore);
+
+      await ledger.evaluateClaim({
+        confidence: 0.95,
+        evidenceIds: [firstEvidence.id],
+        kind: 'preference',
+        predicate: 'reply_latency',
+        scopeKey,
+        subject: 'local:local:subsect',
+        value: 'low',
+      });
+
+      const stableAfterClaim = await ledger.replay(scopeKey, { stableClaimsOnly: true });
+      expect(stableAfterClaim).not.toBe(stableBefore);
+      expect(stableAfterClaim.activeClaims).toHaveLength(1);
+    } finally {
+      await memory.close();
+    }
+  });
 });
 
 function rawEvidence(scopeKey: string, id: string, createdAt: number) {

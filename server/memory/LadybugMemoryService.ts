@@ -143,6 +143,7 @@ export class LadybugMemoryService {
   private initPromise: Promise<LadybugState> | null = null;
   private fallbackReason: string | null = null;
   private fallbackStoreCache: FallbackStoreCache | null = null;
+  private readonly grilloEntityRevisions = new Map<LadybugGrilloRecordEntity, number>();
 
   constructor(dbDir = process.env['WEBWAIFU_MEMORY_DB_DIR']?.trim() || DEFAULT_MEMORY_DB_DIR) {
     this.dbDir = dbDir;
@@ -154,6 +155,10 @@ export class LadybugMemoryService {
 
   getBackendLabel() {
     return this.fallbackReason ? 'json-fallback' : 'ladybug';
+  }
+
+  getGrilloRevision(entities: readonly LadybugGrilloRecordEntity[]) {
+    return entities.map((entity) => `${entity}:${this.grilloEntityRevisions.get(entity) ?? 0}`).join('|');
   }
 
   async getStatus() {
@@ -373,6 +378,7 @@ export class LadybugMemoryService {
     } catch (error) {
       await this.deleteFallbackGrilloState(normalizedScopeKey, error);
     }
+    for (const entity of GRILLO_RECORD_ENTITIES) this.bumpGrilloRevision(entity);
   }
 
   async loadSemanticRecords(scopeKey: string): Promise<LadybugSemanticMemoryRecord[] | null> {
@@ -543,6 +549,7 @@ export class LadybugMemoryService {
     } catch (error) {
       await this.appendFallbackGrilloRecord(normalizedEntity, normalizedRecord, error);
     }
+    this.bumpGrilloRevision(normalizedEntity);
   }
 
   async readGrilloRecords<T = Record<string, unknown>>(
@@ -590,6 +597,7 @@ export class LadybugMemoryService {
     } catch (error) {
       await this.replaceFallbackGrilloRecords(normalizedEntity, normalizedRecords, error);
     }
+    this.bumpGrilloRevision(normalizedEntity);
   }
 
   async getGrilloSingleton<T = Record<string, unknown>>(
@@ -1207,6 +1215,11 @@ export class LadybugMemoryService {
         error,
       );
     }
+    this.bumpGrilloRevision(normalizedEntity);
+  }
+
+  private bumpGrilloRevision(entity: LadybugGrilloRecordEntity) {
+    this.grilloEntityRevisions.set(entity, (this.grilloEntityRevisions.get(entity) ?? 0) + 1);
   }
 
   private async appendNativeGrilloRecord(

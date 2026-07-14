@@ -10,6 +10,7 @@ import type {
 import {
   GrilloEvidenceLedger,
   type GrilloClaimInput,
+  type GrilloLedgerReplay,
 } from './GrilloEvidenceLedger.js';
 import { GrilloRepairQueue, type GrilloRepairTask } from './GrilloRepairQueue.js';
 import { assessGrilloMemorySufficiency } from './GrilloRetrievalController.js';
@@ -238,6 +239,7 @@ export class GrilloWorkerService {
   private readonly repairQueue: GrilloRepairQueue;
   private readonly migrationQueues = new Map<string, Promise<void>>();
   private readonly quarantineSignatures = new Map<string, string>();
+  private readonly projectionCache = new WeakMap<GrilloLedgerReplay, GrilloLedgerProjection>();
   private activeTickPromise: Promise<GrilloWorkerTickResult> | null = null;
   private runtime: GrilloWorkerRuntimeState = {
     enabled: false,
@@ -309,7 +311,7 @@ export class GrilloWorkerService {
   }
 
   async getEvidenceLedgerProjection(scopeKey: unknown) {
-    return buildGrilloLedgerProjection(await this.getEvidenceLedgerReplay(scopeKey));
+    return this.projectLedgerReplay(await this.getEvidenceLedgerReplay(scopeKey));
   }
 
   async getEvidenceProjectionCoverage(scopeKey: unknown) {
@@ -1387,7 +1389,7 @@ export class GrilloWorkerService {
       semanticRecords,
       semanticVectorMatches,
     ] = await Promise.all([
-      this.evidenceLedger.replay(scopeKey),
+      this.evidenceLedger.replay(scopeKey, { stableClaimsOnly: true }),
       this.memory.readGrilloRecords<Record<string, unknown>>('turn_events', { scopeKey }),
       this.memory.readGrilloRecords<Record<string, unknown>>('diary_entries', { scopeKey }),
       this.memory.loadSemanticRecords(scopeKey),
@@ -1442,7 +1444,7 @@ export class GrilloWorkerService {
           ? lexicalSemantic
           : [];
 
-    const ledgerProjection = buildGrilloLedgerProjection(ledgerReplay);
+    const ledgerProjection = this.projectLedgerReplay(ledgerReplay);
     const ledgerProjectionIsValid =
       ledgerProjection.provenance.integrityIssues.length === 0 &&
       ledgerProjection.provenance.invalidRecordIds.length === 0;
@@ -1611,6 +1613,14 @@ export class GrilloWorkerService {
     if (this.quarantineSignatures.get(scopeKey) === signature) return;
     this.quarantineSignatures.set(scopeKey, signature);
     console.warn('[GRILLO] ledger quarantined', { integrityIssues, invalidRecordIds, scopeKey });
+  }
+
+  private projectLedgerReplay(replay: GrilloLedgerReplay) {
+    const cached = this.projectionCache.get(replay);
+    if (cached) return cached;
+    const projection = buildGrilloLedgerProjection(replay);
+    this.projectionCache.set(replay, projection);
+    return projection;
   }
 
   async diagnoseContextPacket(input: GrilloContextPacketInput) {

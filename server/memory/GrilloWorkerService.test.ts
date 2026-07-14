@@ -697,6 +697,58 @@ describe('GrilloWorkerService', () => {
     }
   });
 
+  it('does not rescan ledger tables for evidence-only chat turns on the warm context path', async () => {
+    const { grillo, memory } = createServices();
+    const scopeKey = 'local:persona:hikari-chan';
+    try {
+      const first = await grillo.ingestTurnPair({
+        assistantText: 'I will keep the live path quick.',
+        participantKey: 'local:local:subsect',
+        scopeKey,
+        source: 'local',
+        userText: 'Response speed is paramount.',
+      });
+      await grillo.buildContextPacket({ scopeKey });
+
+      await grillo.ingestTurnPair({
+        assistantText: 'This turn should reuse the claim projection.',
+        participantKey: 'local:local:subsect',
+        scopeKey,
+        source: 'local',
+        userText: 'Keep going without adding latency.',
+      });
+      const readSpy = vi.spyOn(memory, 'readGrilloRecords');
+      await grillo.buildContextPacket({ scopeKey });
+
+      const warmEntities = readSpy.mock.calls.map(([entity]) => entity);
+      expect(warmEntities).not.toContain('evidence_records');
+      expect(warmEntities).not.toContain('memory_claims');
+      expect(warmEntities).not.toContain('memory_corrections');
+      expect(warmEntities).not.toContain('worker_decisions');
+
+      await grillo.runWorkerTool({
+        args: {
+          confidence: 0.95,
+          evidence_turn_ids: [first.turnIds[0]],
+          kind: 'preference',
+          predicate: 'reply_latency',
+          subject: 'local:local:subsect',
+          value: 'low',
+        },
+        name: 'core.worker_claim_propose',
+        participantKey: 'local:local:subsect',
+        scopeKey,
+      });
+      readSpy.mockClear();
+      const packet = await grillo.buildContextPacket({ scopeKey });
+
+      expect(readSpy.mock.calls.map(([entity]) => entity)).toContain('memory_claims');
+      expect(packet.relationship_memory.join('\n')).toContain('low');
+    } finally {
+      await memory.close();
+    }
+  });
+
   it('runs core worker tools against Ladybug and records tool telemetry', async () => {
     const { grillo, memory } = createServices();
     try {
