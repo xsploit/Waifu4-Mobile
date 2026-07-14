@@ -26,6 +26,13 @@ export type GrilloScoredItem = Partial<Omit<GrilloRecallItem, 'score' | 'text'>>
   score?: number;
 };
 
+export type GrilloMemoryPromptAdditions = {
+  contextPacket?: GrilloContextPacket | null;
+  diaryThoughts: string[];
+  recalledMemories: GrilloScoredItem[];
+  relationshipMemory: string[];
+};
+
 type GrilloContextSections = {
   background_information: string[];
   instructions: string[];

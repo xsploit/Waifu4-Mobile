@@ -1,17 +1,12 @@
 import type { ChatMessage, RelationshipMemory } from './types';
-import {
-  dedupeFacts,
-  deriveRelationshipStage,
-  extractFactsFromUserMessage,
-} from './memory-shared';
+import { deriveRelationshipStage } from './memory-shared';
 
 export function updateRelationshipMemory(
   current: RelationshipMemory,
   _history: ChatMessage[],
-  userMessage: string,
+  _userMessage: string,
 ) {
   const nextTurnCount = current.turnCount + 1;
-  const nextFacts = dedupeFacts([...current.facts, ...extractFactsFromUserMessage(userMessage)]);
 
   return {
     ...current,
@@ -24,6 +19,5 @@ export function updateRelationshipMemory(
       attraction: current.attraction,
       guard: current.guard,
     }),
-    facts: nextFacts,
   } satisfies RelationshipMemory;
 }

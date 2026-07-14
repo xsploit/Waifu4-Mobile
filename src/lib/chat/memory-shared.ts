@@ -63,33 +63,6 @@ export function dedupeFacts(facts: string[]) {
   return output.slice(0, MAX_FACTS);
 }
 
-export function extractFactsFromUserMessage(message: string) {
-  const text = message.trim();
-  const facts: string[] = [];
-  const patterns = [
-    /my name is ([^.!?]+)/i,
-    /i(?:'m| am) ([^.!?]+)/i,
-    /i (?:like|love|prefer) ([^.!?]+)/i,
-    /i (?:hate|dislike) ([^.!?]+)/i,
-    /i work (?:as|at) ([^.!?]+)/i,
-    /i live in ([^.!?]+)/i,
-  ];
-
-  patterns.forEach((pattern) => {
-    const match = text.match(pattern);
-    if (!match?.[1]) {
-      return;
-    }
-
-    const fact = match[0].replace(/\s+/g, ' ').trim();
-    if (fact.length >= 6 && fact.length <= 140) {
-      facts.push(fact);
-    }
-  });
-
-  return facts;
-}
-
 export function normalizeRelationshipMood(value: unknown): RelationshipMood {
   if (typeof value !== 'string') {
     return 'guarded';

@@ -35,23 +35,16 @@ import {
   normalizeMemoryAgentIntervalMessages,
 } from './lib/chat/memory-agent';
 import { executeBackendGrilloCadence } from './lib/chat/backend-grillo-cadence';
+import type { GrilloMemoryPromptAdditions } from './lib/chat/grillo-context';
 import type {
   MemoryEmbeddingDebugSnapshot,
   MemoryPromptDebugSnapshot,
   MemoryWorkerDebugSnapshot,
 } from './lib/chat/memory-debug';
 import { updateRelationshipMemory } from './lib/chat/memory';
-import {
-  clearGrilloMemoryStateAsync,
-  createEmptyGrilloMemoryPromptAdditions,
-  createDefaultGrilloMemoryState,
-  getGrilloParticipantKey,
-  hydrateGrilloMemoryState,
-  recordGrilloMemoryTurnFailClosedAsync,
-  type GrilloMemoryState,
-} from './lib/chat/grillo-memory';
 import { resolveDiscordInterruptionAction } from './lib/chat/discord-interruption';
 import {
+  deleteLadybugGrilloScope,
   deleteLadybugRelationshipMemory,
   loadLadybugGrilloContextPacket,
   loadLadybugGrilloRuntimeStatus,
@@ -112,6 +105,7 @@ import {
   type TwitchAiQueueJob,
 } from './lib/chat/twitch-ai-queue';
 import {
+  getGrilloParticipantKey,
   shouldIngestChatJobToGrillo,
   shouldIngestChatTurnToGrillo,
 } from './lib/chat/grillo-intake';
@@ -2196,9 +2190,6 @@ function App() {
   const [memoryAgentPendingCounts, setMemoryAgentPendingCounts] = useState<Record<string, number>>(
     {},
   );
-  const [grilloMemoryState, setGrilloMemoryState] = useState<GrilloMemoryState>(() =>
-    createDefaultGrilloMemoryState(getLocalConversationStateKey(DEFAULT_PERSONA)),
-  );
   const [ttsVoices, setTtsVoices] = useState<PiperVoiceProfile[]>(() => [
     ...CUSTOM_RIKO_PIPER_VOICES,
   ]);
@@ -2285,7 +2276,6 @@ function App() {
   const appliedPersonaSceneKeyRef = useRef<string | null>(null);
   const memoryAgentTimeoutRef = useRef<number | null>(null);
   const backendGrilloCadenceBusyRef = useRef(false);
-  const grilloMemoryHydrationRunRef = useRef(0);
   const ttsManager = useMemo(() => getTtsManager(), []);
   const ttsBenchmarkPlaybackRef = useRef<AudioPlayback | null>(null);
 
@@ -2348,22 +2338,10 @@ function App() {
     setMemoryAgentPendingCounts({ ...memoryAgentPendingChatTurnCountsRef.current });
   }, []);
 
-  const refreshGrilloMemoryState = useCallback((stateKey: string) => {
-    const run = (grilloMemoryHydrationRunRef.current += 1);
-    void hydrateGrilloMemoryState(stateKey).then((state) => {
-      if (
-        run === grilloMemoryHydrationRunRef.current &&
-        shouldExposeScopedRelationshipMemory(stateKey, activeRelationshipStateKeyRef.current)
-      ) {
-        setGrilloMemoryState(state);
-      }
-    });
-  }, []);
-
   const refreshMemoryBackendStatus = useCallback(() => {
     return Promise.all([
       loadLadybugMemoryStatus(),
-      loadLadybugMemoryGraph(),
+      loadLadybugMemoryGraph(activeRelationshipStateKeyRef.current),
       loadLadybugGrilloRuntimeStatus(),
     ])
       .then(([status, graph, runtime]) => {
@@ -2406,7 +2384,11 @@ function App() {
     [],
   );
 
-  const clearScopedRelationshipMemory = useCallback((stateKey: string) => {
+  const clearScopedRelationshipMemory = useCallback(async (stateKey: string) => {
+    const deleted = await deleteLadybugRelationshipMemory(stateKey);
+    if (!deleted) {
+      throw new Error('Ladybug relationship profile delete failed.');
+    }
     setRelationshipMemories((current) => {
       const next = clearScopedRelationshipMemoryState(current, stateKey);
       relationshipMemoriesRef.current = next;
@@ -2417,9 +2399,6 @@ function App() {
       setRelationshipMemory(defaultMemory);
       relationshipMemoryRef.current = defaultMemory;
     }
-    return deleteLadybugRelationshipMemory(stateKey).catch((error) => {
-      console.warn('[App] Failed to delete Ladybug relationship profile', error);
-    });
   }, []);
 
   useEffect(() => {
@@ -2453,28 +2432,8 @@ function App() {
         turns.length,
       );
       syncMemoryAgentPendingCounts();
-      void recordGrilloMemoryTurnFailClosedAsync(
-        {
-          assistantText: '',
-          persona: activePersonaRef.current ?? DEFAULT_PERSONA,
-          scopeKey: stateKey,
-          turns,
-        },
-        (error) => {
-          console.warn('[App] Failed to record raw chat memory turns', error);
-        },
-      )
-        .then((nextGrilloMemoryState) => {
-          if (
-            nextGrilloMemoryState &&
-            shouldExposeScopedRelationshipMemory(stateKey, activeRelationshipStateKeyRef.current)
-          ) {
-            setGrilloMemoryState(nextGrilloMemoryState);
-          }
-          void refreshMemoryBackendStatus();
-        });
     },
-    [refreshMemoryBackendStatus, syncMemoryAgentPendingCounts],
+    [syncMemoryAgentPendingCounts],
   );
 
   const captureTwitchStreamTranscript = useCallback(async () => {
@@ -2606,8 +2565,8 @@ function App() {
       setChatGenerating(false);
     }
     setRelationshipMemory(getScopedRelationshipMemory(activeRelationshipStateKey));
-    refreshGrilloMemoryState(activeRelationshipStateKey);
-  }, [activeRelationshipStateKey, getScopedRelationshipMemory, hydrated, refreshGrilloMemoryState]);
+    void refreshMemoryBackendStatus();
+  }, [activeRelationshipStateKey, getScopedRelationshipMemory, hydrated, refreshMemoryBackendStatus]);
 
   useEffect(() => {
     aiSettingsRef.current = aiSettings;
@@ -4990,9 +4949,12 @@ function App() {
 
   const handleClearMemory = useCallback(() => {
     const relationshipClear = clearScopedRelationshipMemory(activeRelationshipStateKey);
-    const grilloClear = clearGrilloMemoryStateAsync(activeRelationshipStateKey);
+    const grilloClear = deleteLadybugGrilloScope(activeRelationshipStateKey).then((deleted) => {
+      if (!deleted) {
+        throw new Error('Ladybug GRILLO scope delete failed.');
+      }
+    });
     const semanticClear = clearSemanticMemory(activeRelationshipStateKey);
-    setGrilloMemoryState(createDefaultGrilloMemoryState(activeRelationshipStateKey));
     clearMemoryAgentPendingChatTurns(
       memoryAgentPendingChatTurnCountsRef.current,
       activeRelationshipStateKey,
@@ -5118,7 +5080,6 @@ function App() {
           throw new Error('Ladybug relationship profile was unavailable after cadence.');
         }
         commitScopedRelationshipMemory(stateKey, updatedProfile);
-        refreshGrilloMemoryState(stateKey);
         setMemoryAgentStatus(`Backend GRILLO cadence complete: ${summaries.join(' / ')}.`);
         return { beatResults, summaries };
       } catch (error) {
@@ -5135,7 +5096,6 @@ function App() {
     [
       commitScopedRelationshipMemory,
       getScopedRelationshipMemory,
-      refreshGrilloMemoryState,
       refreshMemoryBackendStatus,
       runBackendGrilloTickOnce,
     ],
@@ -6240,7 +6200,7 @@ function App() {
             semanticChars: semanticMemoryContext.length,
           });
         }
-        const grilloPromptMemory = grilloContextPacket
+        const grilloPromptMemory: GrilloMemoryPromptAdditions = grilloContextPacket
           ? {
               contextPacket: grilloContextPacket,
               diaryThoughts: [],
@@ -6249,7 +6209,9 @@ function App() {
             }
           : {
               contextPacket: null,
-              ...createEmptyGrilloMemoryPromptAdditions(),
+              diaryThoughts: [],
+              recalledMemories: [],
+              relationshipMemory: [],
             };
         if (!grilloContextPacket) {
           setMemoryAgentStatus(
@@ -6271,11 +6233,15 @@ function App() {
                 thoughts: grilloContextPacket.thoughts,
               }
             : null,
-          grilloDiaryThoughts: grilloPromptMemory.diaryThoughts.slice(0, 4),
-          grilloRecalledMemories: grilloPromptMemory.recalledMemories
-            .slice(0, 6)
-            .map((item) => item.text),
-          grilloRelationshipMemory: grilloPromptMemory.relationshipMemory.slice(0, 6),
+          grilloDiaryThoughts: grilloContextPacket
+            ? grilloContextPacket.thoughts.slice(0, 4)
+            : grilloPromptMemory.diaryThoughts.slice(0, 4),
+          grilloRecalledMemories: grilloContextPacket
+            ? grilloContextPacket.recalled_memories.slice(0, 6).map((item) => item.text)
+            : grilloPromptMemory.recalledMemories.slice(0, 6).map((item) => item.text),
+          grilloRelationshipMemory: grilloContextPacket
+            ? grilloContextPacket.relationship_memory.slice(0, 6)
+            : grilloPromptMemory.relationshipMemory.slice(0, 6),
           semanticMemoryContext,
           source: targetMessage?.source ?? 'twitch',
           stateKey,
@@ -6518,20 +6484,6 @@ function App() {
               );
               void refreshMemoryBackendStatus();
             });
-          const nextGrilloMemoryState = await recordGrilloMemoryTurnFailClosedAsync(
-            {
-              assistantText: assistantContent,
-              persona,
-              scopeKey: stateKey,
-              turns: job.messages,
-            },
-            (error) => {
-              console.warn('[App] Failed to record local GRILLO memory turn', error);
-            },
-          );
-          if (nextGrilloMemoryState && stateKey === activeRelationshipStateKey) {
-            setGrilloMemoryState(nextGrilloMemoryState);
-          }
           void refreshMemoryBackendStatus();
         } else {
           setMemoryAgentStatus('Stream Mode memory gate kept this Twitch turn short-term only.');
@@ -7593,6 +7545,7 @@ function App() {
 
           {menuOpen ? (
             <SettingsPanel
+              activeMemoryScopeKey={activeRelationshipStateKey}
               activePersona={activePersona}
               activeTab={activeTab}
               activeTwitchChatters={twitchActiveChatterCount}
@@ -7772,7 +7725,6 @@ function App() {
               savedVrmModels={savedVrmModels}
               savedVrmStatus={savedVrmStatus}
               backendGrilloTickBusy={backendGrilloTickBusy}
-              grilloMemoryState={grilloMemoryState}
               grilloRuntimeStatus={grilloRuntimeStatus}
               relationshipMemory={relationshipMemory}
               memoryAgentBusy={memoryAgentBusy}

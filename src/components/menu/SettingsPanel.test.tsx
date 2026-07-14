@@ -11,7 +11,6 @@ import {
   createDefaultRelationshipMemory,
   createDefaultTwitchSettings,
 } from '../../lib/chat/defaults';
-import { createDefaultGrilloMemoryState } from '../../lib/chat/grillo-memory';
 import { createDefaultSequencerSettings, createDefaultVisualSettings } from '../../lib/menu/defaults';
 import { SettingsPanel } from './SettingsPanel';
 
@@ -22,6 +21,7 @@ const noop = () => {};
 function createProps(activeTab: SettingsTabId): SettingsPanelProps {
   const personas = createDefaultPersonas();
   return {
+    activeMemoryScopeKey: 'local:persona:test',
     activePersona: personas[0] ?? DEFAULT_PERSONA,
     activeTab,
     activeTwitchChatters: 0,
@@ -39,7 +39,6 @@ function createProps(activeTab: SettingsTabId): SettingsPanelProps {
     currentBundledModelId: 'default',
     currentCustomVrmModelId: '',
     emotionTelemetryEvents: [],
-    grilloMemoryState: createDefaultGrilloMemoryState('test-scope'),
     grilloRuntimeStatus: null,
     localTransferStatus: 'Ready',
     memoryAgentBusy: false,

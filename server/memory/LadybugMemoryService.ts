@@ -689,9 +689,13 @@ export class LadybugMemoryService {
     return record as LadybugEmotionStateRecord & Record<string, unknown>;
   }
 
-  async getGraphSummary(): Promise<LadybugMemoryGraphSummary> {
+  async getGraphSummary(scopeKey?: string): Promise<LadybugMemoryGraphSummary> {
     try {
       await this.open();
+      const normalizedScopeKey = scopeKey?.trim() ? normalizeScopeKey(scopeKey) : '';
+      const memoryScopeWhere = normalizedScopeKey
+        ? ` WHERE m.scopeKey = ${q(normalizedScopeKey)}`
+        : '';
       const [
         hasCandidateEdges,
         hasBlockEdges,
@@ -819,46 +823,46 @@ export class LadybugMemoryService {
         ),
         this.all('MATCH (p:Persona) RETURN p.id AS id, p.name AS name LIMIT 12'),
         this.all(
-          'MATCH (m:TurnEvent) RETURN m.id AS id, m.scopeKey AS scopeKey, m.role AS role, m.content AS content, m.authorName AS authorName, m.createdAt AS createdAt LIMIT 8',
+          `MATCH (m:TurnEvent)${memoryScopeWhere} RETURN m.id AS id, m.scopeKey AS scopeKey, m.role AS role, m.content AS content, m.authorName AS authorName, m.createdAt AS createdAt ORDER BY m.createdAt DESC LIMIT 8`,
         ),
         this.all(
-          'MATCH (m:MemoryCandidate) RETURN m.id AS id, m.participantKey AS participantKey, m.type AS type, m.summary AS summary LIMIT 8',
+          `MATCH (m:MemoryCandidate)${memoryScopeWhere} RETURN m.id AS id, m.scopeKey AS scopeKey, m.participantKey AS participantKey, m.type AS type, m.summary AS summary, m.confidence AS confidence, m.source AS source, m.createdAt AS createdAt ORDER BY m.createdAt DESC LIMIT 8`,
         ),
         this.all(
-          'MATCH (m:MemoryBlock) RETURN m.id AS id, m.scopeKey AS scopeKey, m.participantKey AS participantKey, m.blockName AS blockName, m.itemsJson AS itemsJson LIMIT 8',
+          `MATCH (m:MemoryBlock)${memoryScopeWhere} RETURN m.id AS id, m.scopeKey AS scopeKey, m.participantKey AS participantKey, m.blockName AS blockName, m.itemsJson AS itemsJson, m.updatedAt AS updatedAt ORDER BY m.updatedAt DESC LIMIT 8`,
         ),
         this.all(
-          'MATCH (m:MemorySlot) RETURN m.id AS id, m.scopeKey AS scopeKey, m.participantKey AS participantKey, m.slotName AS slotName, m.contentJson AS contentJson, m.updatedAt AS updatedAt LIMIT 8',
+          `MATCH (m:MemorySlot)${memoryScopeWhere} RETURN m.id AS id, m.scopeKey AS scopeKey, m.participantKey AS participantKey, m.slotName AS slotName, m.contentJson AS contentJson, m.updatedAt AS updatedAt ORDER BY m.updatedAt DESC LIMIT 8`,
         ),
         this.all(
-          'MATCH (m:MemorySlotPatch) RETURN m.id AS id, m.scopeKey AS scopeKey, m.participantKey AS participantKey, m.slotId AS slotId, m.slotName AS slotName, m.operation AS operation, m.createdAt AS createdAt LIMIT 8',
+          `MATCH (m:MemorySlotPatch)${memoryScopeWhere} RETURN m.id AS id, m.scopeKey AS scopeKey, m.participantKey AS participantKey, m.slotId AS slotId, m.slotName AS slotName, m.operation AS operation, m.createdAt AS createdAt ORDER BY m.createdAt DESC LIMIT 8`,
         ),
         this.all(
-          'MATCH (m:DiaryEntry) RETURN m.id AS id, m.participantKey AS participantKey, m.beatType AS beatType, m.summary AS summary LIMIT 8',
+          `MATCH (m:DiaryEntry)${memoryScopeWhere} RETURN m.id AS id, m.scopeKey AS scopeKey, m.participantKey AS participantKey, m.beatType AS beatType, m.summary AS summary, m.personalThought AS personalThought, m.interactionSummary AS interactionSummary, m.emotionsJson AS emotionsJson, m.tagsJson AS tagsJson, m.createdAt AS createdAt ORDER BY m.createdAt DESC LIMIT 8`,
         ),
         this.all(
-          'MATCH (m:GrilloActivity) RETURN m.id AS id, m.scopeKey AS scopeKey, m.beatType AS beatType, m.promptText AS promptText, m.responseText AS responseText, m.createdAt AS createdAt ORDER BY m.createdAt DESC LIMIT 8',
+          `MATCH (m:GrilloActivity)${memoryScopeWhere} RETURN m.id AS id, m.scopeKey AS scopeKey, m.beatType AS beatType, m.promptText AS promptText, m.responseText AS responseText, m.createdAt AS createdAt ORDER BY m.createdAt DESC LIMIT 8`,
         ),
         this.all(
-          'MATCH (m:WorkerContextTrace) RETURN m.id AS id, m.scopeKey AS scopeKey, m.taskType AS taskType, m.beatType AS beatType, m.provider AS provider, m.model AS model, m.systemPrompt AS systemPrompt, m.prompt AS prompt, m.createdAt AS createdAt ORDER BY m.createdAt DESC LIMIT 8',
+          `MATCH (m:WorkerContextTrace)${memoryScopeWhere} RETURN m.id AS id, m.scopeKey AS scopeKey, m.taskType AS taskType, m.beatType AS beatType, m.provider AS provider, m.model AS model, m.systemPrompt AS systemPrompt, m.prompt AS prompt, m.createdAt AS createdAt ORDER BY m.createdAt DESC LIMIT 8`,
         ),
         this.all(
-          'MATCH (m:EmotionState) RETURN m.id AS id, m.scopeKey AS scopeKey, m.lastSignalSource AS lastSignalSource, m.updatedAt AS updatedAt LIMIT 8',
+          `MATCH (m:EmotionState)${memoryScopeWhere} RETURN m.id AS id, m.scopeKey AS scopeKey, m.lastSignalSource AS lastSignalSource, m.updatedAt AS updatedAt ORDER BY m.updatedAt DESC LIMIT 8`,
         ),
         this.all(
-          'MATCH (m:EmotionIntensity) RETURN m.id AS id, m.scopeKey AS scopeKey, m.emotionStateId AS emotionStateId, m.name AS name, m.intensity AS intensity, m.updatedAt AS updatedAt LIMIT 12',
+          `MATCH (m:EmotionIntensity)${memoryScopeWhere} RETURN m.id AS id, m.scopeKey AS scopeKey, m.emotionStateId AS emotionStateId, m.name AS name, m.intensity AS intensity, m.updatedAt AS updatedAt ORDER BY m.updatedAt DESC LIMIT 12`,
         ),
         this.all(
-          'MATCH (m:RelationshipProfile) RETURN m.id AS id, m.scopeKey AS scopeKey, m.relationshipStage AS relationshipStage, m.mood AS mood, m.summary AS summary LIMIT 8',
+          `MATCH (m:RelationshipProfile)${memoryScopeWhere} RETURN m.id AS id, m.scopeKey AS scopeKey, m.relationshipStage AS relationshipStage, m.mood AS mood, m.summary AS summary LIMIT 8`,
         ),
         this.all(
-          'MATCH (m:RelationshipProfile)-[:HAS_RELATIONSHIP_FACT]->(f:RelationshipFact) RETURN f.id AS id, m.scopeKey AS scopeKey, f.text AS text LIMIT 8',
+          `MATCH (m:RelationshipProfile)-[:HAS_RELATIONSHIP_FACT]->(f:RelationshipFact)${memoryScopeWhere} RETURN f.id AS id, m.scopeKey AS scopeKey, f.text AS text LIMIT 8`,
         ),
         this.all(
-          'MATCH (m:SemanticRecord) RETURN m.id AS id, m.personaId AS personaId, m.text AS text LIMIT 8',
+          `MATCH (m:SemanticRecord)${memoryScopeWhere} RETURN m.id AS id, m.personaId AS personaId, m.text AS text LIMIT 8`,
         ),
         this.all(
-          'MATCH (m:SemanticVector) RETURN m.id AS id, m.personaId AS personaId, m.text AS text LIMIT 8',
+          `MATCH (m:SemanticVector)${memoryScopeWhere} RETURN m.id AS id, m.personaId AS personaId, m.text AS text LIMIT 8`,
         ),
       ]);
 
@@ -923,16 +927,33 @@ export class LadybugMemoryService {
             };
           }),
           candidates: candidates.map((row) => ({
+            confidence: numberValue(row['confidence'], 0),
+            createdAt: Number(row['createdAt'] ?? 0),
             id: stringValue(row['id']),
             participantKey: stringValue(row['participantKey']),
+            scopeKey: stringValue(row['scopeKey']),
+            source: stringValue(row['source']),
             summary: stringValue(row['summary']),
             type: stringValue(row['type']),
           })),
           diary: diary.map((row) => ({
             beatType: stringValue(row['beatType']),
+            createdAt: Number(row['createdAt'] ?? 0),
+            emotions: arrayValue(safeJsonParse(stringValue(row['emotionsJson'])))
+              .filter((value): value is Record<string, unknown> => Boolean(value && typeof value === 'object'))
+              .map((emotion) => ({
+                intensity: numberValue(emotion['intensity'], 0),
+                name: stringValue(emotion['name']),
+              })),
             id: stringValue(row['id']),
+            interactionSummary: stringValue(row['interactionSummary']),
             participantKey: stringValue(row['participantKey']),
+            personalThought: stringValue(row['personalThought']),
+            scopeKey: stringValue(row['scopeKey']),
             summary: stringValue(row['summary']),
+            tags: arrayValue(safeJsonParse(stringValue(row['tagsJson'])))
+              .map((tag) => stringValue(tag))
+              .filter(Boolean),
           })),
           emotions: emotions.map((row) => ({
             id: stringValue(row['id']),
@@ -1020,7 +1041,7 @@ export class LadybugMemoryService {
         })),
       };
     } catch (error) {
-      return this.getFallbackGraphSummary(error);
+      return this.getFallbackGraphSummary(error, scopeKey);
     }
   }
 
@@ -1090,12 +1111,19 @@ export class LadybugMemoryService {
     };
   }
 
-  private async getFallbackGraphSummary(error: unknown): Promise<LadybugMemoryGraphSummary> {
+  private async getFallbackGraphSummary(
+    error: unknown,
+    scopeKey?: string,
+  ): Promise<LadybugMemoryGraphSummary> {
     await this.enableFallback(error);
     const store = await this.readFallbackStore();
     const snapshots = Object.values(store.snapshots);
-    const grilloStates = snapshots.filter((snapshot) => snapshot.kind === 'grillo');
-    const semanticStates = snapshots.filter((snapshot) => snapshot.kind === 'semantic');
+    const normalizedScopeKey = scopeKey?.trim() ? normalizeScopeKey(scopeKey) : '';
+    const visibleSnapshots = normalizedScopeKey
+      ? snapshots.filter((snapshot) => snapshot.scopeKey === normalizedScopeKey)
+      : snapshots;
+    const grilloStates = visibleSnapshots.filter((snapshot) => snapshot.kind === 'grillo');
+    const semanticStates = visibleSnapshots.filter((snapshot) => snapshot.kind === 'semantic');
     const relationshipProfiles = getFallbackRelationshipProfiles(store);
     const recent = createEmptyGraphSummary().recent;
 
@@ -1123,8 +1151,12 @@ export class LadybugMemoryService {
         if (!candidate || typeof candidate !== 'object') continue;
         const row = candidate as Record<string, unknown>;
         recent.candidates.push({
+          confidence: numberValue(row['confidence'], 0),
+          createdAt: Number(row['createdAt'] ?? 0),
           id: stringValue(row['candidateId'] ?? row['id']),
           participantKey: stringValue(row['participantKey']),
+          scopeKey: snapshot.scopeKey,
+          source: stringValue(row['source']),
           summary: stringValue(row['summary']),
           type: stringValue(row['type']),
         });
@@ -1137,14 +1169,27 @@ export class LadybugMemoryService {
         const row = diaryEntry as Record<string, unknown>;
         recent.diary.push({
           beatType: stringValue(row['beatType'] ?? row['beat_type']),
+          createdAt: Number(row['createdAt'] ?? 0),
+          emotions: arrayValue(row['emotions'])
+            .filter((value): value is Record<string, unknown> => Boolean(value && typeof value === 'object'))
+            .map((emotion) => ({
+              intensity: numberValue(emotion['intensity'], 0),
+              name: stringValue(emotion['name']),
+            })),
           id: stringValue(row['diaryId'] ?? row['id']),
+          interactionSummary: stringValue(row['interactionSummary']),
           participantKey: stringValue(row['participantKey']),
+          personalThought: stringValue(row['personalThought']),
+          scopeKey: snapshot.scopeKey,
           summary: stringValue(row['summary']),
+          tags: arrayValue(row['tags']).map((tag) => stringValue(tag)).filter(Boolean),
         });
       }
     }
 
-    for (const [scopeKey, rawProfile] of Object.entries(relationshipProfiles).slice(-8)) {
+    for (const [scopeKey, rawProfile] of Object.entries(relationshipProfiles)
+      .filter(([profileScopeKey]) => !normalizedScopeKey || profileScopeKey === normalizedScopeKey)
+      .slice(-8)) {
       const profile =
         rawProfile && typeof rawProfile === 'object' ? (rawProfile as Record<string, unknown>) : {};
       recent.relationships.push({
@@ -1185,7 +1230,7 @@ export class LadybugMemoryService {
       ...createEmptyGraphSummary(),
       edges: [],
       recent,
-      scopes: snapshots.map((snapshot) => {
+      scopes: visibleSnapshots.map((snapshot) => {
         const parsed = parseScopeKey(snapshot.scopeKey);
         return {
           channel: parsed.channel,

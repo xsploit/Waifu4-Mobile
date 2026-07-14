@@ -41,7 +41,6 @@ import type {
 import { DEFAULT_PERSONA } from '../../lib/chat/defaults';
 import type { ProviderEndpointInfo, ProviderModelInfo } from '../../brain/modelCapability';
 import type { OverlayDiscordStatus } from '../../lib/stream/overlay-events';
-import type { GrilloMemoryState } from '../../lib/chat/grillo-memory';
 import type {
   LadybugGrilloRuntimeStatus,
   LadybugMemoryGraphSummary,
@@ -61,6 +60,7 @@ import { VoiceLabTab } from './tabs/VoiceLabTab';
 import { VrmTab } from './tabs/VrmTab';
 
 type SettingsPanelProps = {
+  activeMemoryScopeKey: string;
   activePersona: PersonaProfile | null;
   activeTab: SettingsTabId;
   activeTwitchChatters: number;
@@ -148,7 +148,6 @@ type SettingsPanelProps = {
   savedVrmModels: SavedVrmModelSummary[];
   savedVrmStatus: string;
   backendGrilloTickBusy: boolean;
-  grilloMemoryState: GrilloMemoryState;
   grilloRuntimeStatus: LadybugGrilloRuntimeStatus | null;
   relationshipMemory: RelationshipMemory;
   memoryAgentBusy: boolean;
@@ -212,6 +211,7 @@ const TABS: { id: SettingsTabId; label: string }[] = [
 ];
 
 export function SettingsPanel({
+  activeMemoryScopeKey,
   activePersona,
   activeTab,
   activeTwitchChatters,
@@ -287,7 +287,6 @@ export function SettingsPanel({
   savedVrmModels,
   savedVrmStatus,
   backendGrilloTickBusy,
-  grilloMemoryState,
   grilloRuntimeStatus,
   relationshipMemory,
   memoryAgentBusy,
@@ -442,6 +441,7 @@ export function SettingsPanel({
       />
     ) : activeTab === 'context' ? (
       <ContextTab
+        activeMemoryScopeKey={activeMemoryScopeKey}
         aiSettings={aiSettings}
         availableModelMetadata={availableModelMetadata}
         availableModels={availableModels}
@@ -460,7 +460,6 @@ export function SettingsPanel({
         onRunBackendGrilloSemanticIndexing={onRunBackendGrilloSemanticIndexing}
         onRunBackendGrilloTick={onRunBackendGrilloTick}
         onRunMemoryAgent={onRunMemoryAgent}
-        grilloMemoryState={grilloMemoryState}
         grilloRuntimeStatus={grilloRuntimeStatus}
         relationshipMemory={relationshipMemory}
         memoryAgentBusy={memoryAgentBusy}

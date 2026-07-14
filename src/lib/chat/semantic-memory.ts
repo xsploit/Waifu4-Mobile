@@ -197,10 +197,11 @@ async function saveSemanticMemory(scopeKey: string, records: SemanticMemoryRecor
 
 export async function clearSemanticMemory(scopeKey: string) {
   const cacheKey = normalizeScopeKey(scopeKey);
+  const deleted = await deleteLadybugSemanticMemory(scopeKey);
+  if (!deleted) {
+    throw new Error('Ladybug semantic memory delete failed.');
+  }
   setSemanticMemoryRecordCache(cacheKey, []);
-  await deleteLadybugSemanticMemory(scopeKey).catch((error) => {
-    warnSemanticMemoryFailure('Ladybug semantic memory delete failed; clearing local fallback stores.', error);
-  });
 
   const db = await openSemanticMemoryDb();
   if (db) {

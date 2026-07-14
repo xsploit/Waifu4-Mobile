@@ -4,7 +4,6 @@ import {
   DEFAULT_OPENROUTER_EMBEDDING_MODEL,
 } from '../../../lib/chat/defaults';
 import { isEmbeddingModel, type ProviderModelInfo } from '../../../brain/modelCapability';
-import type { GrilloMemoryState } from '../../../lib/chat/grillo-memory';
 import type {
   LadybugGrilloRuntimeStatus,
   LadybugMemoryGraphSummary,
@@ -67,6 +66,7 @@ function uniqueGraphRows<T extends { id: string }>(rows: readonly T[]) {
 }
 
 type ContextTabProps = {
+  activeMemoryScopeKey: string;
   aiSettings: AiSettings;
   availableModelMetadata: ReadonlyMap<string, ProviderModelInfo>;
   availableModels: string[];
@@ -86,7 +86,6 @@ type ContextTabProps = {
   onRunBackendGrilloTick: () => void;
   onRunMemoryAgent: () => void;
   grilloRuntimeStatus: LadybugGrilloRuntimeStatus | null;
-  grilloMemoryState: GrilloMemoryState;
   relationshipMemory: RelationshipMemory;
   memoryAgentBusy: boolean;
   memoryAgentPendingCounts: Record<string, number>;
@@ -102,6 +101,7 @@ type ContextTabProps = {
 };
 
 export function ContextTab({
+  activeMemoryScopeKey,
   aiSettings,
   availableModelMetadata,
   availableModels,
@@ -121,7 +121,6 @@ export function ContextTab({
   onRunBackendGrilloTick,
   onRunMemoryAgent,
   grilloRuntimeStatus,
-  grilloMemoryState,
   relationshipMemory,
   memoryAgentBusy,
   memoryAgentPendingCounts,
@@ -154,9 +153,15 @@ export function ContextTab({
       )
       .finally(() => setServerLogLoading(false));
   }, []);
-  const recentBlocks = [...grilloMemoryState.blocks].reverse().slice(0, 6);
-  const recentCandidates = [...grilloMemoryState.candidates].reverse().slice(0, 8);
-  const recentDiary = [...grilloMemoryState.diaryEntries].reverse().slice(0, 4);
+  const recentBlocks = (memoryGraphSummary?.recent.blocks ?? [])
+    .filter((block) => block.scopeKey === activeMemoryScopeKey)
+    .slice(0, 6);
+  const recentCandidates = (memoryGraphSummary?.recent.candidates ?? [])
+    .filter((candidate) => candidate.scopeKey === activeMemoryScopeKey)
+    .slice(0, 8);
+  const recentDiary = (memoryGraphSummary?.recent.diary ?? [])
+    .filter((entry) => entry.scopeKey === activeMemoryScopeKey)
+    .slice(0, 4);
   const latestReflectiveDiary = recentDiary[0] ?? null;
   const latestReflectionSnapshot =
     stringifyContextValue(relationshipMemory.diaryEntry) ||
@@ -166,20 +171,17 @@ export function ContextTab({
           .filter(Boolean)
           .join('\n\n')
       : '');
-  const promotedCount = grilloMemoryState.promotedCandidateIds.length;
-  const hasGrilloMemory =
-    grilloMemoryState.blocks.length > 0 ||
-    grilloMemoryState.candidates.length > 0 ||
-    grilloMemoryState.diaryEntries.length > 0;
-  const lastUpdated =
-    hasGrilloMemory && grilloMemoryState.updatedAt > 0
-      ? new Date(grilloMemoryState.updatedAt).toLocaleString()
-      : '';
+  const lastUpdatedAt = Math.max(
+    0,
+    ...recentCandidates.map((candidate) => candidate.createdAt),
+    ...recentDiary.map((entry) => entry.createdAt),
+  );
+  const lastUpdated = lastUpdatedAt > 0 ? new Date(lastUpdatedAt).toLocaleString() : '';
   const lastPromptDebugAt =
     memoryPromptDebug && memoryPromptDebug.updatedAt > 0
       ? new Date(memoryPromptDebug.updatedAt).toLocaleTimeString()
       : '';
-  const currentPendingWorkerTurns = memoryAgentPendingCounts[grilloMemoryState.scopeKey] ?? 0;
+  const currentPendingWorkerTurns = memoryAgentPendingCounts[activeMemoryScopeKey] ?? 0;
   const totalPendingWorkerTurns = Object.values(memoryAgentPendingCounts).reduce(
     (sum, count) => sum + count,
     0,
@@ -868,31 +870,34 @@ export function ContextTab({
       </div>
 
       <div className="control-group">
-        <div className="control-label">Memory Store</div>
+        <div className="control-label">Current Ladybug Scope</div>
         <div className="memory-kv-grid">
           <div className="status-copy">
-            Scope: <strong>{grilloMemoryState.scopeKey}</strong>
+            Scope: <strong>{activeMemoryScopeKey}</strong>
           </div>
           <div className="status-copy">
-            Blocks: <strong>{grilloMemoryState.blocks.length}</strong>
+            Blocks: <strong>{recentBlocks.length}</strong>
           </div>
           <div className="status-copy">
-            Candidates: <strong>{grilloMemoryState.candidates.length}</strong>
+            Candidates: <strong>{recentCandidates.length}</strong>
           </div>
           <div className="status-copy">
-            Diary entries: <strong>{grilloMemoryState.diaryEntries.length}</strong>
+            Diary entries: <strong>{recentDiary.length}</strong>
           </div>
           <div className="status-copy">
-            Promoted: <strong>{promotedCount}</strong>
+            Active claims:{' '}
+            <strong>
+              {memoryPromptDebug?.grilloContextPacket?.relationship_memory.length ?? 0}
+            </strong>
           </div>
           <div className="status-copy">
             Updated: <strong>{lastUpdated || 'not yet'}</strong>
           </div>
         </div>
         <div className="field-hint">
-          This is the current persona/source memory scope. Twitch and local chat can have different
-          stores. Candidate memories ingest raw local and Twitch chat turns; diary thoughts are
-          written by the worker only when there is something worth reflecting on.
+          This is the canonical LadybugDB view for the current persona/source scope. Twitch, local,
+          and Discord conversations remain isolated; the worker writes candidates and diary entries
+          only after native turn ingest.
         </div>
       </div>
 
@@ -1029,7 +1034,7 @@ export function ContextTab({
         {recentBlocks.length > 0 ? (
           <div className="memory-list">
             {recentBlocks.map((block) => (
-              <div className="memory-entry" key={block.blockId}>
+              <div className="memory-entry" key={block.id}>
                 <div className="memory-entry-header">
                   <strong>{block.blockName}</strong>
                   <span>{block.participantKey}</span>
@@ -1052,14 +1057,14 @@ export function ContextTab({
         {recentCandidates.length > 0 ? (
           <div className="memory-list">
             {recentCandidates.map((candidate) => (
-              <div className="memory-entry" key={candidate.candidateId}>
+              <div className="memory-entry" key={candidate.id}>
                 <div className="memory-entry-header">
                   <strong>{candidate.type}</strong>
                   <span>{Math.round(candidate.confidence * 100)}%</span>
                 </div>
                 <div className="status-copy">{candidate.summary}</div>
                 <div className="memory-pill-row">
-                  <span className="memory-pill">{candidate.source}</span>
+                  <span className="memory-pill">{candidate.source || 'worker'}</span>
                   <span className="memory-pill">{candidate.participantKey}</span>
                 </div>
               </div>
@@ -1075,25 +1080,27 @@ export function ContextTab({
         {recentDiary.length > 0 ? (
           <div className="memory-list">
             {recentDiary.map((entry) => (
-              <div className="memory-entry" key={entry.diaryId}>
+              <div className="memory-entry" key={entry.id}>
                 <div className="memory-entry-header">
                   <strong>{entry.beatType}</strong>
-                  <span>{new Date(entry.createdAt).toLocaleString()}</span>
+                  <span>
+                    {entry.createdAt > 0 ? new Date(entry.createdAt).toLocaleString() : 'unknown'}
+                  </span>
                 </div>
                 <div className="status-copy">{entry.summary}</div>
                 {entry.interactionSummary ? (
                   <div className="status-copy">{entry.interactionSummary}</div>
                 ) : null}
                 <pre className="context-preview compact">{entry.personalThought}</pre>
-                {entry.emotions?.length || entry.contextTags?.length ? (
+                {entry.emotions.length || entry.tags.length ? (
                   <div className="memory-pill-row">
                     {entry.emotions?.map((emotion) => (
-                      <span className="memory-pill" key={`${entry.diaryId}:${emotion.name}`}>
+                      <span className="memory-pill" key={`${entry.id}:${emotion.name}`}>
                         {emotion.name} {Math.round(emotion.intensity)}/10
                       </span>
                     ))}
-                    {entry.contextTags?.map((tag) => (
-                      <span className="memory-pill" key={`${entry.diaryId}:${tag}`}>
+                    {entry.tags.map((tag) => (
+                      <span className="memory-pill" key={`${entry.id}:${tag}`}>
                         {tag}
                       </span>
                     ))}

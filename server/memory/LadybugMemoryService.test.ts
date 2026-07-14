@@ -182,6 +182,20 @@ describe('LadybugMemoryService', () => {
         scopeKey,
         text: 'remember that I like clean GRILLO memory',
       });
+      expect(graph.recent.candidates[0]).toMatchObject({
+        confidence: 0.92,
+        id: 'candidate-native-1',
+        scopeKey,
+        source: 'local',
+        summary: 'Subsect likes clean GRILLO memory.',
+      });
+      expect(graph.recent.diary[0]).toMatchObject({
+        id: 'diary-native-1',
+        personalThought: 'I should treat GRILLO as the real memory spine now.',
+        scopeKey,
+        summary: 'Subsect clarified GRILLO should be canonical.',
+        tags: ['grillo'],
+      });
       expect(graph.recent.slots[0]).toMatchObject({
         itemCount: 1,
         slotName: 'preferences',
@@ -220,6 +234,38 @@ describe('LadybugMemoryService', () => {
           'HAS_TRACE',
         ]),
       );
+
+      const siblingScopeKey = 'local:persona:sibling';
+      await service.appendGrilloRecord('memory_candidates', {
+        candidate_id: 'candidate-sibling',
+        confidence: 0.8,
+        content: 'This belongs to another persona.',
+        created_at: 20,
+        evidence_turn_ids: [],
+        participant_key: participantKey,
+        scope_key: siblingScopeKey,
+        source: 'local',
+        summary: 'This belongs to another persona.',
+        type: 'fact',
+        user_id: siblingScopeKey,
+      });
+      await service.appendGrilloRecord('diary_entries', {
+        beat_type: 'relationship',
+        created_at: 21,
+        diary_id: 'diary-sibling',
+        participant_key: participantKey,
+        personal_thought: 'This thought belongs to another persona.',
+        scope_key: siblingScopeKey,
+        summary: 'Sibling-only diary.',
+        tags: ['sibling'],
+        user_id: siblingScopeKey,
+      });
+
+      const scopedGraph = await service.getGraphSummary(scopeKey);
+      expect(scopedGraph.recent.candidates.map((candidate) => candidate.id)).toEqual([
+        'candidate-native-1',
+      ]);
+      expect(scopedGraph.recent.diary.map((entry) => entry.id)).toEqual(['diary-native-1']);
     } finally {
       await service.close();
     }

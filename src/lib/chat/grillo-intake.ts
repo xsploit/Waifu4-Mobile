@@ -3,6 +3,14 @@ import type { PersonaProfile, TwitchSettings } from './types';
 
 export type ChatJobMemoryMode = 'direct' | 'batch';
 
+export function getGrilloParticipantKey(turn: ChatTurn) {
+  const participantId = turn.source === 'discord' ? turn.userId : turn.login || 'unknown';
+  return `${turn.source}:${turn.channel || 'local'}:${participantId}`
+    .toLowerCase()
+    .replace(/[^a-z0-9:_-]+/g, '-')
+    .slice(0, 160);
+}
+
 type GrilloIntakeSignal =
   | 'local_turn'
   | 'trusted_chat_role'

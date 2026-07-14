@@ -13,12 +13,6 @@
   ],
   "ignoreExports": [
     {
-      "file": "src/lib/chat/ladybug-memory-client.ts",
-      "exports": [
-        "updateLadybugGrilloRuntime"
-      ]
-    },
-    {
       "file": "src/lib/vrm/animation.ts",
       "exports": [
         "mixamoVRMRigMap",

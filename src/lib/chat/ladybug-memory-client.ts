@@ -1,5 +1,4 @@
 import { getDesktopBackendUrl } from '../desktop/runtime';
-import type { GrilloMemoryState } from './grillo-memory';
 import type { SemanticMemoryRecord } from './semantic-memory';
 import type { RelationshipMemory } from './types';
 import type { LadybugMemoryGraphSummary } from '../../shared/ladybugMemoryTypes';
@@ -49,7 +48,7 @@ export type LadybugGrilloTurnPairInput = {
   userText?: string;
 };
 
-export type LadybugGrilloContextPacket = GrilloContextPacket;
+type LadybugGrilloContextPacket = GrilloContextPacket;
 
 export type LadybugGrilloRuntimeStatus = {
   enabled: boolean;
@@ -87,27 +86,7 @@ type LadybugResponse<T> = T & {
   ok?: boolean;
 };
 
-export async function loadLadybugGrilloState(scopeKey: string) {
-  const response = await requestLadybugMemory<{
-    scopeKey: string;
-    state: unknown;
-  }>(`/memory/grillo?scopeKey=${encodeURIComponent(scopeKey)}`);
-  if (!response || response.ok !== true) {
-    return undefined;
-  }
-  return response.state as GrilloMemoryState | null;
-}
-
-export async function saveLadybugGrilloState(scopeKey: string, state: GrilloMemoryState) {
-  const response = await requestLadybugMemory('/memory/grillo', {
-    body: JSON.stringify({ scopeKey, state }),
-    headers: { 'Content-Type': 'application/json' },
-    method: 'PUT',
-  });
-  return response?.ok === true;
-}
-
-export async function deleteLadybugGrilloState(scopeKey: string) {
+export async function deleteLadybugGrilloScope(scopeKey: string) {
   const response = await requestLadybugMemory(
     `/memory/grillo?scopeKey=${encodeURIComponent(scopeKey)}`,
     { method: 'DELETE' },
@@ -163,21 +142,6 @@ export async function loadLadybugGrilloContextPacket(
 export async function loadLadybugGrilloRuntimeStatus() {
   const response = await requestLadybugMemory<{ runtime: LadybugGrilloRuntimeStatus }>(
     '/memory/grillo/runtime',
-  );
-  return response?.ok === true ? response.runtime : null;
-}
-
-export async function updateLadybugGrilloRuntime(options: {
-  enabled: boolean;
-  intervalMs?: number;
-}) {
-  const response = await requestLadybugMemory<{ runtime: LadybugGrilloRuntimeStatus }>(
-    '/memory/grillo/runtime',
-    {
-      body: JSON.stringify(options),
-      headers: { 'Content-Type': 'application/json' },
-      method: 'PUT',
-    },
   );
   return response?.ok === true ? response.runtime : null;
 }
@@ -309,9 +273,12 @@ export async function loadLadybugMemoryStatus() {
   return requestLadybugMemory<LadybugMemoryStatus>('/memory/status');
 }
 
-export async function loadLadybugMemoryGraph() {
+export async function loadLadybugMemoryGraph(scopeKey?: string) {
+  const query = scopeKey?.trim()
+    ? `?scopeKey=${encodeURIComponent(scopeKey.trim())}`
+    : '';
   const response = await requestLadybugMemory<{ graph: LadybugMemoryGraphSummary }>(
-    '/memory/graph',
+    `/memory/graph${query}`,
   );
   return response?.ok === true ? response.graph : null;
 }

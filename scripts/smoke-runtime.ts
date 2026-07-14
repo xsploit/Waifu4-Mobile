@@ -1,5 +1,9 @@
 import { spawn, type ChildProcessWithoutNullStreams } from 'node:child_process';
+import { once } from 'node:events';
 import { existsSync } from 'node:fs';
+import { mkdtemp, rm } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 
 const port = Number(process.env.SMOKE_PORT ?? 8798);
 const baseUrl = `http://127.0.0.1:${port}`;
@@ -193,13 +197,14 @@ async function runCheck(check: Check) {
   console.log(`${check.name}=${response.status}`);
 }
 
-function startServer(): ChildProcessWithoutNullStreams {
+function startServer(memoryDbPath: string): ChildProcessWithoutNullStreams {
   const child = spawn(process.execPath, ['--import', 'tsx', 'server/index.ts'], {
     cwd: process.cwd(),
     env: {
       ...process.env,
       PORT: String(port),
       TWITCH_BACKEND_RUNTIME_ENABLED: 'false',
+      WEBWAIFU_MEMORY_DB_DIR: memoryDbPath,
     },
     stdio: ['ignore', 'pipe', 'pipe'],
   });
@@ -221,14 +226,19 @@ function startServer(): ChildProcessWithoutNullStreams {
 }
 
 async function main() {
-  const child = startServer();
+  const tempRoot = await mkdtemp(join(tmpdir(), 'webwaifu-runtime-smoke-'));
+  const child = startServer(join(tempRoot, 'ladybug-memory.db'));
   try {
     await waitForHealth(10_000);
     for (const check of checks) {
       await runCheck(check);
     }
   } finally {
-    child.kill();
+    if (child.exitCode === null) {
+      child.kill();
+      await Promise.race([once(child, 'exit'), delay(3_000)]);
+    }
+    await rm(tempRoot, { force: true, recursive: true });
   }
 }
 

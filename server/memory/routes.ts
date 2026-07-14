@@ -174,12 +174,13 @@ export function createMemoryRouter() {
     }
   });
 
-  router.get('/graph', async (_req, res) => {
+  router.get('/graph', async (req, res) => {
     try {
+      const scopeKey = typeof req.query.scopeKey === 'string' ? req.query.scopeKey : undefined;
       res.json({
         ok: true,
         backend: getLadybugMemoryService().getBackendLabel(),
-        graph: await getLadybugMemoryService().getGraphSummary(),
+        graph: await getLadybugMemoryService().getGraphSummary(scopeKey),
       });
     } catch (error) {
       sendError(res, error, 'Ladybug memory graph load failed.');

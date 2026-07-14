@@ -1,10 +1,10 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
+  deleteLadybugGrilloScope,
   loadLadybugGrilloContextPacket,
-  saveLadybugGrilloState,
+  loadLadybugMemoryGraph,
   saveLadybugGrilloTurnPair,
 } from './ladybug-memory-client';
-import { createDefaultGrilloMemoryState } from './grillo-memory';
 
 describe('ladybug memory client', () => {
   afterEach(() => {
@@ -18,7 +18,7 @@ describe('ladybug memory client', () => {
       .mockResolvedValueOnce(new Response(JSON.stringify({ ok: true }), { status: 200 }));
 
     await expect(
-      saveLadybugGrilloState('local:persona:test', createDefaultGrilloMemoryState('local:persona:test')),
+      deleteLadybugGrilloScope('local:persona:test'),
     ).resolves.toBe(true);
 
     expect(fetchMock).toHaveBeenCalledTimes(2);
@@ -93,5 +93,24 @@ describe('ladybug memory client', () => {
       queryEmbedding: [1, 0, 0],
       scopeKey: 'local:persona:test',
     });
+  });
+
+  it('requests the graph for the active frontend memory scope', async () => {
+    const graph = {
+      edges: [],
+      participants: [],
+      personas: [],
+      recent: {},
+      scopes: [],
+    };
+    const fetchMock = vi
+      .spyOn(globalThis, 'fetch')
+      .mockResolvedValueOnce(new Response(JSON.stringify({ graph, ok: true }), { status: 200 }));
+
+    await expect(loadLadybugMemoryGraph('local:persona:hikari chan')).resolves.toEqual(graph);
+
+    expect(String(fetchMock.mock.calls[0]?.[0])).toContain(
+      '/memory/graph?scopeKey=local%3Apersona%3Ahikari%20chan',
+    );
   });
 });

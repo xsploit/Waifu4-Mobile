@@ -1,7 +1,6 @@
 import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it, vi } from 'vitest';
 import { createDefaultAiSettings, createDefaultRelationshipMemory } from '../../../lib/chat/defaults';
-import { createDefaultGrilloMemoryState } from '../../../lib/chat/grillo-memory';
 import { ContextTab } from './ContextTab';
 
 describe('ContextTab', () => {
@@ -9,6 +8,7 @@ describe('ContextTab', () => {
     const consoleError = vi.spyOn(console, 'error').mockImplementation(() => undefined);
     const html = renderToStaticMarkup(
       <ContextTab
+        activeMemoryScopeKey="local:persona:hikari-context"
         aiSettings={createDefaultAiSettings()}
         availableModelMetadata={
           new Map([
@@ -41,7 +41,6 @@ describe('ContextTab', () => {
           started: true,
           startedAt: Date.parse('2026-05-25T12:00:00.000Z'),
         }}
-        grilloMemoryState={createDefaultGrilloMemoryState('local:persona:hikari-context')}
         memoryAgentBusy={false}
         memoryAgentPendingCounts={{ 'local:persona:hikari-context': 2 }}
         memoryAgentStatus="Memory worker ready."
@@ -108,8 +107,12 @@ describe('ContextTab', () => {
             ],
             candidates: [
               {
+                confidence: 0.91,
+                createdAt: Date.parse('2026-05-25T12:00:02.000Z'),
                 id: 'candidate-1',
                 participantKey: 'local:local:subby',
+                scopeKey: 'local:persona:hikari-context',
+                source: 'worker_tool',
                 summary: 'Subby asked me to remember Ladybug.',
                 type: 'fact',
               },
@@ -117,9 +120,15 @@ describe('ContextTab', () => {
             diary: [
               {
                 beatType: 'relationship',
+                createdAt: Date.parse('2026-05-25T12:00:03.000Z'),
+                emotions: [{ intensity: 6, name: 'focused' }],
                 id: 'diary-1',
+                interactionSummary: 'Subby verified the memory path.',
                 participantKey: 'local:local:subby',
+                personalThought: 'The canonical Ladybug path is working.',
+                scopeKey: 'local:persona:hikari-context',
                 summary: 'Subby verified memory.',
+                tags: ['audit'],
               },
             ],
             turns: [
@@ -336,10 +345,16 @@ describe('ContextTab', () => {
     expect(html).toContain('Please remember Ladybug memory.');
     expect(html).toContain('Graph candidate');
     expect(html).toContain('Subby asked me to remember Ladybug.');
+    expect(html).toContain('91%');
+    expect(html).toContain('worker_tool');
     expect(html).toContain('preferences');
     expect(html).toContain('Slot patch');
     expect(html).toContain('Graph diary');
     expect(html).toContain('Subby verified memory.');
+    expect(html).toContain('The canonical Ladybug path is working.');
+    expect(html).toContain('focused 6/10');
+    expect(html).toContain('audit');
+    expect(html).toContain('Current Ladybug Scope');
     expect(html).toContain('GRILLO activity');
     expect(html).toContain('Wrote a relationship reflection.');
     expect(html).toContain('Worker trace');
@@ -360,6 +375,7 @@ describe('ContextTab', () => {
   it('keeps the selected safe memory worker model visible when it is missing from the refreshed provider list', () => {
     const html = renderToStaticMarkup(
       <ContextTab
+        activeMemoryScopeKey="local:persona:hikari-context"
         aiSettings={{
           ...createDefaultAiSettings(),
           memoryAgentModel: 'gpt-5-nano',
@@ -370,7 +386,6 @@ describe('ContextTab', () => {
         chatDraftLength={0}
         currentModeLabel="Queue"
         grilloRuntimeStatus={null}
-        grilloMemoryState={createDefaultGrilloMemoryState('local:persona:hikari-context')}
         memoryAgentBusy={false}
         memoryAgentPendingCounts={{}}
         memoryAgentStatus="Memory worker ready."

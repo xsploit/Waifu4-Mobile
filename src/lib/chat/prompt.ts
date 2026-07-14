@@ -1,9 +1,9 @@
 import {
   buildGrilloContextPromptMaterial,
   type GrilloClientContextReceipt,
+  type GrilloMemoryPromptAdditions,
 } from './grillo-context';
 import type { ChatTurn } from './chat-turn';
-import type { GrilloMemoryPromptAdditions } from './grillo-memory';
 import type { ChatMessage, PersonaProfile, RelationshipMemory } from './types';
 import { buildYourWifeyPomlMessages } from './poml';
 import type { PomlPromptMessage } from './poml';

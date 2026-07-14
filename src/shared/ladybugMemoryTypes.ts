@@ -19,8 +19,28 @@ export type LadybugMemoryGraphSummary = {
       participantKey: string;
       scopeKey: string;
     }>;
-    candidates: Array<{ id: string; participantKey: string; summary: string; type: string }>;
-    diary: Array<{ beatType: string; id: string; participantKey: string; summary: string }>;
+    candidates: Array<{
+      confidence: number;
+      createdAt: number;
+      id: string;
+      participantKey: string;
+      scopeKey: string;
+      source: string;
+      summary: string;
+      type: string;
+    }>;
+    diary: Array<{
+      beatType: string;
+      createdAt: number;
+      emotions: Array<{ intensity: number; name: string }>;
+      id: string;
+      interactionSummary: string;
+      participantKey: string;
+      personalThought: string;
+      scopeKey: string;
+      summary: string;
+      tags: string[];
+    }>;
     emotions: Array<{
       id: string;
       lastSignalSource: string;

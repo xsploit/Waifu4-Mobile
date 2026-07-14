@@ -1,24 +1,36 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-const remoteRecords = vi.hoisted(() => [] as Array<Record<string, unknown>>);
+const remoteState = vi.hoisted(() => ({
+  deleteResult: true,
+  records: [] as Array<Record<string, unknown>>,
+}));
 
 vi.mock('./ladybug-memory-client', () => ({
-  deleteLadybugSemanticMemory: vi.fn(async () => true),
-  loadLadybugSemanticMemory: vi.fn(async () => remoteRecords),
+  deleteLadybugSemanticMemory: vi.fn(async () => remoteState.deleteResult),
+  loadLadybugSemanticMemory: vi.fn(async () => remoteState.records),
   saveLadybugSemanticMemory: vi.fn(async (_scopeKey: string, records: unknown[]) => {
-    remoteRecords.splice(0, remoteRecords.length, ...(records as Array<Record<string, unknown>>));
+    remoteState.records.splice(
+      0,
+      remoteState.records.length,
+      ...(records as Array<Record<string, unknown>>),
+    );
     return true;
   }),
   searchLadybugSemanticMemory: vi.fn(async () =>
-    remoteRecords.map((record) => ({ ...record, score: 1 })),
+    remoteState.records.map((record) => ({ ...record, score: 1 })),
   ),
 }));
 
-import { addSemanticMemoryTurn, findSemanticMemoryMatches } from './semantic-memory';
+import {
+  addSemanticMemoryTurn,
+  clearSemanticMemory,
+  findSemanticMemoryMatches,
+} from './semantic-memory';
 
 describe('participant-scoped semantic memory', () => {
   beforeEach(() => {
-    remoteRecords.length = 0;
+    remoteState.deleteResult = true;
+    remoteState.records.length = 0;
   });
 
   it('normalizes participant identity and blocks other or unknown remote participants', async () => {
@@ -33,7 +45,7 @@ describe('participant-scoped semantic memory', () => {
     });
     expect(write?.record.participantKeys).toEqual(['twitch:collab:alice']);
 
-    remoteRecords.push(
+    remoteState.records.push(
       {
         ...write!.record,
         id: 'semantic-bob',
@@ -54,5 +66,24 @@ describe('participant-scoped semantic memory', () => {
       ['twitch:collab:alice'],
     );
     expect(aliceMatches.map((match) => match.id)).toEqual([write!.record.id]);
+  });
+
+  it('does not report semantic memory cleared when Ladybug rejects the delete', async () => {
+    const scopeKey = 'local:persona:delete-failure';
+    const write = await addSemanticMemoryTurn({
+      assistantText: 'I will keep this until the canonical delete succeeds.',
+      embedding: [1, 0],
+      persona: null,
+      scopeKey,
+      userText: 'Remember this durable fact.',
+    });
+    remoteState.deleteResult = false;
+
+    await expect(clearSemanticMemory(scopeKey)).rejects.toThrow(
+      'Ladybug semantic memory delete failed.',
+    );
+
+    const matches = await findSemanticMemoryMatches(scopeKey, 'durable fact', [1, 0], 4);
+    expect(matches.map((match) => match.id)).toContain(write!.record.id);
   });
 });
