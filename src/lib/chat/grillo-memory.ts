@@ -6,7 +6,6 @@ import {
   emptyEmotionIntensities,
   type CanonicalEmotion,
   type EmotionIntensities,
-  type EmotionSignal,
 } from '../grillo/emotion-state';
 import {
   evaluatePromotion,
@@ -138,15 +137,6 @@ const DEFAULT_PROMOTION_POLICY: PromotionPolicy = {
   maxBlockItems: 20,
   minCandidatesForPromotion: 2,
 };
-const OPPOSITE_EMOTIONS: Partial<Record<CanonicalEmotion, CanonicalEmotion>> = {
-  angry: 'relaxed',
-  fear: 'neutral',
-  happy: 'sad',
-  neutral: 'fear',
-  relaxed: 'angry',
-  sad: 'happy',
-};
-
 export function getGrilloParticipantKey(turn: ChatTurn) {
   const participantId = turn.source === 'discord' ? turn.userId : turn.login || 'unknown';
   return `${turn.source}:${turn.channel || 'local'}:${participantId}`
@@ -168,7 +158,7 @@ export function createDefaultGrilloMemoryState(scopeKey: string): GrilloMemorySt
   };
 }
 
-export function loadGrilloMemoryState(scopeKey: string): GrilloMemoryState {
+function loadGrilloMemoryState(scopeKey: string): GrilloMemoryState {
   const key = normalizeScopeStorageKey(scopeKey);
   const cached = grilloMemoryCache.get(key);
   if (cached) {
@@ -222,7 +212,7 @@ export async function hydrateGrilloMemoryState(scopeKey: string): Promise<Grillo
   return legacyState;
 }
 
-export async function saveGrilloMemoryStateAsync(state: GrilloMemoryState) {
+async function saveGrilloMemoryStateAsync(state: GrilloMemoryState) {
   const key = normalizeScopeStorageKey(state.scopeKey);
   const nextState = mergeCachedGrilloMemoryState(state);
   grilloMemoryCache.set(key, nextState);
@@ -280,66 +270,7 @@ function recordGrilloMemoryTurnInState(
   return promoted;
 }
 
-export function applyGrilloEmotionSignals(
-  state: GrilloMemoryState,
-  signals: EmotionSignal[],
-  source: string,
-  now = Date.now(),
-): GrilloMemoryState {
-  if (!Array.isArray(signals) || signals.length === 0) {
-    return state;
-  }
-
-  let emotionState = decayGrilloEmotionState(state.emotionState, now);
-  const intensities = { ...emotionState.intensities };
-  let wroteSignal = false;
-
-  for (const signal of signals) {
-    const canonical = canonicalEmotionName(signal.name);
-    const confidence = clamp01(Number(signal.confidence ?? 1));
-    const signalIntensity = clampNumber(Number(signal.intensity ?? 0), 0, 10);
-    if (signalIntensity <= 0) {
-      continue;
-    }
-
-    const blend = 0.45 + confidence * 0.35;
-    const previous = intensities[canonical] ?? 0;
-    intensities[canonical] = clampNumber(
-      previous * (1 - blend) + signalIntensity * blend,
-      0,
-      10,
-    );
-
-    const opposite = OPPOSITE_EMOTIONS[canonical];
-    if (opposite) {
-      intensities[opposite] = clampNumber(
-        (intensities[opposite] ?? 0) - signalIntensity * 0.25 * confidence,
-        0,
-        10,
-      );
-    }
-    wroteSignal = true;
-  }
-
-  if (!wroteSignal) {
-    return state;
-  }
-
-  emotionState = {
-    intensities,
-    lastSignalAt: now,
-    lastSignalSource: source || 'unknown',
-    updatedAt: now,
-  };
-
-  return {
-    ...state,
-    emotionState,
-    updatedAt: Math.max(state.updatedAt, now),
-  };
-}
-
-export function buildGrilloMemoryPromptAdditions({
+function buildGrilloMemoryPromptAdditions({
   limit = 6,
   participantKeys = [],
   query,
@@ -439,7 +370,7 @@ export async function recordGrilloMemoryTurnFailClosedAsync(
   }
 }
 
-export function promoteGrilloCandidates(
+function promoteGrilloCandidates(
   state: GrilloMemoryState,
   policy: PromotionPolicy = DEFAULT_PROMOTION_POLICY,
 ): GrilloMemoryState {
@@ -925,30 +856,6 @@ function normalizeGrilloEmotionState(value: unknown): GrilloEmotionState {
     lastSignalAt: source.lastSignalAt ? normalizeTimestamp(source.lastSignalAt) : undefined,
     lastSignalSource: normalizeOptionalString(source.lastSignalSource, 160),
     updatedAt: source.updatedAt ? normalizeTimestamp(source.updatedAt) : 0,
-  };
-}
-
-function decayGrilloEmotionState(
-  state: GrilloEmotionState,
-  now = Date.now(),
-  decayTauMs = 60 * 60 * 1000,
-  decayThreshold = 0.05,
-): GrilloEmotionState {
-  const normalized = normalizeGrilloEmotionState(state);
-  const from = normalized.lastSignalAt ?? normalized.updatedAt ?? now;
-  const elapsedMs = Math.max(0, now - from);
-  const tau = Math.max(60_000, decayTauMs);
-  const factor = Math.exp(-elapsedMs / tau);
-  const intensities = emptyEmotionIntensities();
-  (Object.keys(intensities) as CanonicalEmotion[]).forEach((key) => {
-    const value = clampNumber((normalized.intensities[key] ?? 0) * factor, 0, 10);
-    intensities[key] = value < decayThreshold ? 0 : value;
-  });
-
-  return {
-    ...normalized,
-    intensities,
-    updatedAt: now,
   };
 }
 

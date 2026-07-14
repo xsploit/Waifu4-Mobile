@@ -28,16 +28,13 @@ import {
 import { extractSpeakableChunks, getChunkRevealDelay } from './lib/chat/chunking';
 import { findOverlappingSuffix } from './lib/chat/streaming-overlap';
 import {
-  buildMemoryAgentMessages,
-  MEMORY_AGENT_JSON_FORMAT,
   addMemoryAgentPendingChatTurns,
   clearMemoryAgentPendingChatTurns,
   consumeMemoryAgentPendingChatTurns,
   getMemoryAgentCadenceDecision,
-  getMemoryAgentModelCandidates,
   normalizeMemoryAgentIntervalMessages,
-  shouldRunMemoryAgent,
 } from './lib/chat/memory-agent';
+import { executeBackendGrilloCadence } from './lib/chat/backend-grillo-cadence';
 import type {
   MemoryEmbeddingDebugSnapshot,
   MemoryPromptDebugSnapshot,
@@ -45,8 +42,8 @@ import type {
 } from './lib/chat/memory-debug';
 import { updateRelationshipMemory } from './lib/chat/memory';
 import {
-  buildGrilloMemoryPromptAdditionsFailClosedAsync,
   clearGrilloMemoryStateAsync,
+  createEmptyGrilloMemoryPromptAdditions,
   createDefaultGrilloMemoryState,
   getGrilloParticipantKey,
   hydrateGrilloMemoryState,
@@ -69,10 +66,6 @@ import {
   type LadybugMemoryGraphSummary,
   type LadybugMemoryStatus,
 } from './lib/chat/ladybug-memory-client';
-import {
-  extractGrilloWorkerRelationshipJson,
-  runGrilloMemoryWorkerLoop,
-} from './lib/chat/grillo-memory-loop';
 import {
   buildChatCompletionMessagesWithReceipt,
   trimChatHistory,
@@ -418,8 +411,6 @@ function getPresetPersonaVoiceBinding(preset: PersonaScenePreset): PersonaVoiceB
 
 const PERSIST_DEBOUNCE_MS = 900;
 const MEMORY_AGENT_DELAY_MS = 2500;
-const BACKEND_GRILLO_CADENCE_BEATS = ['extraction', 'relationship', 'reflection'] as const;
-
 type BackendGrilloBeatType =
   | 'extraction'
   | 'reflection'
@@ -1891,10 +1882,6 @@ function getLocalConversationStateKey(persona: PersonaProfile | null) {
   return `local:persona:${getPersonaStateKey(persona)}`;
 }
 
-function getMemoryStateKey(baseStateKey: string) {
-  return `memory:${baseStateKey}`.slice(0, 160);
-}
-
 function twitchMessageMentionsPersona(text: string, persona: PersonaProfile | null) {
   const tags = getPersonaMentionTags(persona);
   const mentions = new Set(
@@ -2092,46 +2079,6 @@ function getAiErrorMessage(error: unknown, context: 'chat' | 'models' = 'chat') 
       ? 'AI model list unavailable right now.'
       : 'AI request failed unexpectedly.')
   );
-}
-
-function mergeRelationshipMemoryInWorker(
-  worker: Worker,
-  currentMemory: RelationshipMemory,
-  rawContent: string,
-  targetTurnCount: number,
-) {
-  return new Promise<RelationshipMemory>((resolve, reject) => {
-    const requestId = `memory-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
-
-    const cleanup = () => {
-      worker.removeEventListener('message', handleMessage);
-      worker.removeEventListener('error', handleError);
-    };
-
-    const handleMessage = (event: MessageEvent<{ id?: string; memory?: RelationshipMemory }>) => {
-      if (event.data?.id !== requestId || !event.data.memory) {
-        return;
-      }
-
-      cleanup();
-      resolve(event.data.memory);
-    };
-
-    const handleError = (error: ErrorEvent) => {
-      cleanup();
-      reject(error.error ?? new Error(error.message));
-    };
-
-    worker.addEventListener('message', handleMessage);
-    worker.addEventListener('error', handleError);
-    worker.postMessage({
-      id: requestId,
-      type: 'merge',
-      currentMemory,
-      rawContent,
-      targetTurnCount,
-    });
-  });
 }
 
 type DesktopRuntimeStatus = {
@@ -2336,13 +2283,9 @@ function App() {
   const liveBridgeSubtitleActiveRef = useRef(false);
   const startupStatusSentRef = useRef(false);
   const appliedPersonaSceneKeyRef = useRef<string | null>(null);
-  const memoryAgentWorkerRef = useRef<Worker | null>(null);
   const memoryAgentTimeoutRef = useRef<number | null>(null);
-  const memoryAgentRunRef = useRef(0);
-  const memoryAgentFailedModelsRef = useRef<Set<string>>(new Set());
   const backendGrilloCadenceBusyRef = useRef(false);
   const grilloMemoryHydrationRunRef = useRef(0);
-  const grilloRecentTurnsByStateKeyRef = useRef<Record<string, ChatTurn[]>>({});
   const ttsManager = useMemo(() => getTtsManager(), []);
   const ttsBenchmarkPlaybackRef = useRef<AudioPlayback | null>(null);
 
@@ -2424,7 +2367,7 @@ function App() {
       loadLadybugGrilloRuntimeStatus(),
     ])
       .then(([status, graph, runtime]) => {
-        setMemoryBackendStatus(status?.ok ? status : null);
+        setMemoryBackendStatus(status);
         setMemoryGraphSummary(graph);
         setGrilloRuntimeStatus(runtime);
       })
@@ -2504,10 +2447,6 @@ function App() {
       if (turns.length === 0) {
         return;
       }
-      grilloRecentTurnsByStateKeyRef.current[stateKey] = [
-        ...(grilloRecentTurnsByStateKeyRef.current[stateKey] ?? []),
-        ...turns,
-      ].slice(-24);
       addMemoryAgentPendingChatTurns(
         memoryAgentPendingChatTurnCountsRef.current,
         stateKey,
@@ -2534,7 +2473,6 @@ function App() {
           }
           void refreshMemoryBackendStatus();
         });
-      scheduleMemoryAgentAfterChatTurnsRef.current(stateKey);
     },
     [refreshMemoryBackendStatus, syncMemoryAgentPendingCounts],
   );
@@ -2742,27 +2680,15 @@ function App() {
   }, [sequencerSettings]);
 
   useEffect(() => {
-    memoryAgentFailedModelsRef.current.clear();
-  }, [aiSettings.memoryAgentModel]);
-
-  useEffect(() => {
     setMenuOpen(false);
   }, []);
 
   useEffect(() => {
-    const worker = new Worker(new URL('./lib/chat/memory-agent-worker.ts', import.meta.url), {
-      type: 'module',
-    });
-    memoryAgentWorkerRef.current = worker;
-
     return () => {
       if (memoryAgentTimeoutRef.current !== null) {
         window.clearTimeout(memoryAgentTimeoutRef.current);
       }
       memoryAgentTimeoutRef.current = null;
-      memoryAgentRunRef.current += 1;
-      worker.terminate();
-      memoryAgentWorkerRef.current = null;
     };
   }, []);
 
@@ -2999,7 +2925,6 @@ function App() {
       chatRequestRunRef.current += 1;
       activeChatAbortControllerRef.current?.abort();
       activeChatAbortControllerRef.current = null;
-      memoryAgentRunRef.current += 1;
       setAssistantReplyLock(false);
       if (memoryAgentTimeoutRef.current !== null) {
         window.clearTimeout(memoryAgentTimeoutRef.current);
@@ -5149,56 +5074,79 @@ function App() {
   const runBackendGrilloCadence = useCallback(
     async (stateKey: string, reason: string) => {
       if (backendGrilloCadenceBusyRef.current) {
-        setMemoryAgentStatus('Backend GRILLO cadence skipped: tick already running.');
-        return;
+        throw new Error('Backend GRILLO cadence is already running.');
       }
       backendGrilloCadenceBusyRef.current = true;
       setBackendGrilloTickBusy(true);
       setMemoryAgentStatus('Running backend GRILLO cadence beats...');
-      const summaries: string[] = [];
       try {
-        for (const beatType of BACKEND_GRILLO_CADENCE_BEATS) {
-          const result = await runBackendGrilloTickOnce({
-            beatType,
-            reason: `${reason}_${beatType}`,
-            stateKey,
-          });
-          summaries.push(
-            result?.noOpReason
-              ? `${result.beatType ?? beatType}: ${result.noOpReason}`
-              : `${result?.beatType ?? beatType}: ${result?.writes ?? 0} write${
-                  result?.writes === 1 ? '' : 's'
-                }`,
-          );
+        const relationshipSaved = await saveLadybugRelationshipMemories({
+          [stateKey]: getScopedRelationshipMemory(stateKey),
+        });
+        if (!relationshipSaved) {
+          throw new Error('Ladybug relationship profile save failed before cadence.');
         }
+
+        const beatResults = await executeBackendGrilloCadence({
+          reason,
+          runBeat: async (beatType, beatReason, beatStateKey) => {
+            const result = await runBackendGrilloTickOnce({
+              beatType,
+              reason: beatReason,
+              stateKey: beatStateKey,
+            });
+            if (!result) {
+              throw new Error(`Backend GRILLO ${beatType} returned no result.`);
+            }
+            if (result.noOpReason === 'tick_already_running') {
+              throw new Error(`Backend GRILLO ${beatType} was blocked by another tick.`);
+            }
+            return result;
+          },
+          stateKey,
+        });
+        const summaries = beatResults.map(({ beatType, result }) =>
+          result?.noOpReason
+            ? `${result.beatType ?? beatType}: ${result.noOpReason}`
+            : `${result?.beatType ?? beatType}: ${result?.writes ?? 0} write${
+                result?.writes === 1 ? '' : 's'
+              }`,
+        );
+        const profiles = await loadLadybugRelationshipMemories();
+        const updatedProfile = profiles?.[stateKey];
+        if (!updatedProfile) {
+          throw new Error('Ladybug relationship profile was unavailable after cadence.');
+        }
+        commitScopedRelationshipMemory(stateKey, updatedProfile);
+        refreshGrilloMemoryState(stateKey);
         setMemoryAgentStatus(`Backend GRILLO cadence complete: ${summaries.join(' / ')}.`);
+        return { beatResults, summaries };
       } catch (error) {
         console.warn('[App] Backend GRILLO cadence failed', error);
         const message = error instanceof Error ? error.message : String(error);
         setMemoryAgentStatus(`Backend GRILLO cadence failed: ${message}`);
+        throw error;
       } finally {
         backendGrilloCadenceBusyRef.current = false;
         setBackendGrilloTickBusy(false);
         void refreshMemoryBackendStatus();
       }
     },
-    [refreshMemoryBackendStatus, runBackendGrilloTickOnce],
+    [
+      commitScopedRelationshipMemory,
+      getScopedRelationshipMemory,
+      refreshGrilloMemoryState,
+      refreshMemoryBackendStatus,
+      runBackendGrilloTickOnce,
+    ],
   );
 
   const runRelationshipMemoryRefresh = useCallback(
     async (
-      historySnapshot: ChatMessage[],
-      memorySnapshot: RelationshipMemory,
       stateKey: string,
-      scheduledRun: number,
-      reason: 'chat-cadence' | 'scheduled' | 'manual',
+      reason: 'chat-cadence' | 'manual',
       processedChatTurnCount = 0,
     ) => {
-      const worker = memoryAgentWorkerRef.current;
-      if (!worker) {
-        return;
-      }
-
       setMemoryAgentBusy(true);
       setMemoryWorkerDebug({
         processedChatTurnCount,
@@ -5210,218 +5158,11 @@ function App() {
       setMemoryAgentStatus(
         reason === 'manual'
           ? 'Running memory worker...'
-          : reason === 'chat-cadence'
-            ? 'Running memory worker for chat message cadence...'
-            : 'Running background memory worker...',
+          : 'Running memory worker for chat message cadence...',
       );
 
       try {
-        const excludedModels = Array.from(memoryAgentFailedModelsRef.current);
-        const providerModels = getProviderModelPool(aiSettings.llmProvider, availableModels);
-        const modelCandidates = getMemoryAgentModelCandidates(
-          providerModels,
-          aiSettings.model,
-          excludedModels,
-          aiSettings.memoryAgentModel,
-        );
-
-        let rawContent = '';
-        let lastError: unknown = null;
-        const recentTurns = grilloRecentTurnsByStateKeyRef.current[stateKey] ?? [];
-        const workerParticipantKeys = Array.from(new Set(recentTurns.map(getGrilloParticipantKey)));
-
-        for (const model of modelCandidates) {
-          try {
-            const result = await runGrilloMemoryWorkerLoop({
-              complete: async (request) => {
-                const response = await requestChatCompletion({
-                  disableState: true,
-                  maxTokens: request.maxTokens,
-                  maxToolRounds: aiSettingsRef.current.maxToolRounds,
-                  messages: request.messages,
-                  model: request.model,
-                  llmProvider: aiSettings.llmProvider,
-                  responseFormat: request.responseFormat,
-                  stateKey: request.stateKey,
-                  stateScope: request.stateScope,
-                  temperature: request.temperature,
-                  transportMode: aiSettings.aiTransportMode,
-                  providerKeyVaultWorkspaceId,
-                });
-                return response.choices[0]?.message.content?.trim() ?? '';
-              },
-              history: historySnapshot,
-              model,
-              persona: activePersona ?? DEFAULT_PERSONA,
-              relationshipMemory: memorySnapshot,
-              semanticMemory: {
-                insert: async (text) => {
-                  const write = await rememberSemanticTurn(
-                    stateKey,
-                    text,
-                    '',
-                    activePersona ?? DEFAULT_PERSONA,
-                    providerKeyVaultWorkspaceId,
-                    aiSettings.llmProvider,
-                    setMemoryEmbeddingDebug,
-                    'worker-insert',
-                    aiSettings.embeddingMode,
-                    aiSettings.embeddingModel,
-                    aiSettings.embeddingLocalModel,
-                    workerParticipantKeys,
-                  );
-                  return {
-                    id: write?.record.id,
-                    ok: Boolean(write),
-                    totalIndexed: write?.totalIndexed,
-                    vectorDims: write?.vectorDims,
-                  };
-                },
-                search: async (query, limit) => {
-                  const embeddingResult = await requestTextEmbedding(
-                    query,
-                    providerKeyVaultWorkspaceId,
-                    aiSettings.llmProvider,
-                    'worker-search',
-                    setMemoryEmbeddingDebug,
-                    aiSettings.embeddingMode,
-                    aiSettings.embeddingModel,
-                    aiSettings.embeddingLocalModel,
-                  );
-                  return (
-                    await findSemanticMemoryMatches(
-                      stateKey,
-                      query,
-                      embeddingResult?.embedding ?? null,
-                      limit,
-                      workerParticipantKeys,
-                    )
-                  ).map(
-                    (match) => ({
-                      score: match.score,
-                      text: `[semantic:${match.scopeKey}] ${match.text.replace(/\s+/g, ' ').trim()}`,
-                    }),
-                  );
-                },
-              },
-              scopeKey: stateKey,
-              turns: recentTurns,
-            });
-
-            if (memoryAgentRunRef.current !== scheduledRun) {
-              return;
-            }
-
-            rawContent = extractGrilloWorkerRelationshipJson(result.finalJsonText);
-            if (rawContent) {
-              refreshGrilloMemoryState(stateKey);
-              void refreshMemoryBackendStatus();
-              setMemoryWorkerDebug({
-                model,
-                processedChatTurnCount,
-                reason,
-                rounds: result.rounds,
-                stateKey,
-                status: 'updated',
-                toolCalls: result.toolCalls.length,
-                updatedAt: Date.now(),
-              });
-              setMemoryAgentStatus(
-                `Grillo worker: ${model}; tools=${result.toolCalls.length}; rounds=${result.rounds}.`,
-              );
-              break;
-            }
-          } catch (error) {
-            lastError = error;
-            memoryAgentFailedModelsRef.current.add(model.toLowerCase());
-          }
-        }
-
-        if (!rawContent) {
-          for (const model of modelCandidates) {
-            try {
-              const response = await requestChatCompletion({
-                model,
-                llmProvider: aiSettings.llmProvider,
-                messages: buildMemoryAgentMessages(
-                  historySnapshot,
-                  memorySnapshot,
-                  activePersona ?? DEFAULT_PERSONA,
-                ),
-                maxTokens: 260,
-                responseFormat: MEMORY_AGENT_JSON_FORMAT,
-                stateKey: getMemoryStateKey(stateKey),
-                stateScope: 'memory',
-                disableState: true,
-                transportMode: aiSettings.aiTransportMode,
-                temperature: 0.35,
-                providerKeyVaultWorkspaceId,
-              });
-
-              if (memoryAgentRunRef.current !== scheduledRun) {
-                return;
-              }
-
-              rawContent = response.choices[0]?.message.content?.trim() ?? '';
-              if (rawContent) {
-                setMemoryWorkerDebug({
-                  model,
-                  processedChatTurnCount,
-                  reason,
-                  stateKey,
-                  status: 'updated',
-                  toolCalls: 0,
-                  updatedAt: Date.now(),
-                });
-                setMemoryAgentStatus(`Legacy diary model: ${model}`);
-                break;
-              }
-            } catch (error) {
-              lastError = error;
-              memoryAgentFailedModelsRef.current.add(model.toLowerCase());
-            }
-          }
-        }
-
-        if (memoryAgentRunRef.current !== scheduledRun) {
-          return;
-        }
-
-        if (!rawContent) {
-          if (lastError) {
-            throw lastError;
-          }
-          setMemoryWorkerDebug({
-            processedChatTurnCount,
-            reason,
-            stateKey,
-            status: 'no-json',
-            updatedAt: Date.now(),
-          });
-          setMemoryAgentStatus('Memory worker returned no JSON.');
-          return;
-        }
-
-        const targetTurnCount =
-          processedChatTurnCount > 0
-            ? Math.max(
-                memorySnapshot.turnCount,
-                memorySnapshot.lastDiaryTurnCount + processedChatTurnCount,
-              )
-            : memorySnapshot.turnCount;
-        const mergedMemory = await mergeRelationshipMemoryInWorker(
-          worker,
-          getScopedRelationshipMemory(stateKey),
-          rawContent,
-          targetTurnCount,
-        );
-
-        if (memoryAgentRunRef.current !== scheduledRun) {
-          return;
-        }
-
-        commitScopedRelationshipMemory(stateKey, mergedMemory);
-        void refreshMemoryBackendStatus();
+        const cadence = await runBackendGrilloCadence(stateKey, reason.replace('-', '_'));
         if (processedChatTurnCount > 0) {
           consumeMemoryAgentPendingChatTurns(
             memoryAgentPendingChatTurnCountsRef.current,
@@ -5430,71 +5171,37 @@ function App() {
           );
           syncMemoryAgentPendingCounts();
         }
-        setMemoryAgentStatus('Memory worker updated.');
-      } catch (error) {
         setMemoryWorkerDebug({
-          error: error instanceof Error ? error.message : String(error),
+          model: aiSettingsRef.current.memoryAgentModel || aiSettingsRef.current.model,
+          processedChatTurnCount,
+          reason,
+          rounds: cadence.beatResults.length,
+          stateKey,
+          status: 'updated',
+          updatedAt: Date.now(),
+        });
+        setMemoryAgentStatus(
+          `Memory worker updated through Ladybug: ${cadence.summaries.join(' / ')}.`,
+        );
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        setMemoryWorkerDebug({
+          error: message,
           processedChatTurnCount,
           reason,
           stateKey,
           status: 'failed',
           updatedAt: Date.now(),
         });
-        setMemoryAgentStatus('Memory worker failed.');
+        setMemoryAgentStatus(`Memory worker failed: ${message}`);
       } finally {
-        if (memoryAgentRunRef.current === scheduledRun) {
-          setMemoryAgentBusy(false);
-        }
-        if (reason === 'chat-cadence' && memoryAgentRunRef.current === scheduledRun) {
-          void runBackendGrilloCadence(stateKey, 'chat_cadence');
-        }
+        setMemoryAgentBusy(false);
       }
     },
     [
-      activePersona,
-      aiSettings.aiTransportMode,
-      aiSettings.llmProvider,
-      aiSettings.memoryAgentModel,
-      aiSettings.model,
-      availableModels,
-      commitScopedRelationshipMemory,
-      getScopedRelationshipMemory,
-      providerKeyVaultWorkspaceId,
-      refreshGrilloMemoryState,
-      refreshMemoryBackendStatus,
       runBackendGrilloCadence,
       syncMemoryAgentPendingCounts,
-      twitchChannel,
     ],
-  );
-
-  const scheduleRelationshipMemoryRefresh = useCallback(
-    (historySnapshot: ChatMessage[], memorySnapshot: RelationshipMemory, stateKey: string) => {
-      if (
-        !shouldRunMemoryAgent(memorySnapshot, aiSettingsRef.current.memoryAgentIntervalMessages)
-      ) {
-        return;
-      }
-
-      if (memoryAgentTimeoutRef.current !== null) {
-        window.clearTimeout(memoryAgentTimeoutRef.current);
-      }
-
-      const scheduledRun = ++memoryAgentRunRef.current;
-      const processedChatTurnCount = memoryAgentPendingChatTurnCountsRef.current[stateKey] ?? 0;
-      memoryAgentTimeoutRef.current = window.setTimeout(() => {
-        memoryAgentTimeoutRef.current = null;
-        void runRelationshipMemoryRefresh(
-          historySnapshot,
-          memorySnapshot,
-          stateKey,
-          scheduledRun,
-          'scheduled',
-          processedChatTurnCount,
-        );
-      }, MEMORY_AGENT_DELAY_MS);
-    },
-    [runRelationshipMemoryRefresh],
   );
 
   const scheduleMemoryAgentAfterChatTurns = useCallback(
@@ -5515,23 +5222,17 @@ function App() {
         return;
       }
 
-      const historySnapshot = [...chatHistoryRef.current];
-      const memorySnapshot = getScopedRelationshipMemory(stateKey);
-      const scheduledRun = ++memoryAgentRunRef.current;
       const pendingCount = cadence.pendingCount;
       memoryAgentTimeoutRef.current = window.setTimeout(() => {
         memoryAgentTimeoutRef.current = null;
         void runRelationshipMemoryRefresh(
-          historySnapshot,
-          memorySnapshot,
           stateKey,
-          scheduledRun,
           'chat-cadence',
           pendingCount,
         );
       }, MEMORY_AGENT_DELAY_MS);
     },
-    [getScopedRelationshipMemory, runRelationshipMemoryRefresh],
+    [runRelationshipMemoryRefresh],
   );
 
   useEffect(() => {
@@ -5544,20 +5245,14 @@ function App() {
       memoryAgentTimeoutRef.current = null;
     }
 
-    const historySnapshot = [...chatHistory];
-    const memorySnapshot = relationshipMemoryRef.current;
     const stateKey = activeRelationshipStateKey;
-    const scheduledRun = ++memoryAgentRunRef.current;
     const processedChatTurnCount = memoryAgentPendingChatTurnCountsRef.current[stateKey] ?? 0;
     void runRelationshipMemoryRefresh(
-      historySnapshot,
-      memorySnapshot,
       stateKey,
-      scheduledRun,
       'manual',
       processedChatTurnCount,
     );
-  }, [activeRelationshipStateKey, chatHistory, runRelationshipMemoryRefresh]);
+  }, [activeRelationshipStateKey, runRelationshipMemoryRefresh]);
 
   const runBackendGrilloTask = useCallback((beatType: BackendGrilloBeatType) => {
     if (backendGrilloTickBusy) {
@@ -6552,16 +6247,16 @@ function App() {
               recalledMemories: [],
               relationshipMemory: [],
             }
-          : await buildGrilloMemoryPromptAdditionsFailClosedAsync(
-              {
-                participantKeys,
-                query: userContent,
-                scopeKey: stateKey,
-              },
-              (error) => {
-                console.warn('[App] Failed to load local GRILLO prompt memory', error);
-              },
-            );
+          : {
+              contextPacket: null,
+              ...createEmptyGrilloMemoryPromptAdditions(),
+            };
+        if (!grilloContextPacket) {
+          setMemoryAgentStatus(
+            'Ladybug memory context unavailable; continuing this reply without durable memory.',
+          );
+          void refreshMemoryBackendStatus();
+        }
         const memoryPromptUpdatedAt = Date.now();
         setMemoryPromptDebug({
           grilloContextPacket: grilloContextPacket
@@ -6782,11 +6477,6 @@ function App() {
           setMemoryAgentStatus(
             getMemoryProgressStatus(nextRelationshipMemory, settings.memoryAgentIntervalMessages),
           );
-          grilloRecentTurnsByStateKeyRef.current[stateKey] = [
-            ...(grilloRecentTurnsByStateKeyRef.current[stateKey] ?? []),
-            ...job.messages,
-          ].slice(-24);
-          scheduleRelationshipMemoryRefresh(updatedHistory, nextRelationshipMemory, stateKey);
           void rememberSemanticTurn(
             stateKey,
             userContent,
@@ -6813,10 +6503,20 @@ function App() {
             .then((saved) => {
               if (saved) {
                 void refreshMemoryBackendStatus();
+                scheduleMemoryAgentAfterChatTurnsRef.current(stateKey);
+                return;
               }
+              setMemoryAgentStatus(
+                'Ladybug turn ingest failed; this memory pass remains pending for retry.',
+              );
+              void refreshMemoryBackendStatus();
             })
             .catch((error) => {
               console.warn('[App] Failed to record native GRILLO turn pair', error);
+              setMemoryAgentStatus(
+                'Ladybug turn ingest failed; this memory pass remains pending for retry.',
+              );
+              void refreshMemoryBackendStatus();
             });
           const nextGrilloMemoryState = await recordGrilloMemoryTurnFailClosedAsync(
             {
@@ -6874,7 +6574,6 @@ function App() {
       getScopedRelationshipMemory,
       playAssistantMetadataAnimation,
       providerKeyVaultWorkspaceId,
-      scheduleRelationshipMemoryRefresh,
       setAssistantReplyLock,
       activeRelationshipStateKey,
       twitchChannel,

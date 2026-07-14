@@ -110,6 +110,7 @@ type GrilloWorkerToolName =
   | 'core.worker_diary_write'
   | 'core.worker_memory_write'
   | 'core.worker_profile_patch'
+  | 'core.worker_relationship_update'
   | 'core.worker_emotion_read'
   | 'core.worker_emotion_update'
   | 'core.worker_repair_list'
@@ -208,6 +209,9 @@ type GrilloWorkerTickResult = {
 
 type GrilloWorkerRuntimeState = {
   enabled: boolean;
+  lastError: string;
+  lastErrorAt: number;
+  lastHeartbeatAt: number;
   lastBeatType: string;
   intervalMs: number;
   lastNoOpReason: string;
@@ -243,6 +247,9 @@ export class GrilloWorkerService {
   private activeTickPromise: Promise<GrilloWorkerTickResult> | null = null;
   private runtime: GrilloWorkerRuntimeState = {
     enabled: false,
+    lastError: '',
+    lastErrorAt: 0,
+    lastHeartbeatAt: 0,
     lastBeatType: '',
     intervalMs: 60_000,
     lastNoOpReason: 'not_started',
@@ -272,7 +279,7 @@ export class GrilloWorkerService {
 
   start(options: GrilloWorkerRuntimeOptions = {}) {
     const intervalMs = clampInteger(options.intervalMs, 5_000, 60 * 60 * 1000, this.runtime.intervalMs);
-    const enabled = options.enabled === true;
+    const enabled = options.enabled === undefined ? true : options.enabled === true;
     if (!this.runtime.started) {
       this.runtime.startedAt = this.nowMs();
     }
@@ -280,7 +287,11 @@ export class GrilloWorkerService {
       ...this.runtime,
       enabled,
       intervalMs,
-      lastNoOpReason: enabled ? this.runtime.lastNoOpReason : 'disabled',
+      lastNoOpReason: enabled
+        ? ['disabled', 'not_started', 'stopped'].includes(this.runtime.lastNoOpReason)
+          ? 'waiting_for_client_cadence'
+          : this.runtime.lastNoOpReason
+        : 'disabled',
       started: true,
     };
     this.resetTimer();
@@ -288,7 +299,6 @@ export class GrilloWorkerService {
   }
 
   stop() {
-    this.resetTimer();
     this.runtime = {
       ...this.runtime,
       enabled: false,
@@ -296,6 +306,7 @@ export class GrilloWorkerService {
       running: Boolean(this.activeTickPromise),
       started: false,
     };
+    this.resetTimer();
     return this.getRuntimeStatus();
   }
 
@@ -411,10 +422,22 @@ export class GrilloWorkerService {
         writes: 0,
       } satisfies GrilloWorkerTickResult);
     }
-    this.activeTickPromise = this.runTickNow(input, options).finally(() => {
-      this.activeTickPromise = null;
-      this.runtime.running = false;
-    });
+    this.activeTickPromise = this.runTickNow(input, options)
+      .catch((error) => {
+        this.runtime = {
+          ...this.runtime,
+          lastError: error instanceof Error ? error.message : String(error),
+          lastErrorAt: this.nowMs(),
+          lastNoOpReason: 'tick_failed',
+          lastTickAt: this.nowMs(),
+          lastTickReason: normalizeText(input.reason) || 'manual',
+        };
+        throw error;
+      })
+      .finally(() => {
+        this.activeTickPromise = null;
+        this.runtime.running = false;
+      });
     this.runtime.running = true;
     return this.activeTickPromise;
   }
@@ -692,7 +715,7 @@ export class GrilloWorkerService {
     }
     if (this.runtime.started && this.runtime.enabled) {
       this.tickTimer = setInterval(() => {
-        void this.runTick({ reason: 'interval' });
+        this.runtime.lastHeartbeatAt = this.nowMs();
       }, this.runtime.intervalMs);
       this.tickTimer.unref?.();
     }
@@ -707,13 +730,21 @@ export class GrilloWorkerService {
     const beatType = normalizeWorkerBeatType(input.beatType);
     const startedAt = this.nowMs();
     const tickId = this.idFactory();
-    const taskResult = await (this.tickTask
-      ? this.tickTask({ reason, scopeKey })
-      : beatType === 'extraction'
-        ? this.runExtractionTick({ reason, scopeKey }, options)
-        : beatType === 'semantic_indexing'
-          ? this.runSemanticIndexingTick({ reason, scopeKey }, options)
-          : this.runMemoryBeatTick({ beatType, reason, scopeKey }, options));
+    const taskResult: GrilloWorkerTaskResult = await (
+      reason === 'interval' && !this.tickTask && !options.completion
+        ? Promise.resolve({
+            beatType,
+            noOpReason: 'waiting_for_client_cadence',
+            writes: 0,
+          })
+        : this.tickTask
+          ? this.tickTask({ reason, scopeKey })
+          : beatType === 'extraction'
+            ? this.runExtractionTick({ reason, scopeKey }, options)
+            : beatType === 'semantic_indexing'
+              ? this.runSemanticIndexingTick({ reason, scopeKey }, options)
+              : this.runMemoryBeatTick({ beatType, reason, scopeKey }, options)
+    );
     const writes = clampInteger(taskResult.writes, 0, 100_000, 0);
     const taskBeatType = normalizeWorkerBeatType(taskResult.beatType ?? beatType);
     const toolCalls = clampInteger(taskResult.toolCalls, 0, 100_000, 0);
@@ -721,6 +752,8 @@ export class GrilloWorkerService {
     const durationMs = Math.max(0, this.nowMs() - startedAt);
     this.runtime = {
       ...this.runtime,
+      lastError: '',
+      lastErrorAt: 0,
       lastBeatType: taskBeatType,
       lastNoOpReason: noOpReason,
       lastTickAt: this.nowMs(),
@@ -1665,6 +1698,9 @@ export class GrilloWorkerService {
     if (name === 'core.worker_profile_patch') {
       return this.patchWorkerProfile(scopeKey, args);
     }
+    if (name === 'core.worker_relationship_update') {
+      return this.updateWorkerRelationship(scopeKey, args);
+    }
     if (name === 'core.worker_emotion_read') {
       return this.readWorkerEmotion(scopeKey);
     }
@@ -2022,6 +2058,71 @@ export class GrilloWorkerService {
       };
     });
     return { field, ok: true, operation, value };
+  }
+
+  private async updateWorkerRelationship(scopeKey: string, args: Record<string, unknown>) {
+    const profile = await this.memory.updateRelationshipProfile(scopeKey, (current) => {
+      const turnCount = Math.max(0, integerValue(current['turnCount'], 0));
+      const diaryEntry = compactText(
+        normalizeText(args['diary_entry'] ?? args['riko_diary_entry']),
+        280,
+      );
+      const diaryHistory = readLongStringArray(current['diaryHistory'], 3);
+      if (diaryEntry && diaryHistory[diaryHistory.length - 1] !== diaryEntry) {
+        diaryHistory.push(diaryEntry);
+      }
+      const facts = dedupeStrings([
+        ...readLongStringArray(current['facts'], 8),
+        ...readLongStringArray(args['facts'], 4),
+      ]).slice(0, 8);
+      const trust = applyRelationshipDelta(current['trust'], args['trust_delta'], 4);
+      const attraction = applyRelationshipDelta(
+        current['attraction'],
+        args['attraction_delta'],
+        1,
+      );
+      const respect = applyRelationshipDelta(current['respect'], args['respect_delta'], 4);
+      const irritation = applyRelationshipDelta(
+        current['irritation'],
+        args['irritation_delta'],
+        1,
+      );
+      const jealousy = applyRelationshipDelta(current['jealousy'], args['jealousy_delta'], 0);
+      const guard = applyRelationshipDelta(current['guard'], args['guard_delta'], 16);
+      const summary = compactText(normalizeText(args['summary']), 220);
+      return {
+        ...current,
+        attraction,
+        diaryEntry: diaryEntry || normalizeText(current['diaryEntry']),
+        diaryHistory: diaryHistory.slice(-3),
+        facts,
+        guard,
+        irritation,
+        jealousy,
+        lastActionTag: normalizeRelationshipActionTag(
+          args['action_tag'] ?? current['lastActionTag'],
+        ),
+        lastDiaryTurnCount: turnCount,
+        mood: normalizeRelationshipMood(args['mood'] ?? current['mood']),
+        relationshipStage: deriveRelationshipStage({
+          attraction,
+          guard,
+          respect,
+          trust,
+          turnCount,
+        }),
+        respect,
+        summary: summary || normalizeText(current['summary']),
+        trust,
+        updatedAt: this.nowMs(),
+        version: 2,
+      };
+    });
+    return {
+      ok: true,
+      relationship_stage: profile['relationshipStage'],
+      turn_count: profile['turnCount'],
+    };
   }
 
   private async readWorkerEmotion(scopeKey: string) {
@@ -2386,6 +2487,7 @@ const WORKER_TOOL_NAME_VALUES = [
   'core.worker_diary_write',
   'core.worker_memory_write',
   'core.worker_profile_patch',
+  'core.worker_relationship_update',
   'core.worker_emotion_read',
   'core.worker_emotion_update',
   'core.worker_repair_list',
@@ -2539,6 +2641,43 @@ const WorkerToolArgSchemas = {
       value: TextishSchema,
     })
     .passthrough(),
+  'core.worker_relationship_update': z
+    .object({
+      action_tag: z.enum([
+        'none',
+        'compliment',
+        'flirt',
+        'tease',
+        'apologize',
+        'ask_personal',
+        'challenge',
+        'reassure',
+        'push_boundaries',
+        'stay_silent',
+        'ask_follow',
+        'ask_open_up',
+      ]).optional(),
+      attraction_delta: z.number().int().min(-2).max(2).optional(),
+      diary_entry: z.string().max(280).optional(),
+      facts: z.array(z.string().max(140)).max(4).optional(),
+      guard_delta: z.number().int().min(-2).max(2).optional(),
+      irritation_delta: z.number().int().min(-2).max(2).optional(),
+      jealousy_delta: z.number().int().min(-2).max(2).optional(),
+      mood: z.enum([
+        'cold',
+        'guarded',
+        'curious',
+        'teasing',
+        'flustered',
+        'annoyed',
+        'soft',
+        'affectionate',
+      ]).optional(),
+      respect_delta: z.number().int().min(-2).max(2).optional(),
+      summary: z.string().max(220).optional(),
+      trust_delta: z.number().int().min(-2).max(2).optional(),
+    })
+    .passthrough(),
 } satisfies Record<GrilloWorkerToolName, z.ZodType<Record<string, unknown>>>;
 
 const BACKEND_GRILLO_WORKER_RESPONSE_FORMAT: ChatProviderResponseFormat = {
@@ -2570,6 +2709,7 @@ function buildBackendWorkerSystemPrompt() {
     '- core.worker_diary_write args: {"summary": string, "personal_thought": string, "tags"?: string[], "beat_type"?: string, "source_turn_ids"?: string[]}',
     '- core.worker_memory_write args: {"block_name": string, "items": string[], "operation": "merge|replace", "reason"?: string, "source_candidate_ids"?: string[]}',
     '- core.worker_profile_patch args: {"field": "tone_preferences|interaction_style|boundaries|active_threads", "operation": "add|remove", "value": string}',
+    '- core.worker_relationship_update args: {"action_tag"?: string, "mood"?: string, "trust_delta"?: -2..2, "attraction_delta"?: -2..2, "respect_delta"?: -2..2, "irritation_delta"?: -2..2, "jealousy_delta"?: -2..2, "guard_delta"?: -2..2, "facts"?: string[], "summary"?: string, "diary_entry"?: string}',
     '- core.worker_emotion_read args: {}',
     '- core.worker_emotion_update args: {"intensities": {"emotion_name": number}, "operation"?: "merge|replace", "last_signal_source"?: string}',
     '- core.worker_repair_list args: {"status"?: "open|deferred|resolved"}',
@@ -2626,6 +2766,7 @@ function buildBackendBeatPrompt({
           'Write private diary reflection if the relationship/mood changed.',
           'Use core.worker_memory_write with block_name="relationship_state" for grounded relationship updates.',
           'Use core.worker_profile_patch for grounded boundaries, interaction_style, tone_preferences, or active_threads.',
+          'Use core.worker_relationship_update once to preserve grounded mood, relationship deltas, facts, summary, and the private diary pointer for the compatibility profile.',
         ]
       : beatType === 'consolidation'
         ? [
@@ -2891,6 +3032,7 @@ function isWorkerWriteTool(name: GrilloWorkerToolName) {
     name === 'core.worker_diary_write' ||
     name === 'core.worker_memory_write' ||
     name === 'core.worker_profile_patch' ||
+    name === 'core.worker_relationship_update' ||
     name === 'core.worker_emotion_update' ||
     name === 'core.worker_repair_transition' ||
     name === 'core.worker_memory_insert_archival'
@@ -2914,6 +3056,75 @@ function workerScopeState(state: Record<string, unknown>, scopeKey: string) {
 
 function normalizeText(value: unknown) {
   return String(value ?? '').replace(/\s+/g, ' ').trim();
+}
+
+function readLongStringArray(value: unknown, limit: number) {
+  return Array.isArray(value)
+    ? value.map((item) => normalizeText(item)).filter(Boolean).slice(-limit)
+    : [];
+}
+
+function integerValue(value: unknown, fallback: number) {
+  const parsed = typeof value === 'number' ? value : Number(value);
+  return Number.isFinite(parsed) ? Math.round(parsed) : fallback;
+}
+
+function applyRelationshipDelta(current: unknown, delta: unknown, fallback: number) {
+  return Math.max(
+    0,
+    Math.min(20, integerValue(current, fallback) + Math.max(-2, Math.min(2, integerValue(delta, 0)))),
+  );
+}
+
+function normalizeRelationshipMood(value: unknown) {
+  const mood = normalizeText(value).toLowerCase();
+  return ['cold', 'guarded', 'curious', 'teasing', 'flustered', 'annoyed', 'soft', 'affectionate'].includes(mood)
+    ? mood
+    : 'guarded';
+}
+
+function normalizeRelationshipActionTag(value: unknown) {
+  const actionTag = normalizeText(value).toLowerCase();
+  return [
+    'none',
+    'compliment',
+    'flirt',
+    'tease',
+    'apologize',
+    'ask_personal',
+    'challenge',
+    'reassure',
+    'push_boundaries',
+    'stay_silent',
+    'ask_follow',
+    'ask_open_up',
+  ].includes(actionTag)
+    ? actionTag
+    : 'none';
+}
+
+function deriveRelationshipStage(input: {
+  attraction: number;
+  guard: number;
+  respect: number;
+  trust: number;
+  turnCount: number;
+}) {
+  if (
+    input.turnCount >= 24 ||
+    ((input.trust >= 14 || input.attraction >= 12) && input.respect >= 12 && input.guard <= 9)
+  ) {
+    return 'close';
+  }
+  if (
+    input.turnCount >= 8 ||
+    input.trust >= 8 ||
+    input.respect >= 8 ||
+    input.attraction >= 7
+  ) {
+    return 'familiar';
+  }
+  return 'new';
 }
 
 const MAX_TURN_CONTENT_CHARS = 100_000;

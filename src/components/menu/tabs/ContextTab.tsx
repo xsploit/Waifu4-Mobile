@@ -1,4 +1,4 @@
-import type { Dispatch, SetStateAction } from 'react';
+import { useCallback, useState, type Dispatch, type SetStateAction } from 'react';
 import {
   DEFAULT_LOCAL_EMBEDDING_MODEL,
   DEFAULT_OPENROUTER_EMBEDDING_MODEL,
@@ -135,6 +135,25 @@ export function ContextTab({
   modelsLoading,
   setAiSettings,
 }: ContextTabProps) {
+  const [serverLog, setServerLog] = useState<{ path: string; text: string } | null>(null);
+  const [serverLogLoading, setServerLogLoading] = useState(false);
+  const refreshServerLog = useCallback(() => {
+    const reader = window.webWaifuDesktop?.getServerLogTail;
+    if (!reader) {
+      setServerLog({ path: '', text: 'Server logs are available in the Electron app.' });
+      return;
+    }
+    setServerLogLoading(true);
+    void reader(200)
+      .then(setServerLog)
+      .catch((error) =>
+        setServerLog({
+          path: '',
+          text: `Server log unavailable: ${error instanceof Error ? error.message : String(error)}`,
+        }),
+      )
+      .finally(() => setServerLogLoading(false));
+  }, []);
   const recentBlocks = [...grilloMemoryState.blocks].reverse().slice(0, 6);
   const recentCandidates = [...grilloMemoryState.candidates].reverse().slice(0, 8);
   const recentDiary = [...grilloMemoryState.diaryEntries].reverse().slice(0, 4);
@@ -412,12 +431,18 @@ export function ContextTab({
             </div>
             <p>
               {grilloRuntimeStatus.started ? 'started' : 'stopped'} /{' '}
-              {grilloRuntimeStatus.enabled ? 'auto enabled' : 'manual only'} / interval{' '}
+              {grilloRuntimeStatus.enabled ? 'cadence ready' : 'manual only'} / heartbeat{' '}
               {Math.round(grilloRuntimeStatus.intervalMs / 1000)}s
             </p>
             <div className="status-copy">
               Started: {grilloRuntimeStartedAt || 'not yet'} / Last tick:{' '}
               {grilloRuntimeLastTickAt || 'not yet'}
+            </div>
+            <div className="status-copy">
+              Last heartbeat:{' '}
+              {grilloRuntimeStatus.lastHeartbeatAt
+                ? new Date(grilloRuntimeStatus.lastHeartbeatAt).toLocaleTimeString()
+                : 'waiting'}
             </div>
             <div className="status-copy">
               Last result:{' '}
@@ -429,6 +454,11 @@ export function ContextTab({
                 ? ` / tools ${grilloRuntimeStatus.lastToolCalls}`
                 : ''}
             </div>
+            {grilloRuntimeStatus.lastError ? (
+              <div className="status-copy">
+                Last error: <strong>{grilloRuntimeStatus.lastError}</strong>
+              </div>
+            ) : null}
           </div>
         ) : null}
         <div className="memory-kv-grid">
@@ -526,7 +556,7 @@ export function ContextTab({
           <div className="status-copy">
             Backend:{' '}
             <strong>
-              {memoryBackendStatus?.ok ? memoryBackendStatus.backend : 'browser fallback'}
+              {memoryBackendStatus?.ok ? memoryBackendStatus.backend : 'unavailable'}
             </strong>
           </div>
           <div className="status-copy">
@@ -598,11 +628,36 @@ export function ContextTab({
             Database path: <strong>{memoryBackendStatus.dbDir}</strong>
           </div>
         ) : null}
+        {memoryBackendStatus?.error || memoryBackendStatus?.fallbackReason ? (
+          <div className="status-copy">
+            Database error:{' '}
+            <strong>{memoryBackendStatus.error || memoryBackendStatus.fallbackReason}</strong>
+          </div>
+        ) : null}
         <div className="field-hint">
-          Local backend mode uses LadybugDB for native GRILLO turns, candidates, diary, slots,
-          worker traces, vector records, participants, personas, scopes, and graph edges, then falls
-          back to browser IndexedDB if the backend is unavailable.
+          LadybugDB is the canonical store for GRILLO turns, candidates, diary, slots, worker
+          traces, vectors, participants, personas, scopes, and graph edges. Backend failures are
+          reported here instead of silently switching stores.
         </div>
+        <div className="field-hint">
+          Completed durable chat turns count toward the configured cadence. The browser supplies the
+          selected provider, model, and account key when it starts one backend GRILLO pass. The
+          heartbeat only reports runtime health and never consumes chat turns by itself.
+        </div>
+        <div className="btn-row">
+          <button className="btn-tech secondary" onClick={refreshServerLog} type="button">
+            {serverLogLoading ? 'Reading log...' : 'Show Server Log'}
+          </button>
+        </div>
+        {serverLog ? (
+          <div className="memory-entry">
+            <div className="memory-entry-header">
+              <strong>Electron backend log</strong>
+              <span>{serverLog.path || 'desktop only'}</span>
+            </div>
+            <pre className="context-preview compact">{serverLog.text || 'Log is empty.'}</pre>
+          </div>
+        ) : null}
         {memoryGraphSummary ? (
           <div className="memory-list">
             {uniqueGraphRows(memoryGraphSummary.scopes).slice(0, 4).map((scope) => (

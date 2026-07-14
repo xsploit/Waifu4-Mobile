@@ -19,12 +19,6 @@ export interface EmotionIntensities {
   relaxed: number;
 }
 
-export interface EmotionSignal {
-  name: string;
-  intensity: number;
-  confidence?: number;
-}
-
 const EMOTION_MAP: Record<string, CanonicalEmotion> = {
   happy: "happy",
   happiness: "happy",

@@ -70,7 +70,13 @@ const repairQueueStatusSchema = z.enum(['open', 'resolved', 'deferred']);
 let grilloWorkerService: GrilloWorkerService | null = null;
 
 function getGrilloWorkerService() {
-  grilloWorkerService ??= new GrilloWorkerService(getLadybugMemoryService());
+  if (!grilloWorkerService) {
+    grilloWorkerService = new GrilloWorkerService(getLadybugMemoryService());
+    grilloWorkerService.start({
+      enabled: true,
+      intervalMs: process.env['WEBWAIFU_GRILLO_INTERVAL_MS'],
+    });
+  }
   return grilloWorkerService;
 }
 
@@ -85,10 +91,16 @@ function header(req: Request, name: string): string | undefined {
 }
 
 function sendError(res: Response, error: unknown, fallback: string) {
+  const message = error instanceof Error ? error.message : fallback;
+  console.error(`[memory] ${fallback}`, error);
+  if (res.statusCode < 400) {
+    res.status(500);
+  }
   res.json({
     ok: false,
     backend: getLadybugMemoryService().getBackendLabel(),
-    error: error instanceof Error ? error.message : fallback,
+    dbDir: getLadybugMemoryService().dbDir,
+    error: message,
   });
 }
 
@@ -144,6 +156,15 @@ function createGrilloCompletion(req: Request, body: z.infer<typeof runtimeBodySc
 
 export function createMemoryRouter() {
   const router = Router();
+  getGrilloWorkerService();
+  void getLadybugMemoryService()
+    .getStatus()
+    .then((status) => {
+      console.log(`[memory] LadybugDB ready at ${status.dbDir}`);
+    })
+    .catch((error) => {
+      console.error('[memory] LadybugDB initialization failed', error);
+    });
 
   router.get('/status', async (_req, res) => {
     try {

@@ -1907,6 +1907,23 @@ describe('GrilloWorkerService', () => {
         source: 'local',
         userText: 'relationship beats should update the grillo relationship state',
       });
+      await memory.saveRelationshipProfiles({
+        [scopeKey]: {
+          attraction: 1,
+          diaryHistory: [],
+          facts: [],
+          guard: 16,
+          irritation: 1,
+          jealousy: 0,
+          lastDiaryTurnCount: 0,
+          mood: 'guarded',
+          relationshipStage: 'new',
+          respect: 4,
+          trust: 4,
+          turnCount: 8,
+          version: 2,
+        },
+      });
 
       const tick = await grillo.runTickWithOptions(
         {
@@ -1950,6 +1967,18 @@ describe('GrilloWorkerService', () => {
                       },
                       name: 'core.worker_memory_write',
                     },
+                    {
+                      args: {
+                        action_tag: 'reassure',
+                        diary_entry: 'I feel more settled about keeping our shared context grounded.',
+                        facts: ['Subsect wants relationship memory grounded in GRILLO.'],
+                        guard_delta: -1,
+                        mood: 'soft',
+                        summary: 'Subsect and Hikari are building grounded relationship memory.',
+                        trust_delta: 1,
+                      },
+                      name: 'core.worker_relationship_update',
+                    },
                   ],
                 }),
               };
@@ -1973,7 +2002,7 @@ describe('GrilloWorkerService', () => {
       expect(tick).toMatchObject({
         beatType: 'relationship',
         noOpReason: '',
-        writes: 2,
+        writes: 3,
       });
       expect(requests[0]).toMatchObject({
         stateScope: 'memory',
@@ -1998,13 +2027,21 @@ describe('GrilloWorkerService', () => {
         participantKey,
         slotName: 'relationship_state',
       });
+      expect((await memory.loadRelationshipProfiles())[scopeKey]).toMatchObject({
+        guard: 15,
+        lastActionTag: 'reassure',
+        lastDiaryTurnCount: 8,
+        mood: 'soft',
+        relationshipStage: 'familiar',
+        trust: 5,
+      });
 
       const state = await memory.getGrilloSingleton<Record<string, unknown>>('memory_worker_state');
       expect(state).toMatchObject({
         lastBeatModel: 'openai/gpt-5-nano',
         lastBeatProvider: 'vercel-gateway',
         lastBeatType: 'relationship',
-        lastToolCalls: 2,
+        lastToolCalls: 3,
       });
     } finally {
       await memory.close();
@@ -2557,6 +2594,7 @@ describe('GrilloWorkerService', () => {
       expect(grillo.start({ enabled: true, intervalMs: 5000 })).toMatchObject({
         enabled: true,
         intervalMs: 5000,
+        lastNoOpReason: 'waiting_for_client_cadence',
         started: true,
       });
 
@@ -2602,6 +2640,144 @@ describe('GrilloWorkerService', () => {
       });
     } finally {
       grillo.stop();
+      await memory.close();
+    }
+  });
+
+  it('keeps interval heartbeats from consuming turns without a credentialed client cadence', async () => {
+    const { grillo, memory } = createServices();
+    const scopeKey = 'local:persona:hikari-chan';
+    try {
+      const ingested = await grillo.ingestTurnPair({
+        assistantText: 'I will remember the synthwave preference.',
+        participantKey: 'local:local:subsect',
+        scopeKey,
+        source: 'local',
+        userText: 'I like synthwave.',
+      });
+
+      await expect(grillo.runTick({ reason: 'interval', scopeKey })).resolves.toMatchObject({
+        noOpReason: 'waiting_for_client_cadence',
+        writes: 0,
+      });
+
+      const afterHeartbeat = await memory.getGrilloSingleton<Record<string, unknown>>(
+        'memory_worker_state',
+      );
+      const heartbeatScope = (afterHeartbeat?.['scopes'] as Record<string, Record<string, unknown>>)[
+        scopeKey
+      ];
+      expect(heartbeatScope?.['processedTurnIds']).toBeUndefined();
+
+      const cadenceResult = await grillo.runTickWithOptions({
+        beatType: 'extraction',
+        reason: 'client_cadence',
+        scopeKey,
+      });
+      expect(cadenceResult.writes).toBeGreaterThan(0);
+      const afterCadence = await memory.getGrilloSingleton<Record<string, unknown>>(
+        'memory_worker_state',
+      );
+      const cadenceScope = (afterCadence?.['scopes'] as Record<string, Record<string, unknown>>)[
+        scopeKey
+      ];
+      expect(cadenceScope?.['processedTurnIds']).toEqual(ingested.turnIds);
+    } finally {
+      await memory.close();
+    }
+  });
+
+  it('updates runtime heartbeats without running the memory task or surviving stop', async () => {
+    const dbPath = join(tmpdir(), `webwaifu4-grillo-heartbeat-test-${process.pid}-${Date.now()}.db`);
+    dbPaths.push(dbPath);
+    const memory = new LadybugMemoryService(dbPath);
+    const tickTask = vi.fn(async () => ({ writes: 1 }));
+    vi.useFakeTimers();
+    vi.setSystemTime(1770000000000);
+    const grillo = new GrilloWorkerService(memory, () => Date.now(), randomUUID, tickTask);
+    try {
+      grillo.start({ enabled: true, intervalMs: 5000 });
+      vi.advanceTimersByTime(5000);
+      expect(grillo.getRuntimeStatus().lastHeartbeatAt).toBe(1770000005000);
+      expect(tickTask).not.toHaveBeenCalled();
+
+      grillo.stop();
+      vi.advanceTimersByTime(10000);
+      expect(grillo.getRuntimeStatus().lastHeartbeatAt).toBe(1770000005000);
+      expect(tickTask).not.toHaveBeenCalled();
+    } finally {
+      grillo.stop();
+      vi.useRealTimers();
+      await memory.close();
+    }
+  });
+
+  it('updates the compatibility relationship profile through the backend worker tool', async () => {
+    const { grillo, memory } = createServices();
+    const scopeKey = 'local:persona:hikari-chan';
+    try {
+      await memory.saveRelationshipProfiles({
+        [scopeKey]: {
+          affectState: {
+            arousal: 0.2,
+            dominance: 0,
+            label: 'guarded',
+            lastEmotion: 'neutral',
+            updatedAt: null,
+            valence: 0,
+          },
+          attraction: 1,
+          diaryEntry: '',
+          diaryHistory: [],
+          facts: [],
+          guard: 16,
+          irritation: 1,
+          jealousy: 0,
+          lastActionTag: 'none',
+          lastDiaryTurnCount: 0,
+          lastSeenAt: 1770000000000,
+          mood: 'guarded',
+          relationshipStage: 'new',
+          respect: 4,
+          summary: '',
+          trust: 4,
+          turnCount: 8,
+          version: 2,
+        },
+      });
+
+      await expect(
+        grillo.runWorkerTool({
+          args: {
+            action_tag: 'reassure',
+            diary_entry: 'I felt our trust settle into something warmer.',
+            facts: ['Subsect likes synthwave.'],
+            guard_delta: -2,
+            mood: 'soft',
+            summary: 'Subsect and Hikari are becoming more familiar.',
+            trust_delta: 2,
+          },
+          name: 'core.worker_relationship_update',
+          participantKey: 'local:local:subsect',
+          scopeKey,
+        }),
+      ).resolves.toMatchObject({ ok: true });
+
+      const profile = (await memory.loadRelationshipProfiles())[scopeKey];
+      expect(profile).toMatchObject({
+        diaryEntry: 'I felt our trust settle into something warmer.',
+        diaryHistory: ['I felt our trust settle into something warmer.'],
+        facts: ['Subsect likes synthwave.'],
+        guard: 14,
+        lastActionTag: 'reassure',
+        lastDiaryTurnCount: 8,
+        mood: 'soft',
+        relationshipStage: 'familiar',
+        summary: 'Subsect and Hikari are becoming more familiar.',
+        trust: 6,
+      });
+      expect(profile?.['affectState']).toMatchObject({ label: 'guarded' });
+    } finally {
       await memory.close();
     }
   });

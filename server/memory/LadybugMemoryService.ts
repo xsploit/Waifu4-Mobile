@@ -143,10 +143,15 @@ export class LadybugMemoryService {
   private initPromise: Promise<LadybugState> | null = null;
   private fallbackReason: string | null = null;
   private fallbackStoreCache: FallbackStoreCache | null = null;
+  private readonly allowJsonFallback: boolean;
   private readonly grilloEntityRevisions = new Map<LadybugGrilloRecordEntity, number>();
 
-  constructor(dbDir = process.env['WEBWAIFU_MEMORY_DB_DIR']?.trim() || DEFAULT_MEMORY_DB_DIR) {
+  constructor(
+    dbDir = process.env['WEBWAIFU_MEMORY_DB_DIR']?.trim() || DEFAULT_MEMORY_DB_DIR,
+    options: { allowJsonFallback?: boolean } = {},
+  ) {
     this.dbDir = dbDir;
+    this.allowJsonFallback = options.allowJsonFallback !== false;
     const backend = process.env['WEBWAIFU_MEMORY_BACKEND']?.trim().toLowerCase();
     if (backend === 'json' || backend === 'json-fallback') {
       this.fallbackReason = 'WEBWAIFU_MEMORY_BACKEND=json';
@@ -1651,6 +1656,9 @@ export class LadybugMemoryService {
   }
 
   private async enableFallback(error: unknown) {
+    if (!this.allowJsonFallback) {
+      throw error instanceof Error ? error : new Error(String(error));
+    }
     this.fallbackReason ??= error instanceof Error ? error.message : String(error);
     this.initPromise = null;
     const state = this.state;
@@ -2549,7 +2557,7 @@ async function importLadybugCore() {
 let singleton: LadybugMemoryService | null = null;
 
 export function getLadybugMemoryService() {
-  singleton ??= new LadybugMemoryService();
+  singleton ??= new LadybugMemoryService(undefined, { allowJsonFallback: false });
   return singleton;
 }
 

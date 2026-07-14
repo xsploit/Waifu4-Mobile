@@ -10,6 +10,10 @@ type DesktopRuntimeBridge = {
     clickThrough: boolean;
     mode: DesktopWindowMode;
   }>;
+  getServerLogTail?: (lineLimit?: number) => Promise<{
+    path: string;
+    text: string;
+  }>;
   onRuntimeChanged?: (
     callback: (runtime: {
       backendPort: string;

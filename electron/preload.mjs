@@ -29,6 +29,7 @@ contextBridge.exposeInMainWorld('webWaifuDesktop', {
   getBackendOwner: () => currentBackendOwner,
   getBackendPort: () => currentBackendPort,
   getRuntime: () => ipcRenderer.invoke('desktop:get-runtime'),
+  getServerLogTail: (lineLimit) => ipcRenderer.invoke('desktop:get-server-log-tail', lineLimit),
   relaunchWindowMode: (mode) => ipcRenderer.invoke('desktop:relaunch-window-mode', mode),
   setClickThrough: (enabled) => ipcRenderer.invoke('desktop:set-click-through', enabled),
   onRuntimeChanged: (callback) => {

@@ -546,6 +546,31 @@ function logDesktop(message) {
   console.log(`[desktop] ${message}`);
 }
 
+function readDesktopLogTail(lineLimit = 200) {
+  const logPath = getDesktopLogPath();
+  const limit = Math.max(20, Math.min(500, Number(lineLimit) || 200));
+  try {
+    const stats = fs.statSync(logPath);
+    const byteCount = Math.min(stats.size, 256 * 1024);
+    const buffer = Buffer.alloc(byteCount);
+    const file = fs.openSync(logPath, 'r');
+    try {
+      fs.readSync(file, buffer, 0, byteCount, Math.max(0, stats.size - byteCount));
+    } finally {
+      fs.closeSync(file);
+    }
+    return {
+      path: logPath,
+      text: buffer.toString('utf8').split(/\r?\n/).slice(-limit).join('\n').trim(),
+    };
+  } catch (error) {
+    return {
+      path: logPath,
+      text: `Server log unavailable: ${error instanceof Error ? error.message : String(error)}`,
+    };
+  }
+}
+
 function formatError(error) {
   return error instanceof Error ? `${error.message}\n${error.stack ?? ''}` : String(error);
 }
@@ -802,6 +827,9 @@ function installMenu() {
 }
 
 ipcMain.handle('desktop:get-runtime', () => getDesktopRuntime());
+ipcMain.handle('desktop:get-server-log-tail', (_event, lineLimit) =>
+  readDesktopLogTail(lineLimit),
+);
 
 ipcMain.handle('desktop:set-click-through', (_event, enabled) => {
   clickThrough = Boolean(enabled);

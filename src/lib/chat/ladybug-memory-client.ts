@@ -11,6 +11,9 @@ export type LadybugMemoryStatus = {
   candidates?: number;
   dbDir?: string;
   diaryEntries?: number;
+  error?: string;
+  fallbackReason?: string;
+  initialized?: boolean;
   emotionIntensities?: number;
   emotionStates?: number;
   grilloActivities?: number;
@@ -51,6 +54,9 @@ export type LadybugGrilloContextPacket = GrilloContextPacket;
 export type LadybugGrilloRuntimeStatus = {
   enabled: boolean;
   intervalMs: number;
+  lastError?: string;
+  lastErrorAt?: number;
+  lastHeartbeatAt?: number;
   lastBeatType?: string;
   lastNoOpReason: string;
   lastTickAt: number;
