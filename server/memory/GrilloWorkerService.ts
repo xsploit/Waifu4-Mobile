@@ -15,6 +15,7 @@ import { GrilloRepairQueue, type GrilloRepairTask } from './GrilloRepairQueue.js
 import { assessGrilloMemorySufficiency } from './GrilloRetrievalController.js';
 import {
   buildGrilloLedgerProjection,
+  type GrilloLedgerProjection,
   type GrilloProjectedClaim,
 } from './GrilloLedgerProjector.js';
 import {
@@ -236,6 +237,7 @@ export class GrilloWorkerService {
   private readonly evidenceLedger: GrilloEvidenceLedger;
   private readonly repairQueue: GrilloRepairQueue;
   private readonly migrationQueues = new Map<string, Promise<void>>();
+  private readonly quarantineSignatures = new Map<string, string>();
   private activeTickPromise: Promise<GrilloWorkerTickResult> | null = null;
   private runtime: GrilloWorkerRuntimeState = {
     enabled: false,
@@ -1365,6 +1367,10 @@ export class GrilloWorkerService {
       const normalized = normalizeText(participantKey).toLowerCase();
       return participantSet.size === 0 || participantSet.has(normalized);
     };
+    const includeClaimParticipant = (participantKey: unknown) => {
+      const normalized = normalizeText(participantKey).toLowerCase();
+      return normalized === '' || includeParticipant(normalized);
+    };
     const inScope = (record: Record<string, unknown>) => recordScopeKey(record) === scopeKey;
     const query = normalizeText(input.query);
     const queryEmbedding = normalizeEmbeddingArray(input.queryEmbedding);
@@ -1382,8 +1388,8 @@ export class GrilloWorkerService {
       semanticVectorMatches,
     ] = await Promise.all([
       this.evidenceLedger.replay(scopeKey),
-      this.memory.readGrilloRecords<Record<string, unknown>>('turn_events'),
-      this.memory.readGrilloRecords<Record<string, unknown>>('diary_entries'),
+      this.memory.readGrilloRecords<Record<string, unknown>>('turn_events', { scopeKey }),
+      this.memory.readGrilloRecords<Record<string, unknown>>('diary_entries', { scopeKey }),
       this.memory.loadSemanticRecords(scopeKey),
       queryEmbedding.length > 0
         ? this.memory.querySemanticVectors(scopeKey, queryEmbedding, participantSet.size > 0 ? 32 : 8, {
@@ -1440,23 +1446,32 @@ export class GrilloWorkerService {
     const ledgerProjectionIsValid =
       ledgerProjection.provenance.integrityIssues.length === 0 &&
       ledgerProjection.provenance.invalidRecordIds.length === 0;
+    this.reportLedgerQuarantine(scopeKey, ledgerProjection);
     const allProjectedRelationshipItems = ledgerProjectionIsValid
       ? ledgerProjection.slots.map((slot) => ({
+          claimId: slot.current.claimId,
+          confidence: slot.current.confidence,
           item: formatProjectedClaimItem(slot.current),
           participantKey: slot.current.participantKey,
+          validFrom: slot.current.validFrom,
         }))
       : [];
     const projectedRelationshipItems = allProjectedRelationshipItems
-      .filter(({ participantKey }) => includeParticipant(participantKey))
-      .map(({ item }) => item);
+      .filter(({ participantKey }) => includeClaimParticipant(participantKey))
+      .sort(
+        (left, right) =>
+          right.validFrom - left.validFrom ||
+          right.confidence - left.confidence ||
+          left.claimId.localeCompare(right.claimId),
+      );
     const excludedProjectedRelationshipItems = allProjectedRelationshipItems
-      .filter(({ participantKey }) => !includeParticipant(participantKey))
+      .filter(({ participantKey }) => !includeClaimParticipant(participantKey))
       .map(({ item }) => item);
     const includeProvenanceReceipt = input.includeProvenanceReceipt === true;
     const requestedRelationshipItems = includeProvenanceReceipt
       ? allProjectedRelationshipItems.map(({ item }) => item)
       : [];
-    const eligibleRelationshipItems = projectedRelationshipItems;
+    const eligibleRelationshipItems = projectedRelationshipItems.map(({ item }) => item);
     const relationshipItems = eligibleRelationshipItems.slice(0, 16);
     const relationshipMemory = relationshipItems.map((item) => item.text);
     const channelItems = scopedTurns.map(formatTurnEventItem);
@@ -1547,6 +1562,12 @@ export class GrilloWorkerService {
         `semantic_records: ${semanticRecords?.length ?? 0}`,
         `semantic_retrieval: ${semanticStrategy}`,
         `memory_authority: ${ledgerProjectionIsValid ? 'evidence_ledger' : 'evidence_ledger_quarantined'}`,
+        ledgerProjection.provenance.invalidRecordIds.length > 0
+          ? `quarantined_invalid_records: ${ledgerProjection.provenance.invalidRecordIds.length}`
+          : '',
+        ledgerProjection.provenance.integrityIssues.length > 0
+          ? `ledger_integrity_issues: ${ledgerProjection.provenance.integrityIssues.length}`
+          : '',
         `active_ledger_claims: ${projectedRelationshipItems.length}`,
         query ? `query: ${query}` : '',
       ].filter(Boolean),
@@ -1577,6 +1598,19 @@ export class GrilloWorkerService {
       thoughts: thoughtItems.map((item) => item.text),
     };
     return packet;
+  }
+
+  private reportLedgerQuarantine(scopeKey: string, projection: GrilloLedgerProjection) {
+    const invalidRecordIds = projection.provenance.invalidRecordIds;
+    const integrityIssues = projection.provenance.integrityIssues;
+    if (invalidRecordIds.length === 0 && integrityIssues.length === 0) {
+      this.quarantineSignatures.delete(scopeKey);
+      return;
+    }
+    const signature = JSON.stringify({ integrityIssues, invalidRecordIds });
+    if (this.quarantineSignatures.get(scopeKey) === signature) return;
+    this.quarantineSignatures.set(scopeKey, signature);
+    console.warn('[GRILLO] ledger quarantined', { integrityIssues, invalidRecordIds, scopeKey });
   }
 
   async diagnoseContextPacket(input: GrilloContextPacketInput) {

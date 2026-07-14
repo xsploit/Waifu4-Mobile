@@ -2,7 +2,7 @@ import { rm } from 'node:fs/promises';
 import { randomUUID } from 'node:crypto';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { GrilloWorkerService, type GrilloWorkerCompletionRequest } from './GrilloWorkerService';
 import { LadybugMemoryService } from './LadybugMemoryService';
 
@@ -375,8 +375,8 @@ describe('GrilloWorkerService', () => {
       expect(rendered).not.toContain('Legacy');
       expect(packet.background_information).toContain('memory_authority: evidence_ledger');
       expect(packet.provenance_receipt?.lanes.relationship_memory.includedIds).toEqual([
-        'claim:claim-color',
         'claim:claim-drink-new',
+        'claim:claim-color',
       ]);
     } finally {
       await memory.close();
@@ -523,11 +523,13 @@ describe('GrilloWorkerService', () => {
         expect.objectContaining({ id: 'turn:turn-1', reason: 'lane_limit' }),
       ]);
       expect(packet.relationship_memory).toHaveLength(16);
+      expect(packet.relationship_memory.join('\n')).toContain('canonical preference 17');
+      expect(packet.relationship_memory.join('\n')).not.toContain('canonical preference 0');
       expect(receipt.lanes.relationship_memory.dropped).toEqual(
         expect.arrayContaining([
           expect.objectContaining({ id: 'claim:claim-other', reason: 'participant_filter' }),
-          expect.objectContaining({ id: 'claim:claim-16', reason: 'lane_limit' }),
-          expect.objectContaining({ id: 'claim:claim-17', reason: 'lane_limit' }),
+          expect.objectContaining({ id: 'claim:claim-0', reason: 'lane_limit' }),
+          expect.objectContaining({ id: 'claim:claim-1', reason: 'lane_limit' }),
         ]),
       );
       expect(packet.relationship_memory.join('\n')).not.toContain('[block:');
@@ -544,6 +546,121 @@ describe('GrilloWorkerService', () => {
       );
       expect(packet.recalled_memories).toEqual([]);
       expect(receipt.lanes.recalled_memories.dropped).toEqual([]);
+    } finally {
+      await memory.close();
+    }
+  });
+
+  it('keeps ledger quarantine scoped and reports it once per corruption signature', async () => {
+    const { grillo, memory } = createServices();
+    const validScope = 'local:persona:valid-ledger';
+    const brokenScope = 'local:persona:broken-ledger';
+    const warning = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+    try {
+      await memory.appendGrilloRecord('evidence_records', {
+        content: 'Valid scoped evidence.',
+        createdAt: 100,
+        id: 'valid-evidence',
+        kind: 'observation',
+        metadata: {},
+        role: 'user',
+        scopeKey: validScope,
+        source: 'test',
+        sourceRecordIds: [],
+      });
+      await memory.appendGrilloRecord('memory_claims', {
+        confidence: 0.9,
+        createdAt: 101,
+        evidenceIds: ['valid-evidence'],
+        id: 'valid-claim',
+        kind: 'fact',
+        operation: 'ADD',
+        predicate: 'status',
+        scopeKey: validScope,
+        subject: 'valid-ledger',
+        supersedesRecordIds: [],
+        validFrom: 100,
+        validTo: null,
+        value: 'Valid memory remains available.',
+      });
+      await memory.appendGrilloRecord('memory_claims', {
+        id: 'broken-claim',
+        scopeKey: brokenScope,
+      });
+
+      const validPacket = await grillo.buildContextPacket({ scopeKey: validScope });
+      const brokenPacket = await grillo.buildContextPacket({ scopeKey: brokenScope });
+      await grillo.buildContextPacket({ scopeKey: brokenScope });
+
+      expect(validPacket.relationship_memory.join('\n')).toContain('Valid memory remains available.');
+      expect(validPacket.background_information).toContain('memory_authority: evidence_ledger');
+      expect(brokenPacket.relationship_memory).toEqual([]);
+      expect(brokenPacket.background_information).toEqual(
+        expect.arrayContaining([
+          'memory_authority: evidence_ledger_quarantined',
+          'quarantined_invalid_records: 1',
+        ]),
+      );
+      expect(warning).toHaveBeenCalledTimes(1);
+      expect(warning).toHaveBeenCalledWith(
+        '[GRILLO] ledger quarantined',
+        expect.objectContaining({ invalidRecordIds: ['broken-claim'], scopeKey: brokenScope }),
+      );
+    } finally {
+      warning.mockRestore();
+      await memory.close();
+    }
+  });
+
+  it('includes scope-global claims while filtering claims for other participants', async () => {
+    const { grillo, memory } = createServices();
+    const scopeKey = 'twitch:persona:hikari-chan';
+    try {
+      for (const [suffix, participantKey] of [
+        ['global', undefined],
+        ['other', 'twitch:viewer:other'],
+      ] as const) {
+        await memory.appendGrilloRecord('evidence_records', {
+          content: `${suffix} evidence`,
+          createdAt: suffix === 'global' ? 100 : 110,
+          id: `evidence-${suffix}`,
+          kind: 'observation',
+          metadata: {},
+          participantKey,
+          role: 'user',
+          scopeKey,
+          source: 'test',
+          sourceRecordIds: [],
+        });
+        await memory.appendGrilloRecord('memory_claims', {
+          confidence: 0.9,
+          createdAt: suffix === 'global' ? 101 : 111,
+          evidenceIds: [`evidence-${suffix}`],
+          id: `claim-${suffix}`,
+          kind: 'fact',
+          operation: 'ADD',
+          participantKey,
+          predicate: 'stream_status',
+          scopeKey,
+          subject: suffix,
+          supersedesRecordIds: [],
+          validFrom: suffix === 'global' ? 100 : 110,
+          validTo: null,
+          value: suffix === 'global' ? 'The stream is private.' : 'Other viewer detail.',
+        });
+      }
+
+      const packet = await grillo.buildContextPacket({
+        includeProvenanceReceipt: true,
+        participantKeys: ['twitch:viewer:current'],
+        scopeKey,
+      });
+
+      expect(packet.relationship_memory.join('\n')).toContain('The stream is private.');
+      expect(packet.relationship_memory.join('\n')).not.toContain('Other viewer detail.');
+      expect(packet.provenance_receipt?.lanes.relationship_memory.dropped).toContainEqual(
+        expect.objectContaining({ id: 'claim:claim-other', reason: 'participant_filter' }),
+      );
     } finally {
       await memory.close();
     }

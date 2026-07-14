@@ -547,12 +547,18 @@ export class LadybugMemoryService {
 
   async readGrilloRecords<T = Record<string, unknown>>(
     entity: LadybugGrilloRecordEntity,
+    filter: { recordId?: string; scopeKey?: string } = {},
   ): Promise<T[]> {
     const normalizedEntity = normalizeGrilloEntity(entity);
+    const scopeKey = filter.scopeKey ? normalizeScopeKey(filter.scopeKey) : '';
+    const recordId = stringValue(filter.recordId);
     try {
       await this.open();
+      const predicates = [`m.entity = ${q(normalizedEntity)}`];
+      if (scopeKey) predicates.push(`m.scopeKey = ${q(scopeKey)}`);
+      if (recordId) predicates.push(`m.recordId = ${q(recordId)}`);
       const rows = await this.all(
-        `MATCH (m:GrilloRecord) WHERE m.entity = ${q(normalizedEntity)} RETURN m.json AS json, m.seq AS seq, m.id AS id`,
+        `MATCH (m:GrilloRecord) WHERE ${predicates.join(' AND ')} RETURN m.json AS json, m.seq AS seq, m.id AS id`,
       );
       return rows
         .map((row) => ({
@@ -564,7 +570,7 @@ export class LadybugMemoryService {
         .sort((left, right) => left.seq - right.seq || left.id.localeCompare(right.id))
         .map((row) => row.value);
     } catch (error) {
-      return this.readFallbackGrilloRecords<T>(normalizedEntity, error);
+      return this.readFallbackGrilloRecords<T>(normalizedEntity, error, { recordId, scopeKey });
     }
   }
 
@@ -1526,10 +1532,15 @@ export class LadybugMemoryService {
   private async readFallbackGrilloRecords<T>(
     entity: LadybugGrilloRecordEntity,
     error: unknown,
+    filter: { recordId?: string; scopeKey?: string } = {},
   ): Promise<T[]> {
     await this.enableFallback(error);
     const store = await this.readFallbackStore();
-    const records = readFallbackGrilloBucket(store, entity);
+    const records = readFallbackGrilloBucket(store, entity).filter(
+      (record) =>
+        (!filter.scopeKey || grilloRecordScopeKey(record) === filter.scopeKey) &&
+        (!filter.recordId || grilloRecordNaturalId(entity, record) === filter.recordId),
+    );
     return structuredClone(records) as T[];
   }
 

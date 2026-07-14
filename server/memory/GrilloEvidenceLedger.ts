@@ -195,7 +195,11 @@ export class GrilloEvidenceLedger {
       });
     }
 
-    const evidence = await this.readValid('evidence_records', evidenceRecordSchema);
+    const evidence = await this.readValid(
+      'evidence_records',
+      evidenceRecordSchema,
+      parsed.scopeKey,
+    );
     const evidenceById = new Map(
       evidence.filter((record) => record.scopeKey === parsed.scopeKey).map((record) => [record.id, record]),
     );
@@ -217,8 +221,8 @@ export class GrilloEvidenceLedger {
     const validFrom = parsed.validFrom ?? evidenceValidFrom;
 
     const [allClaims, allCorrections] = await Promise.all([
-      this.readValid('memory_claims', memoryClaimSchema),
-      this.readValid('memory_corrections', memoryCorrectionSchema),
+      this.readValid('memory_claims', memoryClaimSchema, parsed.scopeKey),
+      this.readValid('memory_corrections', memoryCorrectionSchema, parsed.scopeKey),
     ]);
     const claims = allClaims.filter((record) => record.scopeKey === parsed.scopeKey);
     const supersededClaimIds = new Set(claims.flatMap((record) => record.supersedesRecordIds));
@@ -379,8 +383,8 @@ export class GrilloEvidenceLedger {
     }
 
     const [evidence, claims] = await Promise.all([
-      this.readValid('evidence_records', evidenceRecordSchema),
-      this.readValid('memory_claims', memoryClaimSchema),
+      this.readValid('evidence_records', evidenceRecordSchema, parsed.scopeKey),
+      this.readValid('memory_claims', memoryClaimSchema, parsed.scopeKey),
     ]);
     const knownEvidence = new Set(
       evidence.filter((record) => record.scopeKey === parsed.scopeKey).map((record) => record.id),
@@ -440,10 +444,14 @@ export class GrilloEvidenceLedger {
   async replay(scopeKey: string): Promise<GrilloLedgerReplay> {
     const normalizedScopeKey = scopeKeySchema.parse(scopeKey);
     const [evidenceResult, claimsResult, correctionsResult, decisionsResult] = await Promise.all([
-      this.readValidWithInvalid('evidence_records', evidenceRecordSchema),
-      this.readValidWithInvalid('memory_claims', memoryClaimSchema),
-      this.readValidWithInvalid('memory_corrections', memoryCorrectionSchema),
-      this.readValidWithInvalid('worker_decisions', workerDecisionSchema),
+      this.readValidWithInvalid('evidence_records', evidenceRecordSchema, normalizedScopeKey),
+      this.readValidWithInvalid('memory_claims', memoryClaimSchema, normalizedScopeKey),
+      this.readValidWithInvalid(
+        'memory_corrections',
+        memoryCorrectionSchema,
+        normalizedScopeKey,
+      ),
+      this.readValidWithInvalid('worker_decisions', workerDecisionSchema, normalizedScopeKey),
     ]);
     const evidence = sortedForScope(evidenceResult.valid, normalizedScopeKey);
     const claims = sortedForScope(claimsResult.valid, normalizedScopeKey);
@@ -569,8 +577,14 @@ export class GrilloEvidenceLedger {
     record: T,
     schema: z.ZodType<T>,
   ) {
-    const records = await this.readValid(entity, schema);
-    const existing = records.find((entry) => entry.id === record.id);
+    const records = await this.memory.readGrilloRecords<Record<string, unknown>>(entity, {
+      recordId: record.id,
+    });
+    const parsedExisting = records[0] ? schema.safeParse(records[0]) : null;
+    if (parsedExisting && !parsedExisting.success) {
+      throw new Error(`GRILLO ledger ID conflict with invalid record in ${entity}: ${record.id}`);
+    }
+    const existing = parsedExisting?.success ? parsedExisting.data : undefined;
     if (existing) {
       if (isDeepStrictEqual(existing, record)) return existing;
       throw new Error(`GRILLO ledger ID conflict in ${entity}: ${record.id}`);
@@ -579,12 +593,18 @@ export class GrilloEvidenceLedger {
     return record;
   }
 
-  private async readValid<T>(entity: LedgerEntity, schema: z.ZodType<T>) {
-    return (await this.readValidWithInvalid(entity, schema)).valid;
+  private async readValid<T>(entity: LedgerEntity, schema: z.ZodType<T>, scopeKey?: string) {
+    return (await this.readValidWithInvalid(entity, schema, scopeKey)).valid;
   }
 
-  private async readValidWithInvalid<T>(entity: LedgerEntity, schema: z.ZodType<T>) {
-    const records = await this.memory.readGrilloRecords<Record<string, unknown>>(entity);
+  private async readValidWithInvalid<T>(
+    entity: LedgerEntity,
+    schema: z.ZodType<T>,
+    scopeKey?: string,
+  ) {
+    const records = await this.memory.readGrilloRecords<Record<string, unknown>>(entity, {
+      scopeKey,
+    });
     const valid: T[] = [];
     const invalidIds: string[] = [];
     for (const record of records) {

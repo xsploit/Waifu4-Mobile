@@ -225,6 +225,48 @@ describe('LadybugMemoryService', () => {
     }
   });
 
+  it('reads native GRILLO records by scope and natural record ID', async () => {
+    const service = createService();
+    const targetScope = 'local:persona:scope-filter-target';
+    const siblingScope = 'local:persona:scope-filter-sibling';
+    try {
+      await service.appendGrilloRecord('evidence_records', {
+        content: 'Target evidence.',
+        createdAt: 10,
+        id: 'evidence-target',
+        kind: 'turn',
+        metadata: {},
+        role: 'user',
+        scopeKey: targetScope,
+        source: 'local',
+        sourceRecordIds: [],
+      });
+      await service.appendGrilloRecord('evidence_records', {
+        content: 'Sibling evidence.',
+        createdAt: 11,
+        id: 'evidence-sibling',
+        kind: 'turn',
+        metadata: {},
+        role: 'user',
+        scopeKey: siblingScope,
+        source: 'local',
+        sourceRecordIds: [],
+      });
+
+      const scoped = await service.readGrilloRecords<{ id: string }>('evidence_records', {
+        scopeKey: targetScope,
+      });
+      const byId = await service.readGrilloRecords<{ id: string }>('evidence_records', {
+        recordId: 'evidence-sibling',
+      });
+
+      expect(scoped.map((record) => record.id)).toEqual(['evidence-target']);
+      expect(byId.map((record) => record.id)).toEqual(['evidence-sibling']);
+    } finally {
+      await service.close();
+    }
+  });
+
   it('stores Grillo, semantic, participant, persona, and relationship graph rows', async () => {
     const service = createService();
     try {
@@ -684,6 +726,52 @@ describe('LadybugMemoryService', () => {
       expect(claims).toEqual([]);
       expect(service.getBackendLabel()).toBe('json-fallback');
       expect(initCalls).toBe(1);
+    } finally {
+      await service.close();
+    }
+  });
+
+  it('applies scoped and point GRILLO reads in JSON fallback mode', async () => {
+    const service = createService();
+    (service as unknown as { init: () => Promise<never> }).init = async () => {
+      throw new Error('native wal unavailable');
+    };
+    const targetScope = 'local:persona:fallback-filter-target';
+    const siblingScope = 'local:persona:fallback-filter-sibling';
+    try {
+      await service.appendGrilloRecord('evidence_records', {
+        content: 'Target fallback evidence.',
+        createdAt: 10,
+        id: 'fallback-evidence-target',
+        kind: 'turn',
+        metadata: {},
+        role: 'user',
+        scopeKey: targetScope,
+        source: 'local',
+        sourceRecordIds: [],
+      });
+      await service.appendGrilloRecord('evidence_records', {
+        content: 'Sibling fallback evidence.',
+        createdAt: 11,
+        id: 'fallback-evidence-sibling',
+        kind: 'turn',
+        metadata: {},
+        role: 'user',
+        scopeKey: siblingScope,
+        source: 'local',
+        sourceRecordIds: [],
+      });
+
+      const scoped = await service.readGrilloRecords<{ id: string }>('evidence_records', {
+        scopeKey: targetScope,
+      });
+      const byId = await service.readGrilloRecords<{ id: string }>('evidence_records', {
+        recordId: 'fallback-evidence-sibling',
+      });
+
+      expect(scoped.map((record) => record.id)).toEqual(['fallback-evidence-target']);
+      expect(byId.map((record) => record.id)).toEqual(['fallback-evidence-sibling']);
+      expect(service.getBackendLabel()).toBe('json-fallback');
     } finally {
       await service.close();
     }
