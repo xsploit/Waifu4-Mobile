@@ -88,6 +88,51 @@ describe('GrilloWorkerService', () => {
     }
   });
 
+  it('bounds oversized turns before writing matching turn and evidence records', async () => {
+    const { grillo, memory } = createServices();
+    const scopeKey = 'local:persona:hikari-chan';
+    try {
+      const result = await grillo.ingestTurnPair({
+        assistantText: `assistant-${'b'.repeat(150_000)}`,
+        participantKey: 'local:local:subsect',
+        scopeKey,
+        source: 'local',
+        userText: `user-${'a'.repeat(150_000)}`,
+      });
+      const turns = await memory.readGrilloRecords<Record<string, unknown>>('turn_events', {
+        scopeKey,
+      });
+      const replay = await grillo.getEvidenceLedgerReplay(scopeKey);
+
+      expect(result.turnIds).toHaveLength(2);
+      for (const turn of turns) {
+        const content = String(turn['content']);
+        const evidence = replay.evidence.find((record) => record.id === turn['turn_id']);
+        expect(content).toHaveLength(100_000);
+        expect(content.endsWith(' ...[truncated]')).toBe(true);
+        expect(evidence?.content).toBe(content);
+      }
+
+      await expect(
+        grillo.runWorkerTool({
+          args: {
+            confidence: 0.95,
+            evidence_turn_ids: [result.turnIds[0]],
+            kind: 'observation',
+            predicate: 'oversized_turn_ingested',
+            subject: 'local:local:subsect',
+            value: 'yes',
+          },
+          name: 'core.worker_claim_propose',
+          participantKey: 'local:local:subsect',
+          scopeKey,
+        }),
+      ).resolves.toMatchObject({ ok: true });
+    } finally {
+      await memory.close();
+    }
+  });
+
   it('runs a manual extraction pass through Ladybug candidates, diary, slots, activity, and traces', async () => {
     const { grillo, memory } = createServices();
     try {

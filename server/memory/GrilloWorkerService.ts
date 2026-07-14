@@ -428,7 +428,7 @@ export class GrilloWorkerService {
     const createdAt = numberOrNow(input.createdAt, this.nowMs);
     const writtenTurnIds: string[] = [];
 
-    const userText = normalizeText(input.userText);
+    const userText = normalizeTurnContent(input.userText);
     if (userText) {
       const turnId = this.idFactory();
       await this.memory.appendGrilloRecord('turn_events', {
@@ -463,7 +463,7 @@ export class GrilloWorkerService {
       writtenTurnIds.push(turnId);
     }
 
-    const assistantText = normalizeText(input.assistantText);
+    const assistantText = normalizeTurnContent(input.assistantText);
     if (assistantText) {
       const turnId = this.idFactory();
       await this.memory.appendGrilloRecord('turn_events', {
@@ -2914,6 +2914,15 @@ function workerScopeState(state: Record<string, unknown>, scopeKey: string) {
 
 function normalizeText(value: unknown) {
   return String(value ?? '').replace(/\s+/g, ' ').trim();
+}
+
+const MAX_TURN_CONTENT_CHARS = 100_000;
+const TURN_TRUNCATION_MARKER = ' ...[truncated]';
+
+function normalizeTurnContent(value: unknown) {
+  const normalized = normalizeText(value);
+  if (normalized.length <= MAX_TURN_CONTENT_CHARS) return normalized;
+  return `${normalized.slice(0, MAX_TURN_CONTENT_CHARS - TURN_TRUNCATION_MARKER.length)}${TURN_TRUNCATION_MARKER}`;
 }
 
 function normalizeKey(value: unknown, fallback: string) {
