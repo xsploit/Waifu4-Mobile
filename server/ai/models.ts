@@ -12,6 +12,79 @@ const log = createLogger('models');
 const OPENROUTER_MODELS_URL = 'https://openrouter.ai/api/v1/models';
 const VERCEL_GATEWAY_MODELS_URL = 'https://ai-gateway.vercel.sh/v1/models';
 
+export type VercelProviderEndpointInfo = {
+  contextLength?: number;
+  maxCompletionTokens?: number;
+  providerName: string;
+  status?: number;
+  supportedParameters: string[];
+  supportsImplicitCaching: boolean;
+};
+
+function asRecord(value: unknown): Record<string, unknown> | null {
+  return value && typeof value === 'object' && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : null;
+}
+
+function asFiniteNumber(value: unknown): number | undefined {
+  return typeof value === 'number' && Number.isFinite(value) ? value : undefined;
+}
+
+function asStringArray(value: unknown): string[] {
+  return Array.isArray(value)
+    ? value.filter((entry): entry is string => typeof entry === 'string')
+    : [];
+}
+
+export function parseVercelProviderEndpoints(payload: unknown): VercelProviderEndpointInfo[] {
+  const root = asRecord(payload);
+  const data = asRecord(root?.data);
+  const entries = Array.isArray(data?.endpoints)
+    ? data.endpoints
+    : Array.isArray(root?.endpoints)
+      ? root.endpoints
+      : [];
+  const byProvider = new Map<string, VercelProviderEndpointInfo>();
+
+  for (const value of entries) {
+    const entry = asRecord(value);
+    const providerName = typeof entry?.provider_name === 'string'
+      ? entry.provider_name.trim()
+      : typeof entry?.provider === 'string'
+        ? entry.provider.trim()
+        : '';
+    if (!providerName) {
+      continue;
+    }
+    const next: VercelProviderEndpointInfo = {
+      contextLength: asFiniteNumber(entry?.context_length),
+      maxCompletionTokens: asFiniteNumber(entry?.max_completion_tokens),
+      providerName,
+      status: asFiniteNumber(entry?.status),
+      supportedParameters: asStringArray(entry?.supported_parameters),
+      supportsImplicitCaching: entry?.supports_implicit_caching === true,
+    };
+    const current = byProvider.get(providerName);
+    if (!current || (current.status !== 0 && next.status === 0)) {
+      byProvider.set(providerName, next);
+    }
+  }
+
+  return Array.from(byProvider.values()).sort((a, b) => {
+    const activeDifference = Number(a.status !== 0) - Number(b.status !== 0);
+    return activeDifference || a.providerName.localeCompare(b.providerName);
+  });
+}
+
+export function getVercelModelEndpointsUrl(model: string): string {
+  const segments = model.trim().split('/').filter(Boolean);
+  if (segments.length < 2) {
+    throw new Error('Vercel model ID must include creator and model');
+  }
+  return `${VERCEL_GATEWAY_MODELS_URL}/${segments.map(encodeURIComponent).join('/')}/endpoints`;
+}
+
 function sendModels(res: Response, provider: string, modelMetadata: ProviderModelInfo[], note?: string) {
   res.json({
     ok: true,
@@ -67,7 +140,7 @@ export async function handleModels(req: Request, res: Response): Promise<void> {
         res,
         provider,
         modelMetadata,
-        'gateway structured-output support is policy-derived until per-model metadata is exposed',
+        'provider endpoints are discovered separately for the selected model',
       );
     } catch (err) {
       sendModelsError(res, provider, err);
@@ -92,6 +165,41 @@ export async function handleModels(req: Request, res: Response): Promise<void> {
       },
     );
     sendModels(res, provider, modelMetadata);
+  } catch (err) {
+    sendModelsError(res, provider, err);
+  }
+}
+
+/** GET /ai/model-endpoints?provider=vercel-gateway&model=creator/model */
+export async function handleModelEndpoints(req: Request, res: Response): Promise<void> {
+  const provider = req.query.provider;
+  const model = typeof req.query.model === 'string' ? req.query.model.trim() : '';
+  if (provider !== 'vercel-gateway') {
+    res.status(400).json({ ok: false, error: 'Model endpoint discovery requires Vercel Gateway' });
+    return;
+  }
+  if (!model) {
+    res.status(400).json({ ok: false, error: 'Missing model' });
+    return;
+  }
+
+  try {
+    const upstream = await fetch(getVercelModelEndpointsUrl(model), {
+      signal: AbortSignal.timeout(15000),
+    });
+    if (!upstream.ok) {
+      throw new Error(`Vercel Gateway model endpoints HTTP ${upstream.status}`);
+    }
+    const endpoints = parseVercelProviderEndpoints(await upstream.json());
+    res.json({
+      ok: true,
+      provider,
+      model,
+      endpoints,
+      providerSlugs: endpoints
+        .filter((endpoint) => endpoint.status === undefined || endpoint.status === 0)
+        .map((endpoint) => endpoint.providerName),
+    });
   } catch (err) {
     sendModelsError(res, provider, err);
   }

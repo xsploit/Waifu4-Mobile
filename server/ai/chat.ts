@@ -55,6 +55,9 @@ const chatRequestInputSchema = z.object({
   maxTokens: z.number().int().positive().optional(),
   toolChoiceMode: toolChoiceModeSchema.optional(),
   maxToolRounds: z.number().int().min(1).max(30).optional(),
+  stateKey: z.string().min(1).optional(),
+  stateScope: z.string().min(1).optional(),
+  transportMode: z.literal('http-stream').optional(),
   openRouterRouting: openRouterRoutingSchema,
   vercelRouting: vercelRoutingSchema,
   stream: z.boolean().default(true),
@@ -85,13 +88,29 @@ export function normalizeChatRequest(input: z.infer<typeof chatRequestInputSchem
 
 export function buildChatDoneEventPayload(
   result: Pick<StreamChatResult, 'metadata' | 'model' | 'provider' | 'visibleText'>,
+  runtime: {
+    stateKey?: string;
+    toolNames?: string[];
+    toolsAvailable?: boolean;
+    toolsSource?: string;
+    transport?: 'http-stream';
+  } = {},
 ) {
+  const transport = runtime.transport ?? 'http-stream';
   return {
     ok: true,
     text: result.visibleText,
     meta: {
       provider: result.provider,
       model: result.model,
+      activeStateKey: runtime.stateKey,
+      requestedTransport: transport,
+      stateKey: runtime.stateKey,
+      stateMode: 'stateless',
+      toolNames: runtime.toolNames,
+      toolsAvailable: runtime.toolsAvailable,
+      toolsSource: runtime.toolsSource,
+      transport,
     },
     replyMetadata: result.metadata,
   };
@@ -264,7 +283,17 @@ export async function handleChat(
         });
       }
     }
-    send('done', buildChatDoneEventPayload(result));
+    const tavilyAvailable = request.toolChoiceMode !== 'off' && Boolean(keys.tavilyKey);
+    send(
+      'done',
+      buildChatDoneEventPayload(result, {
+        stateKey: parsed.data.stateKey,
+        toolNames: tavilyAvailable ? ['tavily_search'] : [],
+        toolsAvailable: tavilyAvailable,
+        toolsSource: tavilyAvailable ? 'tavily' : 'none',
+        transport: parsed.data.transportMode ?? 'http-stream',
+      }),
+    );
   } catch (err) {
     bridge?.fail(err instanceof Error ? err : new Error(String(err)));
     if (bridgeDone) {

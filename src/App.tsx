@@ -509,6 +509,12 @@ type AppModelsResponse = {
   provider?: string;
 };
 
+type AppModelEndpointsResponse = {
+  error?: string;
+  ok?: boolean;
+  providerSlugs?: string[];
+};
+
 type AppTextEmbeddingResult = {
   embedding: number[];
   model: string;
@@ -710,6 +716,17 @@ function getAiModelsUrl(llmProvider: AiSettings['llmProvider']) {
     url.pathname = `${url.pathname.replace(/\/+$/, '')}/models`;
   }
   url.searchParams.set('provider', llmProvider);
+  return url.toString();
+}
+
+function getAiModelEndpointsUrl(llmProvider: AiSettings['llmProvider'], model: string) {
+  const url = new URL(getAiProxyUrl());
+  url.pathname = url.pathname.replace(/\/chat\/?$/, '/model-endpoints');
+  if (!/\/model-endpoints\/?$/.test(url.pathname)) {
+    url.pathname = `${url.pathname.replace(/\/+$/, '')}/model-endpoints`;
+  }
+  url.searchParams.set('provider', llmProvider);
+  url.searchParams.set('model', model);
   return url.toString();
 }
 
@@ -2207,6 +2224,9 @@ function App() {
   >(() => new Map());
   const [modelsLoading, setModelsLoading] = useState(false);
   const [modelsError, setModelsError] = useState<string | null>(null);
+  const [vercelProviderSlugs, setVercelProviderSlugs] = useState<string[]>([]);
+  const [vercelProvidersLoading, setVercelProvidersLoading] = useState(false);
+  const [vercelProvidersError, setVercelProvidersError] = useState<string | null>(null);
   const [aiProxyHealth, setAiProxyHealth] = useState<AiProxyHealth | null>(null);
   const [aiProxyHealthError, setAiProxyHealthError] = useState<string | null>(null);
   const [memoryAgentBusy, setMemoryAgentBusy] = useState(false);
@@ -2279,6 +2299,7 @@ function App() {
   const availableModelsRef = useRef<string[]>([]);
   const availableModelMetadataRef = useRef<Map<string, AppModelMetadata>>(new Map());
   const modelCatalogRequestRef = useRef(0);
+  const vercelProviderRequestRef = useRef(0);
   const sequencerSettingsRef = useRef(createDefaultSequencerSettings());
   const recentReactionAnimationIdsRef = useRef<string[]>([]);
   const directTwitchClientRef = useRef<DirectTwitchIrcClient | null>(null);
@@ -2858,6 +2879,54 @@ function App() {
     }
   }, [providerKeyVaultWorkspaceId]);
 
+  const loadVercelProviderEndpoints = useCallback(async () => {
+    const requestId = ++vercelProviderRequestRef.current;
+    const { llmProvider, model } = aiSettingsRef.current;
+    if (llmProvider !== 'vercel-gateway' || !model.trim()) {
+      setVercelProviderSlugs([]);
+      setVercelProvidersError(null);
+      setVercelProvidersLoading(false);
+      return;
+    }
+
+    setVercelProvidersLoading(true);
+    setVercelProvidersError(null);
+    try {
+      const response = await fetch(getAiModelEndpointsUrl(llmProvider, model), {
+        cache: 'no-store',
+        headers: { Accept: 'application/json' },
+      });
+      if (!response.ok) {
+        throw new Error(`Vercel provider discovery failed with HTTP ${response.status}.`);
+      }
+      const data = (await response.json()) as AppModelEndpointsResponse;
+      if (!data.ok) {
+        throw new Error(data.error || 'Vercel provider discovery failed.');
+      }
+      if (
+        vercelProviderRequestRef.current !== requestId ||
+        aiSettingsRef.current.llmProvider !== llmProvider ||
+        aiSettingsRef.current.model !== model
+      ) {
+        return;
+      }
+      setVercelProviderSlugs(
+        Array.from(new Set((data.providerSlugs ?? []).filter((slug) => slug.trim()))),
+      );
+    } catch (error) {
+      if (vercelProviderRequestRef.current === requestId) {
+        setVercelProviderSlugs([]);
+        setVercelProvidersError(
+          error instanceof Error ? error.message : 'Vercel provider discovery failed.',
+        );
+      }
+    } finally {
+      if (vercelProviderRequestRef.current === requestId) {
+        setVercelProvidersLoading(false);
+      }
+    }
+  }, []);
+
   const refreshAiProxyHealth = useCallback(async () => {
     try {
       const providerHeaders = await buildBackendProviderHeaders({
@@ -2883,7 +2952,10 @@ function App() {
       if (data.ok === false) {
         throw new Error(data.error || 'AI proxy health check failed.');
       }
-      setAiProxyHealth(data);
+      setAiProxyHealth((current) => ({
+        ...(current ?? {}),
+        serverProviderProxyEnabled: true,
+      }));
       setAiProxyHealthError(null);
     } catch (error) {
       setAiProxyHealthError(
@@ -4375,6 +4447,13 @@ function App() {
 
     void loadAvailableModels();
   }, [aiSettings.llmProvider, hydrated, loadAvailableModels]);
+
+  useEffect(() => {
+    if (!hydrated) {
+      return;
+    }
+    void loadVercelProviderEndpoints();
+  }, [aiSettings.llmProvider, aiSettings.model, hydrated, loadVercelProviderEndpoints]);
 
   useEffect(() => {
     if (!personas.some((persona) => persona.id === activePersonaId)) {
@@ -7796,6 +7875,9 @@ function App() {
               onClearMemory={handleClearMemory}
               modelsError={modelsError}
               modelsLoading={modelsLoading}
+              vercelProviderSlugs={vercelProviderSlugs}
+              vercelProvidersError={vercelProvidersError}
+              vercelProvidersLoading={vercelProvidersLoading}
               onCacheVoice={() => {
                 void handleCacheTtsVoice();
               }}

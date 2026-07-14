@@ -51,8 +51,16 @@ describe('chat request normalization', () => {
       ok: true,
       text: 'Hey there.',
       meta: {
+        activeStateKey: undefined,
         provider: 'vercel-gateway',
         model: 'openai/gpt-5-mini',
+        requestedTransport: 'http-stream',
+        stateKey: undefined,
+        stateMode: 'stateless',
+        toolNames: undefined,
+        toolsAvailable: undefined,
+        toolsSource: undefined,
+        transport: 'http-stream',
       },
       replyMetadata: {
         emotion: 'happy',
@@ -60,6 +68,31 @@ describe('chat request normalization', () => {
         arousal: 0.4,
         dominance: 0.1,
       },
+    });
+  });
+
+  it('reports the completed chat transport, scope, and real tool availability', () => {
+    expect(
+      buildChatDoneEventPayload(
+        {
+          provider: 'vercel-gateway',
+          model: 'deepseek/deepseek-v4-pro',
+          visibleText: 'Streaming status.',
+          metadata: null,
+        },
+        {
+          stateKey: 'local:persona:hikari-chan',
+          toolNames: ['tavily_search'],
+          toolsAvailable: true,
+          toolsSource: 'tavily',
+        },
+      ).meta,
+    ).toMatchObject({
+      activeStateKey: 'local:persona:hikari-chan',
+      stateMode: 'stateless',
+      toolsAvailable: true,
+      toolNames: ['tavily_search'],
+      transport: 'http-stream',
     });
   });
 });

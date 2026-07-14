@@ -5,7 +5,7 @@ import express from 'express';
 import { buildHealth, SERVICE_NAME } from './health';
 import { handleChat } from './ai/chat';
 import { handleEmbeddings } from './ai/embeddings';
-import { handleModels } from './ai/models';
+import { handleModelEndpoints, handleModels } from './ai/models';
 import { renderYourWifeyPomlResponse } from './ai/PomlRenderer';
 import { handlePiperOutput } from './tts/piperOutput';
 import { handleTtsStream } from './tts/stream';
@@ -90,6 +90,11 @@ backendRouter.get('/local/backup-settings', (req, res) => {
 // GET /ai/models — model capability metadata for automatic lane selection.
 backendRouter.get('/ai/models', (req, res) => {
   void handleModels(req, res);
+});
+
+// GET /ai/model-endpoints — active Vercel providers for one selected model.
+backendRouter.get('/ai/model-endpoints', (req, res) => {
+  void handleModelEndpoints(req, res);
 });
 
 // POST /ai/chat — SSE reply stream (delta / done / error).

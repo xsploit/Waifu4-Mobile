@@ -188,6 +188,9 @@ type SettingsPanelProps = {
   modelsLoading: boolean;
   voicesError: string | null;
   voicesLoading: boolean;
+  vercelProviderSlugs: string[];
+  vercelProvidersError: string | null;
+  vercelProvidersLoading: boolean;
 };
 
 const TABS: { id: SettingsTabId; label: string }[] = [
@@ -323,6 +326,9 @@ export function SettingsPanel({
   modelsLoading,
   voicesError,
   voicesLoading,
+  vercelProviderSlugs,
+  vercelProvidersError,
+  vercelProvidersLoading,
 }: SettingsPanelProps) {
   const touchStartX = useRef(0);
   const touchStartY = useRef(0);
@@ -393,6 +399,9 @@ export function SettingsPanel({
         onRefreshAiProxyHealth={onRefreshAiProxyHealth}
         onRefreshModels={onRefreshModels}
         setAiSettings={setAiSettings}
+        vercelProviderSlugs={vercelProviderSlugs}
+        vercelProvidersError={vercelProvidersError}
+        vercelProvidersLoading={vercelProvidersLoading}
       />
     ) : activeTab === 'twitch' ? (
       <TwitchTab

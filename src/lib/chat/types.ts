@@ -214,6 +214,8 @@ export type AiProxyHealth = {
     cachedTokens?: number;
     conversationId?: string | null;
     previousResponseId?: string | null;
+    model?: string;
+    provider?: string;
     promptCacheKey?: string;
     promptCacheRetention?: string;
     requestedTransport?: string;

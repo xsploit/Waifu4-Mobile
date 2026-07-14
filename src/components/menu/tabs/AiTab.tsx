@@ -1,5 +1,9 @@
 import type { Dispatch, SetStateAction } from 'react';
-import { supportsImageInput, type ProviderModelInfo } from '../../../brain/modelCapability';
+import {
+  selectReplyFormat,
+  supportsImageInput,
+  type ProviderModelInfo,
+} from '../../../brain/modelCapability';
 import type { AiProxyHealth, AiSettings } from '../../../lib/chat/types';
 import {
   applyLlmProviderSwitchDefaults,
@@ -7,23 +11,6 @@ import {
 } from '../../../lib/chat/provider-defaults';
 import { getReplyLengthLabel, REPLY_LENGTH_MODES } from '../../../lib/chat/reply-length';
 import { Slider } from '../ui/Slider';
-
-const VERCEL_PROVIDER_SLUGS = [
-  'azure',
-  'baseten',
-  'deepinfra',
-  'deepseek',
-  'fireworks',
-  'novita',
-  'togetherai',
-  'openai',
-  'anthropic',
-  'google',
-  'vertex',
-  'bedrock',
-  'xai',
-  'zai',
-] as const;
 
 type AiTabProps = {
   activePersonaName: string;
@@ -37,6 +24,9 @@ type AiTabProps = {
   onRefreshAiProxyHealth: () => void;
   onRefreshModels: () => void;
   setAiSettings: Dispatch<SetStateAction<AiSettings>>;
+  vercelProviderSlugs: string[];
+  vercelProvidersError: string | null;
+  vercelProvidersLoading: boolean;
 };
 
 function updateAiSettings(
@@ -49,14 +39,37 @@ function updateAiSettings(
   }));
 }
 
-function formatProviderTransport(providerState: AiProxyHealth['providerState']) {
-  return providerState?.transport === 'http-stream' ? 'HTTP stream' : 'unknown';
+function describeReplyLane(aiSettings: AiSettings, model: ProviderModelInfo | undefined) {
+  const format = selectReplyFormat(aiSettings.llmProvider, model ?? null);
+  if (
+    format === 'structured' &&
+    aiSettings.llmProvider === 'vercel-gateway' &&
+    aiSettings.model === 'deepseek/deepseek-v4-pro'
+  ) {
+    return 'Strict tool JSON (provider may deliver one completed payload)';
+  }
+  return format === 'structured'
+    ? 'Structured output stream'
+    : 'Streaming text + hidden emotion metadata';
 }
 
-function describeProviderState(providerState: AiProxyHealth['providerState']) {
-  return providerState?.stateMode === 'stateless'
-    ? 'Provider calls are stateless. Conversation continuity is Web Waifu-owned: recent turns, diary, relationship memory, semantic recall, tools, and stream context are rendered into each request.'
-    : 'The backend reports provider transport state after refresh.';
+function describeToolStatus(
+  mode: AiSettings['toolChoiceMode'],
+  providerState: AiProxyHealth['providerState'],
+) {
+  if (mode === 'off') {
+    return 'Off';
+  }
+  const modeLabel = mode === 'required' ? 'Required' : 'Auto';
+  if (providerState?.toolsAvailable === true) {
+    return `${modeLabel}: ${providerState.toolNames?.join(', ') || 'available'}${
+      providerState.toolsSource ? ` (${providerState.toolsSource})` : ''
+    }`;
+  }
+  if (providerState?.toolsAvailable === false) {
+    return `${modeLabel}: no runtime tool key available on last reply`;
+  }
+  return `${modeLabel}: availability reported after the next reply`;
 }
 
 function formatModelCount(value?: number) {
@@ -145,12 +158,26 @@ export function AiTab({
   onRefreshAiProxyHealth,
   onRefreshModels,
   setAiSettings,
+  vercelProviderSlugs,
+  vercelProvidersError,
+  vercelProvidersLoading,
 }: AiTabProps) {
   const selectedModel = aiSettings.model.trim();
   const modelOptions = filterSafeProviderModels(
     selectedModel ? Array.from(new Set([...availableModels, selectedModel])) : availableModels,
   );
   const providerState = aiProxyHealth?.providerState ?? null;
+  const configuredModel = availableModelMetadata.get(aiSettings.model);
+  const lastChatProvider = providerState?.provider ?? aiProxyHealth?.aiProvider;
+  const lastChatModel = providerState?.model ?? aiProxyHealth?.model;
+  const savedVercelProvider = aiSettings.vercelProviderSlugs.trim();
+  const selectedSingleVercelProvider = savedVercelProvider.includes(',')
+    ? ''
+    : savedVercelProvider;
+  const vercelProviderOptions = selectedSingleVercelProvider &&
+    !vercelProviderSlugs.includes(selectedSingleVercelProvider)
+    ? [selectedSingleVercelProvider, ...vercelProviderSlugs]
+    : vercelProviderSlugs;
 
   return (
     <>
@@ -265,12 +292,12 @@ export function AiTab({
                 onChange={(event) =>
                   updateAiSettings(setAiSettings, { vercelProviderSlugs: event.target.value })
                 }
-                value={VERCEL_PROVIDER_SLUGS.includes(aiSettings.vercelProviderSlugs as never)
-                  ? aiSettings.vercelProviderSlugs
-                  : ''}
+                value={selectedSingleVercelProvider}
               >
-                <option value="">Choose provider slug</option>
-                {VERCEL_PROVIDER_SLUGS.map((slug) => (
+                <option value="">
+                  {vercelProvidersLoading ? 'Loading selected-model providers...' : 'Choose provider'}
+                </option>
+                {vercelProviderOptions.map((slug) => (
                   <option key={slug} value={slug}>{slug}</option>
                 ))}
               </select>
@@ -295,9 +322,17 @@ export function AiTab({
             </>
           ) : null}
           <div className="field-hint">
-            Verified auto preserves tested model-specific routes. Explicit modes use Vercel
-            gateway sort, order, or only provider controls.
+            Auto lets Vercel route dynamically by availability and latency. Explicit modes use
+            gateway sort, order, or only controls. Pinned choices are loaded from the selected
+            model's live Vercel endpoint catalog.
           </div>
+          {vercelProvidersError ? <div className="error-copy">{vercelProvidersError}</div> : null}
+          {aiSettings.model === 'deepseek/deepseek-v4-pro' ? (
+            <div className="field-hint">
+              Compatibility: Vercel DeepSeek V4 Pro keeps the tested strict-tool reply lane;
+              provider discovery does not change its structured-output handling.
+            </div>
+          ) : null}
         </div>
       ) : null}
 
@@ -366,35 +401,37 @@ export function AiTab({
           rendered POML, recent transcript, diary, semantic memory, and Twitch/local context.
         </div>
         <div className="status-copy">
-          Provider: <strong>{aiProxyHealth?.aiProvider ?? 'unknown'}</strong>
+          Provider: <strong>{aiSettings.llmProvider}</strong>
         </div>
         <div className="status-copy">
-          State: <strong>{providerState?.stateMode ?? 'stateless'}</strong>
+          Conversation: <strong>app-owned / provider stateless</strong>
         </div>
         <div className="status-copy">
-          Active state:{' '}
+          Reply lane: <strong>{describeReplyLane(aiSettings, configuredModel)}</strong>
+        </div>
+        <div className="status-copy">
+          Transport: <strong>AI SDK HTTP stream</strong>
+        </div>
+        <div className="status-copy">
+          Last completed chat:{' '}
           <strong>
-            {providerState?.activeState?.stateKey ??
-              providerState?.activeStateKey ??
-              providerState?.stateKey ??
-              'default'}
+            {lastChatProvider && lastChatModel
+              ? `${lastChatProvider} / ${lastChatModel}`
+              : 'not reported this session'}
           </strong>
         </div>
         <div className="status-copy">
-          Transport: <strong>{formatProviderTransport(providerState)}</strong>
-        </div>
-        <div className="status-copy">
-          Prompt cache: <strong>{providerState?.promptCacheKey ?? 'none'}</strong> / last cached
-          tokens: <strong>{providerState?.cachedTokens ?? 0}</strong>
+          Prompt cache:{' '}
+          <strong>
+            {typeof providerState?.cachedTokens === 'number'
+              ? `${providerState.cachedTokens} cached tokens reported`
+              : 'not reported by the last response'}
+          </strong>
         </div>
         <div className="status-copy">
           Tools:{' '}
           <strong>
-            {providerState?.toolsAvailable
-              ? `${providerState.toolNames?.join(', ') || 'available'}${
-                  providerState.toolsSource ? ` (${providerState.toolsSource})` : ''
-                }`
-              : 'not configured'}
+            {describeToolStatus(aiSettings.toolChoiceMode, providerState)}
           </strong>
         </div>
         <select
@@ -425,13 +462,16 @@ export function AiTab({
           step={1}
           value={aiSettings.maxToolRounds}
         />
-        <div className="field-hint">{describeProviderState(providerState)}</div>
         <div className="field-hint">
-          Cached tokens are the last value reported by the provider. A zero here means no cached
-          token usage has been reported yet, not that prompt caching is disabled.
+          Provider calls are stateless. Conversation continuity is rendered from the active
+          persona, transcript, relationship memory, semantic recall, and current situation.
+        </div>
+        <div className="field-hint">
+          Cache telemetry appears only when the provider reports it; an absent value is not shown
+          as zero or as proof that caching is disabled.
         </div>
         <button className="btn-tech secondary" onClick={onRefreshAiProxyHealth} type="button">
-          Refresh Transport
+          Check Backend
         </button>
         {aiProxyHealthError ? <div className="status-copy">{aiProxyHealthError}</div> : null}
       </div>

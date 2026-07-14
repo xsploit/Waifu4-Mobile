@@ -148,6 +148,9 @@ function createProps(activeTab: SettingsTabId): SettingsPanelProps {
     voiceLabVoices: [],
     voicesError: null,
     voicesLoading: false,
+    vercelProviderSlugs: [],
+    vercelProvidersError: null,
+    vercelProvidersLoading: false,
     vrmTelemetry: null,
   };
 }
@@ -181,6 +184,7 @@ describe('SettingsPanel tab smoke', () => {
       ...props.aiSettings,
       llmProvider: 'openrouter-responses',
       model: 'provider/chat-vision-tools',
+      toolChoiceMode: 'auto',
     };
     props.availableModels = ['provider/chat-vision-tools'];
     props.availableModelMetadata = new Map([
@@ -219,6 +223,27 @@ describe('SettingsPanel tab smoke', () => {
     expect(html).toContain('tavily_search');
   });
 
+  it('shows configured AI truth instead of fabricated health defaults', () => {
+    const props = createProps('ai');
+    props.aiSettings = {
+      ...props.aiSettings,
+      llmProvider: 'vercel-gateway',
+      model: 'deepseek/deepseek-v4-pro',
+      toolChoiceMode: 'auto',
+    };
+    props.aiProxyHealth = null;
+
+    const html = renderToStaticMarkup(<SettingsPanel {...props} />);
+
+    expect(html).toContain('vercel-gateway');
+    expect(html).toContain('Strict tool JSON');
+    expect(html).toContain('AI SDK HTTP stream');
+    expect(html).toContain('not reported by the last response');
+    expect(html).toContain('availability reported after the next reply');
+    expect(html).not.toContain('Provider: <strong>unknown</strong>');
+    expect(html).not.toContain('Active state:');
+  });
+
   it('renders Vercel provider routing and pinned provider controls', () => {
     const props = createProps('ai');
     props.aiSettings = {
@@ -227,6 +252,7 @@ describe('SettingsPanel tab smoke', () => {
       vercelRoutingMode: 'pinned',
       vercelProviderSlugs: 'baseten,deepseek',
     };
+    props.vercelProviderSlugs = ['baseten', 'deepseek'];
 
     const html = renderToStaticMarkup(<SettingsPanel {...props} />);
 
@@ -234,6 +260,7 @@ describe('SettingsPanel tab smoke', () => {
     expect(html).toContain('Pinned provider order');
     expect(html).toContain('baseten,deepseek');
     expect(html).toContain('Allow other providers after this order');
+    expect(html).toContain("selected model&#x27;s live Vercel endpoint catalog");
   });
 
   it('keeps toon shader presets mounted on the avatar tab', () => {
