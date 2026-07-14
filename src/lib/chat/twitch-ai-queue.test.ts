@@ -4,6 +4,7 @@ import {
   describeTwitchAiQueueBackpressure,
   enqueueTwitchAiJobWithBackpressure,
   shouldApplyTwitchReplyGap,
+  shouldRunChatJobImmediately,
   type TwitchAiQueueJob,
 } from './twitch-ai-queue';
 
@@ -41,6 +42,14 @@ describe('enqueueTwitchAiJobWithBackpressure', () => {
     expect(shouldApplyTwitchReplyGap(base)).toBe(true);
     expect(shouldApplyTwitchReplyGap({ ...base, surface: 'local' })).toBe(false);
     expect(shouldApplyTwitchReplyGap({ ...base, surface: 'discord' })).toBe(false);
+  });
+
+  it('runs interrupting direct inputs immediately but never bypasses the queue for Twitch', () => {
+    const base = job('interrupt');
+    expect(shouldRunChatJobImmediately({ ...base, interruptActive: true, surface: 'discord' })).toBe(true);
+    expect(shouldRunChatJobImmediately({ ...base, interruptActive: true, surface: 'local' })).toBe(true);
+    expect(shouldRunChatJobImmediately({ ...base, interruptActive: true, surface: 'twitch' })).toBe(false);
+    expect(shouldRunChatJobImmediately({ ...base, surface: 'discord' })).toBe(false);
   });
 
   it('keeps direct replies fresh by dropping stale pending work once capped', () => {

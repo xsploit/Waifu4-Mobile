@@ -9,12 +9,17 @@ export type TwitchAiQueueJob = {
   activeChatterCount: number;
   context: ChatTurn[];
   firstTimeChatter?: boolean;
+  interruptActive?: boolean;
   messages: ChatTurn[];
   surface?: 'discord' | 'local' | 'twitch';
 };
 
 export function shouldApplyTwitchReplyGap(job: TwitchAiQueueJob): boolean {
   return (job.surface ?? 'twitch') === 'twitch';
+}
+
+export function shouldRunChatJobImmediately(job: TwitchAiQueueJob): boolean {
+  return job.interruptActive === true && (job.surface === 'discord' || job.surface === 'local');
 }
 
 export type TwitchAiQueueBackpressureResult = {

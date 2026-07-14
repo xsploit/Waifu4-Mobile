@@ -115,6 +115,7 @@ import {
   describeTwitchAiQueueBackpressure,
   enqueueTwitchAiJobWithBackpressure,
   shouldApplyTwitchReplyGap,
+  shouldRunChatJobImmediately,
   type TwitchAiQueueJob,
 } from './lib/chat/twitch-ai-queue';
 import {
@@ -2316,6 +2317,8 @@ function App() {
   const twitchBatchRef = useRef<ChatTurn[]>([]);
   const twitchAiQueueRef = useRef<ChatAiJob[]>([]);
   const enqueueChatAiJobRef = useRef<(job: ChatAiJob) => void>(() => {});
+  const immediateAiActiveRef = useRef(false);
+  const immediateAiRunRef = useRef(0);
   const twitchAiProcessingRef = useRef(false);
   const twitchLastReplyAtRef = useRef(0);
   const twitchBatchTimerRef = useRef<number | null>(null);
@@ -6879,13 +6882,16 @@ function App() {
   );
 
   const processTwitchAiQueue = useCallback(async () => {
-    if (twitchAiProcessingRef.current) {
+    if (twitchAiProcessingRef.current || immediateAiActiveRef.current) {
       return;
     }
 
     twitchAiProcessingRef.current = true;
     try {
       while (twitchAiQueueRef.current.length > 0) {
+        if (immediateAiActiveRef.current) {
+          break;
+        }
         const pendingJob = twitchAiQueueRef.current[0];
         if (pendingJob && shouldApplyTwitchReplyGap(pendingJob)) {
           const sinceLastReply = Date.now() - twitchLastReplyAtRef.current;
@@ -6905,7 +6911,7 @@ function App() {
       }
     } finally {
       twitchAiProcessingRef.current = false;
-      if (twitchAiQueueRef.current.length > 0) {
+      if (twitchAiQueueRef.current.length > 0 && !immediateAiActiveRef.current) {
         void processTwitchAiQueue();
       }
     }
@@ -6913,6 +6919,18 @@ function App() {
 
   const enqueueTwitchAiJob = useCallback(
     (job: ChatAiJob) => {
+      if (shouldRunChatJobImmediately(job)) {
+        const immediateRun = ++immediateAiRunRef.current;
+        immediateAiActiveRef.current = true;
+        void runChatAiJob(job).finally(() => {
+          if (immediateAiRunRef.current !== immediateRun) return;
+          immediateAiActiveRef.current = false;
+          if (twitchAiQueueRef.current.length > 0) {
+            void processTwitchAiQueue();
+          }
+        });
+        return;
+      }
       const currentTwitchSettings = twitchSettingsRef.current;
       const backpressure = enqueueTwitchAiJobWithBackpressure(twitchAiQueueRef.current, job, {
         maxBatchMessages: currentTwitchSettings.maxBatchMessages,
@@ -6925,7 +6943,7 @@ function App() {
       }
       void processTwitchAiQueue();
     },
-    [appendSystemMessage, processTwitchAiQueue],
+    [appendSystemMessage, processTwitchAiQueue, runChatAiJob],
   );
 
   useEffect(() => {
@@ -7109,6 +7127,7 @@ function App() {
         activeChatterCount: 1,
         context: recentContext,
         id: `discord-direct-${turn.id}`,
+        interruptActive: interruptionAction !== 'none',
         messages: [turn],
         mode: 'direct',
         surface: 'discord',
