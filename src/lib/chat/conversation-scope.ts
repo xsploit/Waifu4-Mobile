@@ -6,6 +6,15 @@ export type ScopedConversationSnapshot = {
   relationshipMemory: RelationshipMemory;
 };
 
+export type ChatInputSurface = 'discord' | 'local' | 'twitch';
+
+export function selectConversationStateKey(
+  surface: ChatInputSurface,
+  keys: { local: string; twitch: string },
+): string {
+  return surface === 'twitch' ? keys.twitch : keys.local;
+}
+
 export function resolveScopedConversationSnapshot({
   fallbackChatHistory,
   fallbackRelationshipMemory,

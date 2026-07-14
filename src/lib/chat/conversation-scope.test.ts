@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { createDefaultRelationshipMemory } from './defaults';
 import type { ChatMessage } from './types';
-import { resolveScopedConversationSnapshot } from './conversation-scope';
+import { resolveScopedConversationSnapshot, selectConversationStateKey } from './conversation-scope';
 
 const fallbackHistory: ChatMessage[] = [
   {
@@ -13,6 +13,17 @@ const fallbackHistory: ChatMessage[] = [
 ];
 
 describe('resolveScopedConversationSnapshot', () => {
+  it('keeps Discord voice in the local typed-chat scope while isolating Twitch', () => {
+    const keys = {
+      local: 'local:persona:hikari',
+      twitch: 'twitch:somebody-else:persona:hikari',
+    };
+
+    expect(selectConversationStateKey('local', keys)).toBe(keys.local);
+    expect(selectConversationStateKey('discord', keys)).toBe(keys.local);
+    expect(selectConversationStateKey('twitch', keys)).toBe(keys.twitch);
+  });
+
   it('uses scoped chat history and relationship memory for the active state key', () => {
     const scopedHistory: ChatMessage[] = [
       {

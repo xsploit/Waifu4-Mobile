@@ -110,7 +110,7 @@ import {
   formatChatTurns,
   type ChatTurn,
 } from './lib/chat/chat-turn';
-import { resolveScopedConversationSnapshot } from './lib/chat/conversation-scope';
+import { resolveScopedConversationSnapshot, selectConversationStateKey } from './lib/chat/conversation-scope';
 import {
   describeTwitchAiQueueBackpressure,
   enqueueTwitchAiJobWithBackpressure,
@@ -1884,14 +1884,6 @@ function getPersonaStateKey(persona: PersonaProfile | null) {
 
 function getTwitchConversationStateKey(channel: string, persona: PersonaProfile | null) {
   return `twitch:${normalizeStateKeyPart(channel, DIRECT_TWITCH_CHANNEL || 'subsect')}:persona:${getPersonaStateKey(persona)}`;
-}
-
-function getDiscordConversationStateKey(
-  guildId: string,
-  voiceChannelId: string,
-  persona: PersonaProfile | null,
-) {
-  return `discord:guild:${normalizeStateKeyPart(guildId, 'unknown')}:voice:${normalizeStateKeyPart(voiceChannelId, 'unknown')}:persona:${getPersonaStateKey(persona)}`;
 }
 
 function getLocalConversationStateKey(persona: PersonaProfile | null) {
@@ -6433,16 +6425,10 @@ function App() {
       const userMessage = targetMessage
         ? chatTurnToChatMessage(targetMessage)
         : createChatMessage('user', userContent);
-      const stateKey =
-        targetMessage?.source === 'local'
-          ? getLocalConversationStateKey(persona)
-          : targetMessage?.source === 'discord'
-            ? getDiscordConversationStateKey(
-                targetMessage.guildId,
-                targetMessage.voiceChannelId,
-                persona,
-              )
-            : getTwitchConversationStateKey(channel, persona);
+      const stateKey = selectConversationStateKey(targetMessage?.source ?? 'twitch', {
+        local: getLocalConversationStateKey(persona),
+        twitch: getTwitchConversationStateKey(channel, persona),
+      });
       const scopedConversation = resolveScopedConversationSnapshot({
         chatHistories: chatHistoriesRef.current,
         fallbackChatHistory: chatHistoryRef.current,
@@ -7075,11 +7061,10 @@ function App() {
       }
 
       const persona = activePersonaRef.current ?? DEFAULT_PERSONA;
-      const stateKey = getDiscordConversationStateKey(
-        transcript.guildId,
-        transcript.voiceChannelId,
-        persona,
-      );
+      const stateKey = selectConversationStateKey('discord', {
+        local: getLocalConversationStateKey(persona),
+        twitch: getTwitchConversationStateKey(twitchChannel, persona),
+      });
       const turn = createDiscordChatTurn({
         displayName: transcript.displayName,
         guildId: transcript.guildId,

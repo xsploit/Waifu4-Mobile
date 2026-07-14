@@ -506,6 +506,32 @@ describe('chat settings persistence', () => {
     });
   });
 
+  it('migrates Discord voice transcripts into the durable local typed-chat history', async () => {
+    const localKey = 'local:persona:hikari-chan';
+    const discordKey = 'discord:guild:123:voice:456:persona:hikari-chan';
+    window.localStorage.setItem(
+      STORAGE_KEYS.chatHistories,
+      JSON.stringify({
+        [localKey]: [
+          { content: 'typed first', createdAt: 10, id: 'local-1', role: 'user' },
+        ],
+        [discordKey]: [
+          { content: 'spoken next', createdAt: 20, id: 'discord-1', role: 'user' },
+          { content: 'voice reply', createdAt: 30, id: 'discord-2', role: 'assistant' },
+        ],
+      }),
+    );
+
+    const loaded = await loadPersistedChatState();
+
+    expect(loaded.chatHistories[discordKey]).toBeUndefined();
+    expect(loaded.chatHistories[localKey]?.map((message) => message.content)).toEqual([
+      'typed first',
+      'spoken next',
+      'voice reply',
+    ]);
+  });
+
   it('keeps Discord settings in normalized import and export snapshots', async () => {
     const discordSettings = {
       ...createDefaultDiscordSettings(),

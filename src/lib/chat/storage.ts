@@ -721,7 +721,27 @@ function normalizeChatHistories(value: unknown): Record<string, ChatMessage[]> {
       .filter((message): message is ChatMessage => Boolean(message));
     entries.push([key, history.slice(-120)]);
   }
-  return Object.fromEntries(entries);
+  return mergeDiscordVoiceHistoryIntoLocal(Object.fromEntries(entries));
+}
+
+function mergeDiscordVoiceHistoryIntoLocal(
+  histories: Record<string, ChatMessage[]>,
+): Record<string, ChatMessage[]> {
+  const merged = { ...histories };
+  for (const [stateKey, history] of Object.entries(histories)) {
+    const match = /^discord:guild:.+:voice:.+:persona:([^:]+)$/i.exec(stateKey);
+    if (!match?.[1]) continue;
+    const localKey = `local:persona:${match[1]}`;
+    const byId = new Map<string, ChatMessage>();
+    for (const message of [...(merged[localKey] ?? []), ...history]) {
+      byId.set(message.id, message);
+    }
+    merged[localKey] = [...byId.values()]
+      .sort((left, right) => left.createdAt - right.createdAt)
+      .slice(-120);
+    delete merged[stateKey];
+  }
+  return merged;
 }
 
 function normalizeUiState(value: unknown): UiState {
