@@ -7,8 +7,12 @@ describe('overlay socket activation', () => {
   });
 
   it('stays off by default in production builds', () => {
-    expect(shouldConnectOverlaySocket({ PROD: true })).toBe(false);
-    expect(shouldConnectOverlaySocket({ MODE: 'production' })).toBe(false);
+    expect(shouldConnectOverlaySocket({ PROD: true }, '')).toBe(false);
+    expect(shouldConnectOverlaySocket({ MODE: 'production' }, '')).toBe(false);
+  });
+
+  it('connects a packaged Electron renderer to its local backend', () => {
+    expect(shouldConnectOverlaySocket({ PROD: true }, 'ws://127.0.0.1:8797/ws')).toBe(true);
   });
 
   it('keeps old explicit enable flags working', () => {
@@ -17,8 +21,8 @@ describe('overlay socket activation', () => {
   });
 
   it('can be explicitly disabled for static/no-backend runs', () => {
-    expect(shouldConnectOverlaySocket({ VITE_STREAM_BOT_WS_ENABLED: 'false' })).toBe(false);
-    expect(shouldConnectOverlaySocket({ VITE_OVERLAY_WS_ENABLED: 'off' })).toBe(false);
+    expect(shouldConnectOverlaySocket({ VITE_STREAM_BOT_WS_ENABLED: 'false' }, 'ws://127.0.0.1:8797/ws')).toBe(false);
+    expect(shouldConnectOverlaySocket({ VITE_OVERLAY_WS_ENABLED: 'off' }, 'ws://127.0.0.1:8797/ws')).toBe(false);
   });
 
   it('enables when an overlay socket URL is configured', () => {

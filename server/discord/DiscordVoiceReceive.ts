@@ -42,7 +42,9 @@ type VoiceReceiverLike = {
 
 interface ReceiverSubscription {
   decoder: PcmDecoder;
+  decodedPcmObserved: boolean;
   identity: DiscordVoiceIdentity;
+  noAudioTimer?: ReturnType<typeof setTimeout>;
   stream: Readable;
   trailing: Buffer;
   vad: VoiceActivityDetector;
@@ -125,14 +127,18 @@ export class DiscordVoiceReceive {
     const subscription = this.subscriptions.get(userId);
     if (!subscription) return;
     this.subscriptions.delete(userId);
+    if (subscription.noAudioTimer) clearTimeout(subscription.noAudioTimer);
     subscription.stream.removeAllListeners();
     subscription.stream.destroy();
     subscription.decoder.removeAllListeners?.();
     subscription.decoder.destroy?.();
-    this.emitUtterances(subscription.identity, subscription.vad.disconnect(userId));
+    const utterances = subscription.vad.disconnect(userId);
+    console.info(`[DiscordVoice] receive closed user=${userId} flushed=${utterances.length}`);
+    this.emitUtterances(subscription.identity, utterances);
   }
 
   private readonly handleSpeakingStart = (userId: string): void => {
+    console.info(`[DiscordVoice] speaking start user=${userId}`);
     void this.startUser(userId);
   };
 
@@ -158,6 +164,7 @@ export class DiscordVoiceReceive {
       };
       const subscription: ReceiverSubscription = {
         decoder,
+        decodedPcmObserved: false,
         identity,
         nextTimestampMs: this.now(),
         stream,
@@ -165,6 +172,16 @@ export class DiscordVoiceReceive {
         vad: this.options.createVad?.() ?? createDefaultVad(this.options.vad),
       };
       this.subscriptions.set(userId, subscription);
+      const noAudioTimeoutMs = this.options.receiveSilenceMs ?? DEFAULT_RECEIVE_SILENCE_MS;
+      subscription.noAudioTimer = setTimeout(() => {
+        const current = this.subscriptions.get(userId);
+        if (current === subscription && !current.decodedPcmObserved) {
+          console.warn(`[DiscordVoice] receive timed out before decoded PCM user=${userId}`);
+          this.stopUser(userId);
+        }
+      }, noAudioTimeoutMs);
+      subscription.noAudioTimer.unref?.();
+      console.info(`[DiscordVoice] receive subscribed user=${userId}`);
       decoder.on('data', (chunk) => this.handlePcm(userId, chunk));
       decoder.on('error', (error) => this.report(error, userId));
       stream.on('error', (error) => this.report(error, userId));
@@ -181,6 +198,14 @@ export class DiscordVoiceReceive {
   private handlePcm(userId: string, chunk: Buffer): void {
     const subscription = this.subscriptions.get(userId);
     if (!subscription || chunk.length === 0) return;
+    if (!subscription.decodedPcmObserved) {
+      subscription.decodedPcmObserved = true;
+      if (subscription.noAudioTimer) {
+        clearTimeout(subscription.noAudioTimer);
+        subscription.noAudioTimer = undefined;
+      }
+      console.info(`[DiscordVoice] first decoded PCM user=${userId} bytes=${chunk.length}`);
+    }
     const combined = subscription.trailing.length === 0 ? chunk : Buffer.concat([subscription.trailing, chunk]);
     let offset = 0;
     while (offset + STEREO_PCM_BYTES_PER_FRAME <= combined.length) {
@@ -199,6 +224,7 @@ export class DiscordVoiceReceive {
 
   private emitUtterances(identity: DiscordVoiceIdentity, utterances: VoiceUtterance[]): void {
     for (const utterance of utterances) {
+      console.info(`[DiscordVoice] utterance emitted user=${identity.userId} speechMs=${Math.round(utterance.speechDurationMs)}`);
       this.options.onUtterance(identity, utterance);
     }
   }

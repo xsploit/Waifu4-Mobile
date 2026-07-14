@@ -3,6 +3,7 @@ import type { ChatTurn } from './chat-turn';
 import {
   describeTwitchAiQueueBackpressure,
   enqueueTwitchAiJobWithBackpressure,
+  shouldApplyTwitchReplyGap,
   type TwitchAiQueueJob,
 } from './twitch-ai-queue';
 
@@ -34,6 +35,14 @@ function job(id: string, mode: TwitchAiQueueJob['mode'] = 'direct'): TwitchAiQue
 }
 
 describe('enqueueTwitchAiJobWithBackpressure', () => {
+  it('applies Twitch cadence only to Twitch jobs', () => {
+    const base = job('surface');
+    expect(shouldApplyTwitchReplyGap({ ...base, surface: 'twitch' })).toBe(true);
+    expect(shouldApplyTwitchReplyGap(base)).toBe(true);
+    expect(shouldApplyTwitchReplyGap({ ...base, surface: 'local' })).toBe(false);
+    expect(shouldApplyTwitchReplyGap({ ...base, surface: 'discord' })).toBe(false);
+  });
+
   it('keeps direct replies fresh by dropping stale pending work once capped', () => {
     const queue = [job('old-direct-a'), job('old-batch', 'batch'), job('old-direct-b')];
 

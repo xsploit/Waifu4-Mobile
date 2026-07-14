@@ -130,6 +130,7 @@ export class DiscordTranscriber {
       utterance,
       wav: encodeMonoPcm16Wav(utterance, this.sampleRate),
     });
+    console.info(`[DiscordVoice] ASR queued user=${identity.userId} speechMs=${Math.round(utterance.speechDurationMs)}`);
     this.queuedByUser.set(identity.userId, queuedForUser + 1);
     this.pump();
     return true;
@@ -167,11 +168,14 @@ export class DiscordTranscriber {
 
   private async run(item: PendingUtterance): Promise<void> {
     try {
+      console.info(`[DiscordVoice] ASR started user=${item.identity.userId} wavBytes=${item.wav.byteLength}`);
       const transcript = await this.options.transcribe(item.wav, item.identity);
+      console.info(`[DiscordVoice] ASR completed user=${item.identity.userId} textChars=${transcript.text.length}`);
       if (!this.closed) {
         await this.options.onTranscript?.({ ...transcript, ...item });
       }
     } catch (error) {
+      console.warn(`[DiscordVoice] ASR failed user=${item.identity.userId}: ${error instanceof Error ? error.message : 'unknown error'}`);
       if (!this.closed) {
         this.options.onError?.(error instanceof Error ? error : new Error('Discord transcription failed.'), item.identity);
       }

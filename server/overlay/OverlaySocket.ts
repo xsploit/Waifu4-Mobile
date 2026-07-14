@@ -104,13 +104,12 @@ function isOverlaySocketLocalDevRequest(
   env: Record<string, string | undefined>,
   allowedOrigins: readonly string[] | undefined,
 ) {
-  if (env.NODE_ENV === 'production') {
-    return false;
-  }
-
   const origin = normalizeOrigin(readHeader(headers, 'origin'));
   if (origin && allowedOrigins?.includes(origin)) {
     return true;
+  }
+  if (env.NODE_ENV === 'production') {
+    return false;
   }
 
   const host = readHeader(headers, 'host') ?? '';
@@ -130,7 +129,10 @@ function normalizeOrigin(value: string | undefined) {
     return null;
   }
   try {
-    return new URL(value).origin;
+    const url = new URL(value);
+    return url.origin === 'null' && url.protocol && url.host
+      ? `${url.protocol}//${url.host}`
+      : url.origin;
   } catch {
     return null;
   }

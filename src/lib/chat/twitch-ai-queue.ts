@@ -10,7 +10,12 @@ export type TwitchAiQueueJob = {
   context: ChatTurn[];
   firstTimeChatter?: boolean;
   messages: ChatTurn[];
+  surface?: 'discord' | 'local' | 'twitch';
 };
+
+export function shouldApplyTwitchReplyGap(job: TwitchAiQueueJob): boolean {
+  return (job.surface ?? 'twitch') === 'twitch';
+}
 
 export type TwitchAiQueueBackpressureResult = {
   coalescedBatch: boolean;

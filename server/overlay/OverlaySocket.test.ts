@@ -59,6 +59,16 @@ describe('OverlaySocket auth', () => {
     expect(
       authorizeOverlaySocketRequest(
         request('/ws', {
+          host: '127.0.0.1:8797',
+          origin: 'webwaifu://app',
+        }),
+        { allowedOrigins: ['webwaifu://app'], env: { NODE_ENV: 'production' } },
+      ),
+    ).toMatchObject({ allowed: true, reason: 'local-dev-origin', trusted: true });
+
+    expect(
+      authorizeOverlaySocketRequest(
+        request('/ws', {
           host: 'overlay.example.test',
           origin: 'https://overlay.example.test',
         }),

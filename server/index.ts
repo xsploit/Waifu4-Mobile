@@ -138,9 +138,13 @@ backendRouter.post('/tts/voices/design/publish', (req, res) => {
 });
 
 const server = createServer(app);
-const overlaySocket = new OverlaySocket(server, (event) => {
-  console.log(`[INFO] (${SERVICE_NAME}) overlay client event: ${event.type}`);
-});
+const overlaySocket = new OverlaySocket(
+  server,
+  (event) => {
+    console.log(`[INFO] (${SERVICE_NAME}) overlay client event: ${event.type}`);
+  },
+  { allowedOrigins: ['webwaifu://app'] },
+);
 const twitchRuntime = createTwitchRuntime({ overlaySocket });
 const discordController = new DiscordVoiceController({
   onEvent: (event) => overlaySocket.broadcast(event),

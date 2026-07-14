@@ -114,6 +114,7 @@ import { resolveScopedConversationSnapshot } from './lib/chat/conversation-scope
 import {
   describeTwitchAiQueueBackpressure,
   enqueueTwitchAiJobWithBackpressure,
+  shouldApplyTwitchReplyGap,
   type TwitchAiQueueJob,
 } from './lib/chat/twitch-ai-queue';
 import {
@@ -5787,6 +5788,7 @@ function App() {
         activeChatterCount,
         context: twitchContextRef.current.slice(-currentTwitchSettings.contextLimit),
         messages: [turn],
+        surface: 'local',
       });
     },
     [activePersona, chatInput, recordRawChatMemoryTurns],
@@ -6898,10 +6900,13 @@ function App() {
     twitchAiProcessingRef.current = true;
     try {
       while (twitchAiQueueRef.current.length > 0) {
-        const sinceLastReply = Date.now() - twitchLastReplyAtRef.current;
-        const waitMs = Math.max(0, twitchSettingsRef.current.replyGapMs - sinceLastReply);
-        if (waitMs > 0) {
-          await delay(waitMs);
+        const pendingJob = twitchAiQueueRef.current[0];
+        if (pendingJob && shouldApplyTwitchReplyGap(pendingJob)) {
+          const sinceLastReply = Date.now() - twitchLastReplyAtRef.current;
+          const waitMs = Math.max(0, twitchSettingsRef.current.replyGapMs - sinceLastReply);
+          if (waitMs > 0) {
+            await delay(waitMs);
+          }
         }
 
         const job = twitchAiQueueRef.current.shift();
@@ -7121,6 +7126,7 @@ function App() {
         id: `discord-direct-${turn.id}`,
         messages: [turn],
         mode: 'direct',
+        surface: 'discord',
       });
     },
     [
@@ -7185,6 +7191,7 @@ function App() {
         activeChatterCount,
         context: twitchContextRef.current.slice(-twitchSettingsRef.current.contextLimit),
         messages,
+        surface: 'twitch',
       });
     },
     [enqueueTwitchAiJob],
@@ -7242,6 +7249,7 @@ function App() {
           context: twitchContextRef.current.slice(-currentTwitchSettings.contextLimit),
           firstTimeChatter,
           messages: [turn],
+          surface: 'twitch',
         });
         return;
       }

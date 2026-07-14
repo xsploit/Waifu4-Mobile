@@ -84,7 +84,10 @@ function readBooleanFlag(value: string | boolean | undefined) {
   return null;
 }
 
-export function shouldConnectOverlaySocket(env: OverlaySocketEnv = import.meta.env as OverlaySocketEnv) {
+export function shouldConnectOverlaySocket(
+  env: OverlaySocketEnv = import.meta.env as OverlaySocketEnv,
+  desktopSocketUrl = getDesktopOverlaySocketUrl(),
+) {
   const streamFlag = readBooleanFlag(env.VITE_STREAM_BOT_WS_ENABLED);
   const overlayFlag = readBooleanFlag(env.VITE_OVERLAY_WS_ENABLED);
   if (streamFlag === false || overlayFlag === false) {
@@ -94,6 +97,9 @@ export function shouldConnectOverlaySocket(env: OverlaySocketEnv = import.meta.e
     return true;
   }
   if (String(env.VITE_OVERLAY_WS_URL ?? env.VITE_BOT_WS_URL ?? '').trim()) {
+    return true;
+  }
+  if (desktopSocketUrl) {
     return true;
   }
   return !(env.PROD === true || env.MODE === 'production');

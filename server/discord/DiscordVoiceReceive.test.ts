@@ -102,6 +102,25 @@ describe('DiscordVoiceReceive', () => {
     receive.detach();
   });
 
+  it('drops a receive subscription that never yields decoded PCM', async () => {
+    const receiver = new TestReceiver();
+    const receive = new DiscordVoiceReceive(receiver, {
+      createDecoder: () => new TestDecoder(),
+      getUser: (userId) => ({ bot: false, id: userId }),
+      identity: { channelId: 'channel', guildId: 'guild' },
+      isSelf: () => false,
+      onUtterance: () => {},
+      receiveSilenceMs: 5,
+    });
+
+    receive.attach();
+    receiver.speaking.emit('start', 'human');
+    await new Promise((resolve) => setTimeout(resolve, 15));
+
+    expect(receive.subscriptionCount).toBe(0);
+    receive.detach();
+  });
+
   it('keeps overlapping speakers in independent receive and VAD sessions', async () => {
     const receiver = new TestReceiver();
     const utterances: string[] = [];
