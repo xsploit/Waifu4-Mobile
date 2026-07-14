@@ -13,7 +13,7 @@
     "desktop:clean": "node scripts/clean-desktop-release.mjs",
     "desktop:dev": "concurrently -k -n web,server,electron -c cyan,magenta,yellow \"npm:dev:web\" \"npm:dev:server\" \"wait-on http://127.0.0.1:5173/ http://127.0.0.1:8797/health && cross-env ELECTRON_DEV_SERVER_URL=http://127.0.0.1:5173 ELECTRON_BACKEND_EXTERNAL=true ELECTRON_BOT_PORT=8797 electron electron/main.mjs\"",
     "desktop:dist": "npm run build && npm run desktop:runtime && npm run desktop:clean && electron-builder && npm run smoke:packaged-ui:fresh",
-    "desktop:pack": "npm run build && npm run desktop:runtime && npm run desktop:clean && electron-builder --dir",
+    "desktop:pack": "npm run build && npm run desktop:runtime && npm run desktop:clean && electron-builder --dir && npm run smoke:packaged-poml",
     "desktop:runtime": "node scripts/prepare-desktop-runtime.mjs",
     "desktop:start": "npm run build && cross-env ELECTRON_BOT_PORT=8797 electron electron/main.mjs",
     "desktop:test:transparent": "electron electron/transparent-test.mjs",
@@ -36,6 +36,7 @@
     "smoke:packaged-ui": "node scripts/smoke-packaged-ui.mjs",
     "smoke:packaged-ui:fresh": "node scripts/smoke-packaged-ui.mjs --expect-fresh-profile",
     "smoke:packaged-ui:desktop": "node scripts/smoke-packaged-ui.mjs --window-mode=desktop --exercise-desktop-controls",
+    "smoke:packaged-poml": "node scripts/smoke-packaged-poml.mjs",
     "smoke:runtime": "tsx scripts/smoke-runtime.ts",
     "typecheck": "tsc --noEmit --pretty",
     "test": "vitest run",
@@ -103,6 +104,7 @@
     "appId": "ai.webwaifu.webwaifu4",
     "productName": "WebWaifu 4",
     "afterPack": "scripts/after-pack.mjs",
+    "afterSign": "scripts/after-sign.mjs",
     "directories": {
       "output": "release"
     },
