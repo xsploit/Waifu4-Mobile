@@ -375,6 +375,7 @@ export class LadybugMemoryService {
         ],
         true,
       );
+      await this.pruneOrphanIdentityNodes();
     } catch (error) {
       await this.deleteFallbackGrilloState(normalizedScopeKey, error);
     }
@@ -2281,6 +2282,41 @@ export class LadybugMemoryService {
     await this.exec(`MATCH (s:MemoryScope) WHERE s.id = ${q(scopeKey)} DELETE s`).catch(
       () => undefined,
     );
+  }
+
+  private async pruneOrphanIdentityNodes() {
+    const participants = await this.all('MATCH (p:Participant) RETURN p.id AS id').catch(() => []);
+    for (const row of participants) {
+      const id = stringValue(row['id']);
+      if (!id) continue;
+      const references = await this.scalarCount(
+        `MATCH (m)-[r]->(p:Participant) WHERE p.id = ${q(id)} RETURN count(r) AS count`,
+      ).catch(() => 1);
+      if (references === 0) {
+        await this.exec(`MATCH (p:Participant) WHERE p.id = ${q(id)} DELETE p`).catch(
+          () => undefined,
+        );
+      }
+    }
+
+    const personas = await this.all('MATCH (p:Persona) RETURN p.id AS id').catch(() => []);
+    for (const row of personas) {
+      const id = stringValue(row['id']);
+      if (!id) continue;
+      const [references, scopes] = await Promise.all([
+        this.scalarCount(
+          `MATCH (m)-[r]->(p:Persona) WHERE p.id = ${q(id)} RETURN count(r) AS count`,
+        ).catch(() => 1),
+        this.scalarCount(
+          `MATCH (s:MemoryScope) WHERE s.personaId = ${q(id)} RETURN count(s) AS count`,
+        ).catch(() => 1),
+      ]);
+      if (references === 0 && scopes === 0) {
+        await this.exec(`MATCH (p:Persona) WHERE p.id = ${q(id)} DELETE p`).catch(
+          () => undefined,
+        );
+      }
+    }
   }
 
   private async deleteSemanticVectorRowsForScope(scopeKey: string) {

@@ -386,6 +386,8 @@ describe('LadybugMemoryService', () => {
       expect(status.semanticVectors).toBe(1);
       expect(status.relationshipProfiles).toBe(1);
       expect(status.relationshipFacts).toBe(1);
+      expect(status.participants).toBe(1);
+      expect(status.personas).toBe(1);
       expect(status.relationshipEdges).toBe(13);
       expect(graph.scopes[0]?.id).toBe('local:persona:hikari-chan');
       expect(graph.participants[0]?.id).toBe('local:local:subby');
@@ -1133,6 +1135,8 @@ describe('LadybugMemoryService', () => {
       expect(graphText).not.toContain('cleared diary memory');
       expect(graphText).not.toContain('cleared semantic memory');
       expect(graphText).not.toContain('Cleared relationship fact.');
+      expect(graphText).not.toContain('local:local:subby');
+      expect(graphText).toContain('twitch:subsect:rayen');
     } finally {
       await service.close();
     }
