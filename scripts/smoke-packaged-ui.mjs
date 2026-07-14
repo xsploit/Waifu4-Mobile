@@ -5,13 +5,18 @@ import { fileURLToPath } from 'node:url';
 import WebSocket from 'ws';
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
-const exePath = path.join(repoRoot, 'release', 'win-unpacked', 'WebWaifu 4.exe');
+const exePath = path.resolve(
+  process.env.WEBWAIFU_UI_SMOKE_EXE_PATH ||
+    path.join(repoRoot, 'release', 'win-unpacked', 'WebWaifu 4.exe'),
+);
+const userDataDir = process.env.WEBWAIFU_UI_SMOKE_USER_DATA_DIR?.trim();
 const debugPort = Number.parseInt(process.env.WEBWAIFU_UI_SMOKE_DEBUG_PORT || '9333', 10);
 const timeoutMs = Number.parseInt(process.env.WEBWAIFU_UI_SMOKE_TIMEOUT_MS || '30000', 10);
 const args = new Set(process.argv.slice(2));
 const modeArg = process.argv.find((arg) => arg.startsWith('--window-mode='));
 const requestedMode = (modeArg?.split('=').slice(1).join('=') || 'editor').trim();
 const shouldExerciseDesktopControls = args.has('--exercise-desktop-controls');
+const shouldExpectFreshProfile = args.has('--expect-fresh-profile');
 let observedBackendPort = null;
 
 function getJson(url) {
@@ -188,6 +193,9 @@ function summarizeBadEvents(events) {
 }
 
 const childArgs = [`--remote-debugging-port=${debugPort}`];
+if (userDataDir) {
+  childArgs.push(`--user-data-dir=${path.resolve(userDataDir)}`);
+}
 if (requestedMode && requestedMode !== 'editor') {
   childArgs.push(`--window-mode=${requestedMode}`);
 }
@@ -224,6 +232,12 @@ try {
       menuButton?.click();
       await new Promise((resolve) => setTimeout(resolve, 150));
       const opened = Boolean(document.querySelector('.settings-panel.open'));
+      const keysDataTab = [...document.querySelectorAll('.tab-btn')]
+        .find((button) => button.textContent?.trim() === 'Keys & Data');
+      keysDataTab?.click();
+      await new Promise((resolve) => setTimeout(resolve, 100));
+      const savedProviderKeyCount = [...document.querySelectorAll('.provider-key-heading strong')]
+        .filter((element) => element.textContent?.trim() !== 'not set').length;
       const twitchTab = [...document.querySelectorAll('.tab-btn')]
         .find((button) => button.textContent?.trim() === 'Twitch');
       twitchTab?.click();
@@ -240,6 +254,7 @@ try {
         activeTab: document.querySelector('.tab-btn.active')?.textContent?.trim() || null,
         focusedInsidePanel: Boolean(document.activeElement?.closest('.settings-panel')),
         opened,
+        savedProviderKeyCount,
         stillOpen: Boolean(document.querySelector('.settings-panel.open')),
       };
     })()))()`,
@@ -254,6 +269,9 @@ try {
       }
       if (!result.focusedInsidePanel) {
         throw new Error('Settings panel input did not retain focus inside the panel.');
+      }
+      if (shouldExpectFreshProfile && result.savedProviderKeyCount !== 0) {
+        throw new Error(`Fresh profile restored ${result.savedProviderKeyCount} provider keys.`);
       }
     });
 
@@ -298,6 +316,10 @@ try {
       backendOwner: window.webWaifuDesktop?.getBackendOwner?.() || window.webWaifuDesktop?.backendOwner || null,
       backendPort: window.webWaifuDesktop?.getBackendPort?.() || window.webWaifuDesktop?.backendPort || null,
       mode: document.documentElement.dataset.webwaifuWindowMode || null,
+      persistedLegacyChatCount: JSON.parse(localStorage.getItem('yourwifey.chatHistory.v1') || '[]').length,
+      persistedScopedChatCount: Object.values(
+        JSON.parse(localStorage.getItem('yourwifey.chatHistories.v1') || '{}')
+      ).reduce((count, history) => count + (Array.isArray(history) ? history.length : 0), 0),
       bodyText: document.body?.innerText?.slice(0, 2000) || '',
       shellTransparentClass: Boolean(document.querySelector('.shell.scene-background-transparent')),
       shellBgColor: getComputedStyle(document.querySelector('.shell')).backgroundColor,
@@ -368,6 +390,14 @@ try {
   }
   if (badEvents.length > 0) {
     throw new Error(`Renderer emitted errors:\n${badEvents.join('\n')}`);
+  }
+  if (
+    shouldExpectFreshProfile &&
+    (snapshot.persistedLegacyChatCount !== 0 || snapshot.persistedScopedChatCount !== 0)
+  ) {
+    throw new Error(
+      `Fresh profile restored chat data: legacy=${snapshot.persistedLegacyChatCount}, scoped=${snapshot.persistedScopedChatCount}.`,
+    );
   }
   if (requestedMode !== 'editor') {
     if (snapshot.mode !== requestedMode) {
