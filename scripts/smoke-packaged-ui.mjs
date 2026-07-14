@@ -1,5 +1,7 @@
 import { spawn } from 'node:child_process';
+import { mkdtemp, rm } from 'node:fs/promises';
 import http from 'node:http';
+import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import WebSocket from 'ws';
@@ -9,7 +11,7 @@ const exePath = path.resolve(
   process.env.WEBWAIFU_UI_SMOKE_EXE_PATH ||
     path.join(repoRoot, 'release', 'win-unpacked', 'WebWaifu 4.exe'),
 );
-const userDataDir = process.env.WEBWAIFU_UI_SMOKE_USER_DATA_DIR?.trim();
+let userDataDir = process.env.WEBWAIFU_UI_SMOKE_USER_DATA_DIR?.trim();
 const debugPort = Number.parseInt(process.env.WEBWAIFU_UI_SMOKE_DEBUG_PORT || '9333', 10);
 const timeoutMs = Number.parseInt(process.env.WEBWAIFU_UI_SMOKE_TIMEOUT_MS || '30000', 10);
 const args = new Set(process.argv.slice(2));
@@ -18,6 +20,12 @@ const requestedMode = (modeArg?.split('=').slice(1).join('=') || 'editor').trim(
 const shouldExerciseDesktopControls = args.has('--exercise-desktop-controls');
 const shouldExpectFreshProfile = args.has('--expect-fresh-profile');
 let observedBackendPort = null;
+let temporaryUserDataDir = null;
+
+if (shouldExpectFreshProfile && !userDataDir) {
+  temporaryUserDataDir = await mkdtemp(path.join(os.tmpdir(), 'webwaifu4-ui-smoke-'));
+  userDataDir = temporaryUserDataDir;
+}
 
 function getJson(url) {
   return new Promise((resolve, reject) => {
@@ -420,4 +428,7 @@ try {
   await closeElectronGracefully(cdp, child);
   cdp?.close();
   await waitForBackendClosed(observedBackendPort);
+  if (temporaryUserDataDir) {
+    await rm(temporaryUserDataDir, { force: true, recursive: true });
+  }
 }

@@ -462,6 +462,7 @@ flow.
 ```powershell
 npm run desktop:dist
 npm run smoke:packaged-ui
+npm run smoke:packaged-ui:fresh
 npm run smoke:packaged-ui:desktop
 npm run smoke:desktop-port-fallback
 npm run smoke:desktop-owned-backend-reuse
