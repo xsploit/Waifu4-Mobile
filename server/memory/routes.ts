@@ -1,6 +1,7 @@
 import { Router, type Request, type Response } from 'express';
 import { z } from 'zod';
 import type { GatewayId, LlmMessage } from '../../src/brain/BrainTypes';
+import { normalizeGrilloContextQuery } from '../../src/shared/grilloContext';
 import { completeChat } from '../ai/llmGateway';
 import { readProviderKeys } from '../ai/providerKeys';
 import {
@@ -22,7 +23,7 @@ const contextBodySchema = z
     embeddingVersion: z.string().max(120).optional(),
     includeProvenanceReceipt: z.boolean().optional(),
     participantKeys: z.array(z.string().max(240)).max(64).optional(),
-    query: z.string().max(4000).optional(),
+    query: z.string().transform(normalizeGrilloContextQuery).optional(),
     queryEmbedding: z.array(z.number().finite()).max(10000).optional(),
     scopeKey: z.string().max(240).optional(),
   })
@@ -221,7 +222,7 @@ export function createMemoryRouter() {
           participantKeys: readQueryStringArray(
             req.query.participantKeys ?? req.query.participantKey,
           ),
-          query: req.query.query,
+          query: normalizeGrilloContextQuery(req.query.query),
           scopeKey: req.query.scopeKey,
         }),
       });

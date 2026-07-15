@@ -95,6 +95,23 @@ describe('ladybug memory client', () => {
     });
   });
 
+  it('bounds native GRILLO recall queries to the backend contract', async () => {
+    const fetchMock = vi
+      .spyOn(globalThis, 'fetch')
+      .mockResolvedValueOnce(
+        new Response(JSON.stringify({ ok: true, packet: {} }), { status: 200 }),
+      );
+
+    await loadLadybugGrilloContextPacket('local:persona:test', {
+      query: `  ${'x'.repeat(5000)}  `,
+    });
+
+    const [, init] = fetchMock.mock.calls[0] ?? [];
+    const body = JSON.parse(String(init?.body)) as { query: string };
+    expect(body.query).toHaveLength(4000);
+    expect(body.query).toBe('x'.repeat(4000));
+  });
+
   it('requests the graph for the active frontend memory scope', async () => {
     const graph = {
       edges: [],

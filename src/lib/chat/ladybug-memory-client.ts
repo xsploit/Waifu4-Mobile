@@ -2,7 +2,10 @@ import { getDesktopBackendUrl } from '../desktop/runtime';
 import type { SemanticMemoryRecord } from './semantic-memory';
 import type { RelationshipMemory } from './types';
 import type { LadybugMemoryGraphSummary } from '../../shared/ladybugMemoryTypes';
-import type { GrilloContextPacket } from '../../shared/grilloContext';
+import {
+  normalizeGrilloContextQuery,
+  type GrilloContextPacket,
+} from '../../shared/grilloContext';
 export type { LadybugMemoryGraphSummary } from '../../shared/ladybugMemoryTypes';
 
 export type LadybugMemoryStatus = {
@@ -128,7 +131,7 @@ export async function loadLadybugGrilloContextPacket(
         embeddingVersion: options.embeddingVersion?.trim() || undefined,
         includeProvenanceReceipt: options.includeProvenanceReceipt || undefined,
         participantKeys: (options.participantKeys ?? []).map((key) => key.trim()).filter(Boolean),
-        query: options.query?.trim() || undefined,
+        query: normalizeGrilloContextQuery(options.query) || undefined,
         queryEmbedding: options.queryEmbedding?.filter(Number.isFinite) ?? undefined,
         scopeKey,
       }),

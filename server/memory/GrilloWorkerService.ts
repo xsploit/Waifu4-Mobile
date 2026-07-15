@@ -29,6 +29,7 @@ import {
   auditGrilloProjectionCoverage,
 } from './GrilloProjectionAudit.js';
 import { buildGrilloShadowComparison } from './GrilloShadowComparison.js';
+import { normalizeGrilloContextQuery } from '../../src/shared/grilloContext.js';
 import type {
   GrilloContextPacket,
   GrilloContextProvenanceReceipt,
@@ -1407,7 +1408,7 @@ export class GrilloWorkerService {
       return normalized === '' || includeParticipant(normalized);
     };
     const inScope = (record: Record<string, unknown>) => recordScopeKey(record) === scopeKey;
-    const query = normalizeText(input.query);
+    const query = normalizeGrilloContextQuery(input.query);
     const queryEmbedding = normalizeEmbeddingArray(input.queryEmbedding);
     const queryEmbeddingIdentity = createEmbeddingIdentity({
       dimensions: queryEmbedding.length,

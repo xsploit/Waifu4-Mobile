@@ -1,3 +1,11 @@
+export const GRILLO_CONTEXT_QUERY_MAX_CHARS = 4000;
+
+export function normalizeGrilloContextQuery(value: unknown): string {
+  return typeof value === 'string'
+    ? value.trim().slice(0, GRILLO_CONTEXT_QUERY_MAX_CHARS)
+    : '';
+}
+
 export type GrilloEmbeddingIdentity = {
   dimensions: number;
   generation: string;
