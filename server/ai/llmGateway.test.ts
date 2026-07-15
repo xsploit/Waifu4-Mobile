@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   buildProviderOptions,
   isStructuredCompatibilityError,
+  recoverStrictAssistantReply,
   resolveTemperature,
   toModelMessages,
 } from './llmGateway';
@@ -262,5 +263,27 @@ describe('LLM structured compatibility fallback', () => {
       ),
     ).toBe(true);
     expect(isStructuredCompatibilityError(new Error('Provider request timed out.'))).toBe(false);
+  });
+
+  it('recovers a missing final tool input from streamed assistant_reply JSON', async () => {
+    await expect(recoverStrictAssistantReply(
+      undefined,
+      '{"message":"I found it.","emotion":"curious","valence":0.4,"arousal":0.5,"dominance":0.2}',
+      '',
+    )).resolves.toEqual({
+      visibleText: 'I found it.',
+      metadata: { emotion: 'curious', valence: 0.4, arousal: 0.5, dominance: 0.2 },
+    });
+  });
+
+  it('recovers provider text when required assistant_reply tool choice is ignored', async () => {
+    await expect(recoverStrictAssistantReply(
+      undefined,
+      '',
+      'I found it.\n<yw-meta>{"emotion":"curious","valence":0.4,"arousal":0.5,"dominance":0.2}</yw-meta>',
+    )).resolves.toEqual({
+      visibleText: 'I found it.',
+      metadata: { emotion: 'curious', valence: 0.4, arousal: 0.5, dominance: 0.2 },
+    });
   });
 });

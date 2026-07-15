@@ -478,6 +478,7 @@ type AiProxyStreamEvent = {
   type?: 'delta' | 'done' | 'error' | 'audio' | 'tts-error' | 'tool-status';
   audio?: string;
   delta?: string;
+  detail?: string;
   error?: string;
   label?: string;
   mimeType?: string;
@@ -491,6 +492,7 @@ type AiProxyStreamEvent = {
 };
 
 type ChatToolStatus = {
+  detail?: string;
   label: string;
   phase?: 'started' | 'completed' | 'failed';
   toolName?: string;
@@ -1069,6 +1071,7 @@ async function readAiProxyStream(
     }
     if (event.type === 'tool-status' && event.label) {
       onToolStatus?.({
+        detail: event.detail,
         label: event.label,
         phase: event.phase,
         toolName: event.toolName,
@@ -6406,7 +6409,7 @@ function App() {
           onTextDelta: speechPlayer.pushDelta,
           onToolStatus: (status) => {
             if (chatRequestRunRef.current === requestRun) {
-              setChatActivity(status.label);
+              setChatActivity([status.label, status.detail].filter(Boolean).join(' '));
             }
           },
           responseFormat: assistantResponseFormat,

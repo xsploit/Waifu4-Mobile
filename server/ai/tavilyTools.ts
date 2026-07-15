@@ -14,12 +14,48 @@ const TAVILY_BASE_URL = 'https://api.tavily.com';
 export type ToolProgressPhase = 'started' | 'completed' | 'failed';
 
 export type ToolProgressEvent = {
+  detail?: string;
   label: string;
   phase: ToolProgressPhase;
   toolName: 'tavily_search' | 'tavily_extract' | 'tavily_crawl';
 };
 
 export type ToolProgressHandler = (event: ToolProgressEvent) => void;
+
+function compactText(value: unknown, maxLength = 140) {
+  const text = typeof value === 'string' ? value.replace(/\s+/g, ' ').trim() : '';
+  return text.length > maxLength ? `${text.slice(0, maxLength - 1)}…` : text;
+}
+
+function sourceHosts(urls: unknown[], maxHosts = 4) {
+  const hosts: string[] = [];
+  for (const value of urls) {
+    const url = typeof value === 'string'
+      ? value
+      : value && typeof value === 'object' && typeof (value as { url?: unknown }).url === 'string'
+        ? (value as { url: string }).url
+        : '';
+    if (!url) continue;
+    try {
+      const host = new URL(url).hostname.replace(/^www\./, '');
+      if (host && !hosts.includes(host)) hosts.push(host);
+    } catch {
+      // Invalid provider URLs are omitted from user-facing progress.
+    }
+    if (hosts.length >= maxHosts) break;
+  }
+  return hosts.join(', ');
+}
+
+function summarizeTavilyResult(result: unknown) {
+  if (!result || typeof result !== 'object') return undefined;
+  const results = Array.isArray((result as { results?: unknown }).results)
+    ? (result as { results: unknown[] }).results
+    : [];
+  const hosts = sourceHosts(results);
+  if (results.length === 0) return 'No matching sources returned.';
+  return `${results.length} source${results.length === 1 ? '' : 's'}${hosts ? ` · ${hosts}` : ''}`;
+}
 
 async function postTavily(apiKey: string, path: '/search' | '/extract' | '/crawl', body: Record<string, unknown>) {
   const response = await fetch(`${TAVILY_BASE_URL}${path}`, {
@@ -58,11 +94,17 @@ export function createTavilyTools(apiKey?: string, onProgress?: ToolProgressHand
     toolName: ToolProgressEvent['toolName'],
     labels: { started: string; completed: string; failed: string },
     execute: () => Promise<T>,
+    details?: { started?: string; completed?: (result: T) => string | undefined },
   ) => {
-    onProgress?.({ label: labels.started, phase: 'started', toolName });
+    onProgress?.({ detail: details?.started, label: labels.started, phase: 'started', toolName });
     try {
       const result = await execute();
-      onProgress?.({ label: labels.completed, phase: 'completed', toolName });
+      onProgress?.({
+        detail: details?.completed?.(result),
+        label: labels.completed,
+        phase: 'completed',
+        toolName,
+      });
       return result;
     } catch (error) {
       onProgress?.({ label: labels.failed, phase: 'failed', toolName });
@@ -82,6 +124,10 @@ export function createTavilyTools(apiKey?: string, onProgress?: ToolProgressHand
           failed: 'Web search failed; trying to recover...',
         },
         () => postTavily(key, '/search', toTavilySearchRequest(args)),
+        {
+          started: `Query: ${compactText(args.query)}`,
+          completed: summarizeTavilyResult,
+        },
       ),
     }),
     tavily_extract: tool({
@@ -110,6 +156,10 @@ export function createTavilyTools(apiKey?: string, onProgress?: ToolProgressHand
 
         return result;
         },
+        {
+          started: `Sources: ${sourceHosts(args.urls) || `${args.urls.length} URL${args.urls.length === 1 ? '' : 's'}`}`,
+          completed: summarizeTavilyResult,
+        },
       ),
     }),
     tavily_crawl: tool({
@@ -123,6 +173,10 @@ export function createTavilyTools(apiKey?: string, onProgress?: ToolProgressHand
           failed: 'Site exploration failed; trying to recover...',
         },
         () => postTavily(key, '/crawl', toTavilyCrawlRequest(args)),
+        {
+          started: `Site: ${sourceHosts([args.url]) || compactText(args.url)}`,
+          completed: summarizeTavilyResult,
+        },
       ),
     }),
   };

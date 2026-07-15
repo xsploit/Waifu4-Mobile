@@ -46,7 +46,7 @@ describe('Tavily tools', () => {
   });
 
   it('reports tool progress around the real network wait', async () => {
-    const progress: Array<{ label: string; phase: string; toolName: string }> = [];
+    const progress: Array<{ detail?: string; label: string; phase: string; toolName: string }> = [];
     let releaseFetch: ((response: Response) => void) | undefined;
     vi.stubGlobal('fetch', vi.fn(() => new Promise<Response>((resolve) => {
       releaseFetch = resolve;
@@ -60,15 +60,19 @@ describe('Tavily tools', () => {
 
     expect(progress).toEqual([{
       label: 'Searching the web...',
+      detail: 'Query: WebWaifu',
       phase: 'started',
       toolName: 'tavily_search',
     }]);
 
-    releaseFetch?.(new Response(JSON.stringify({ results: [] }), { status: 200 }));
+    releaseFetch?.(new Response(JSON.stringify({
+      results: [{ title: 'WebWaifu', url: 'https://example.com/webwaifu' }],
+    }), { status: 200 }));
     await pending;
 
     expect(progress.at(-1)).toEqual({
       label: 'Reviewing search results...',
+      detail: '1 source · example.com',
       phase: 'completed',
       toolName: 'tavily_search',
     });
@@ -76,7 +80,7 @@ describe('Tavily tools', () => {
 
   it('reports failed tool execution without swallowing the provider error', async () => {
     vi.stubGlobal('fetch', vi.fn(async () => new Response('nope', { status: 503 })));
-    const progress: Array<{ label: string; phase: string; toolName: string }> = [];
+    const progress: Array<{ detail?: string; label: string; phase: string; toolName: string }> = [];
     const tools = createTavilyTools('tvly-test-key', (event) => progress.push(event));
 
     await expect(tools?.tavily_search.execute?.(

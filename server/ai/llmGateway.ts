@@ -24,6 +24,7 @@ import {
   createLaneBParser,
   extractStructuredReply,
   monotonicDelta,
+  parseLaneB,
 } from '../../src/brain/replyParser';
 import type { OpenRouterReasoningEffort } from '../../src/brain/modelCapability';
 import { createLogger } from '../../src/shared/logger';
@@ -266,6 +267,46 @@ function createAssistantStructuredOutput() {
   });
 }
 
+export async function recoverStrictAssistantReply(
+  output: unknown,
+  rawInput: string,
+  fallbackText: string,
+): Promise<{ visibleText: string; metadata: ReplyMetadata | null } | null> {
+  const candidates: unknown[] = [output];
+  if (rawInput.trim()) {
+    candidates.push((await parsePartialJson(rawInput)).value);
+    try {
+      candidates.push(JSON.parse(rawInput));
+    } catch {
+      // The partial parser above is intentionally more tolerant than JSON.parse.
+    }
+  }
+
+  const trimmedFallback = fallbackText
+    .trim()
+    .replace(/^```(?:json)?\s*/i, '')
+    .replace(/\s*```$/, '')
+    .trim();
+  if (trimmedFallback) {
+    try {
+      candidates.push(JSON.parse(trimmedFallback));
+    } catch {
+      // A provider may violate required tool choice and return ordinary Lane B text.
+    }
+  }
+
+  for (const candidate of candidates) {
+    const parsed = assistantReplySchema.safeParse(candidate);
+    if (parsed.success) return extractStructuredReply(parsed.data);
+  }
+
+  if (trimmedFallback) {
+    const laneB = parseLaneB(trimmedFallback);
+    if (laneB.visibleText) return laneB;
+  }
+  return null;
+}
+
 export function toModelMessages(messages: LlmMessage[]): ModelMessage[] {
   return messages.map((m) => {
     if (m.role !== 'user' || !m.images?.length) {
@@ -438,6 +479,7 @@ export async function streamChat(
     let activeReplyId = '';
     let rawInput = '';
     let lastMessage = '';
+    let fallbackText = '';
     let output: unknown;
     try {
       for await (const part of result.fullStream) {
@@ -458,16 +500,36 @@ export async function streamChat(
           }
         } else if (part.type === 'tool-call' && part.toolName === 'assistant_reply') {
           output = part.input;
+        } else if (part.type === 'text-delta') {
+          fallbackText += part.text;
         }
       }
     } catch (err) {
       throw new Error(streamError ?? (err instanceof Error ? err.message : String(err)));
     }
-    const parsed = assistantReplySchema.safeParse(output);
-    if (!parsed.success) {
-      throw new Error(streamError ?? `Invalid assistant_reply tool call: ${parsed.error.message}`);
+    if (output === undefined) {
+      try {
+        output = (await result.toolCalls)
+          .find((call) => call?.toolName === 'assistant_reply')
+          ?.input;
+      } catch {
+        // The streamed input and text fallbacks below may still be usable.
+      }
     }
-    const { visibleText, metadata } = extractStructuredReply(parsed.data);
+    if (!fallbackText) {
+      try {
+        fallbackText = await result.text;
+      } catch {
+        // Preserve the provider's original validation failure below.
+      }
+    }
+    const recovered = await recoverStrictAssistantReply(output, rawInput, fallbackText);
+    if (!recovered) {
+      const parsed = assistantReplySchema.safeParse(output);
+      const detail = parsed.success ? 'provider returned no recoverable reply' : parsed.error.message;
+      throw new Error(streamError ?? `Invalid assistant_reply tool call: ${detail}`);
+    }
+    const { visibleText, metadata } = recovered;
     emit(monotonicDelta(lastMessage, visibleText));
     const usage = normalizeChatUsage(await result.totalUsage);
     log.info('chat done', {
@@ -561,7 +623,7 @@ export async function streamChat(
 
 export function isStructuredCompatibilityError(error: unknown) {
   const message = error instanceof Error ? error.message : String(error);
-  return /no object generated|could not parse|failed to parse|invalid json|empty structured reply|structured output/i.test(message);
+  return /no object generated|could not parse|failed to parse|invalid json|invalid assistant_reply|empty structured reply|structured output/i.test(message);
 }
 
 /** Retry native structured-output failures through the same schema as a strict tool call. */
