@@ -2994,7 +2994,9 @@ function closeLadybugQueryOutput(result: LadybugQueryOutput) {
 
 function isCorruptedWalError(error: unknown) {
   const message = error instanceof Error ? error.message : String(error);
-  return /corrupt(?:ed)? wal file|invalid wal record/i.test(message);
+  return /corrupt(?:ed)? wal file|invalid wal record|wal_record\.cpp.*unreachable_code/i.test(
+    message,
+  );
 }
 
 function isMissingFileError(error: unknown) {

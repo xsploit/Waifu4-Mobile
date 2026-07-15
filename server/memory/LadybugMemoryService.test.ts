@@ -24,7 +24,13 @@ afterEach(async () => {
 });
 
 describe('LadybugMemoryService', () => {
-  it('quarantines a corrupt WAL and retries native initialization once', async () => {
+  it.each([
+    ['legacy corruption error', 'Runtime exception: Corrupted wal file. Invalid WAL record type.'],
+    [
+      'Ladybug native assertion',
+      'Assertion failed in file "D:\\a\\ladybug\\ladybug\\src\\storage\\wal\\wal_record.cpp" on line 76: UNREACHABLE_CODE',
+    ],
+  ])('quarantines a corrupt WAL for %s and retries native initialization once', async (_label, message) => {
     const service = createService();
     const walPath = `${service.dbDir}.wal`;
     await writeFile(walPath, 'corrupt wal bytes', 'utf8');
@@ -41,7 +47,7 @@ describe('LadybugMemoryService', () => {
     internals.init = async () => {
       initCalls += 1;
       if (initCalls === 1) {
-        throw new Error('Runtime exception: Corrupted wal file. Invalid WAL record type.');
+        throw new Error(message);
       }
       return nativeState;
     };
