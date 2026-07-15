@@ -181,6 +181,10 @@ import {
   NEURO_PIPER_VOICE_KEY,
 } from './lib/tts/piper';
 import type { PiperVoiceProfile, WordBoundary } from './lib/tts/piper';
+import {
+  createEstimatedSubtitleWordBoundaries,
+  getPlaybackSubtitleLine,
+} from './lib/tts/subtitles';
 import { getTtsProviderLabel } from './lib/tts/labels';
 import { getTtsManager, type RemotePcmPushStream } from './lib/tts/manager';
 import {
@@ -432,13 +436,8 @@ const STREAM_BOT_WS_ENABLED = shouldConnectOverlaySocket();
 const DIRECT_COMMAND_PREFIXES = ['!ww4', '!webwaifu', '!yw', '!yourwifey', '!waifu'];
 const AI_PROXY_URL = (import.meta.env['VITE_AI_PROXY_URL'] || '').trim();
 const AUTO_RESUME_BROWSER_AUDIO = import.meta.env['VITE_AUTO_RESUME_AUDIO'] === 'true';
-const PIPER_TIMING_TICKS_PER_SECOND = 10000000;
 const SUBTITLE_WORD_WINDOW = 14;
 const SUBTITLE_CLEAR_DELAY_MS = 1200;
-const ESTIMATED_SUBTITLE_WORD_SECONDS = 0.22;
-const LIVE_BRIDGE_SUBTITLE_TICK_MS = 85;
-const LIVE_BRIDGE_SUBTITLE_CHARS_PER_TICK = 3;
-const LIVE_BRIDGE_SUBTITLE_PUNCTUATION_PAUSE_MS = 160;
 const STREAM_DISPLAY_TICK_MS = 22;
 const STREAM_DISPLAY_CHARS_PER_TICK = 4;
 const STREAM_DISPLAY_PUNCTUATION_PAUSE_MS = 70;
@@ -1956,35 +1955,6 @@ function pruneActiveTwitchChatters(chatters: Map<string, number>, now: number) {
   return chatters.size;
 }
 
-function getSubtitleLine(text: string, wordBoundaries: WordBoundary[], elapsedSeconds: number) {
-  const cleaned = text.replace(/\s+/g, ' ').trim();
-  if (wordBoundaries.length === 0) {
-    return cleaned;
-  }
-
-  const elapsedTicks = elapsedSeconds * PIPER_TIMING_TICKS_PER_SECOND;
-  const nextWordIndex = wordBoundaries.findIndex((boundary) => elapsedTicks < boundary.offset);
-  const visibleCount = nextWordIndex === -1 ? wordBoundaries.length : Math.max(1, nextWordIndex);
-  const start = Math.max(0, visibleCount - SUBTITLE_WORD_WINDOW);
-  const visibleWords = wordBoundaries.slice(start, visibleCount).map((boundary) => boundary.word);
-
-  return visibleWords.join(' ').trim() || cleaned;
-}
-
-function getLiveBridgeSubtitleLine(text: string) {
-  const words = text.replace(/\s+/g, ' ').trim().split(' ').filter(Boolean);
-  return words.slice(-SUBTITLE_WORD_WINDOW).join(' ');
-}
-
-function createEstimatedSubtitleWordBoundaries(text: string): WordBoundary[] {
-  const words = text.replace(/\s+/g, ' ').trim().split(' ').filter(Boolean);
-  return words.map((word, index) => ({
-    duration: ESTIMATED_SUBTITLE_WORD_SECONDS * PIPER_TIMING_TICKS_PER_SECOND,
-    offset: index * ESTIMATED_SUBTITLE_WORD_SECONDS * PIPER_TIMING_TICKS_PER_SECOND,
-    word,
-  }));
-}
-
 function buildChatAiPrompt(
   job: ChatAiJob,
   persona: PersonaProfile | null,
@@ -3205,8 +3175,9 @@ function App() {
       let queuedDisplayText = '';
       let displayPumpTimer: number | null = null;
       let liveSubtitleText = '';
-      let queuedLiveSubtitleText = '';
-      let liveSubtitlePumpTimer: number | null = null;
+      let liveSubtitleAudioStarted = false;
+      let liveSubtitleTimelineText = '';
+      let liveSubtitleTimeline: WordBoundary[] = [];
       let finalDisplayPending = false;
       let pendingText = '';
       let rawDeltaText = '';
@@ -3303,35 +3274,48 @@ function App() {
         }
       };
 
-      const pumpLiveSubtitle = () => {
-        liveSubtitlePumpTimer = null;
-        if (isStale() || !liveBridgeTts) {
-          return;
-        }
-        if (!queuedLiveSubtitleText) {
-          return;
-        }
-        const nextText = queuedLiveSubtitleText.slice(0, LIVE_BRIDGE_SUBTITLE_CHARS_PER_TICK);
-        queuedLiveSubtitleText = queuedLiveSubtitleText.slice(nextText.length);
-        liveSubtitleText += nextText;
-        setSubtitleText(getLiveBridgeSubtitleLine(liveSubtitleText));
-        const pause =
-          /[.!?]["')\]]?\s*$/.test(liveSubtitleText) && queuedLiveSubtitleText
-            ? LIVE_BRIDGE_SUBTITLE_PUNCTUATION_PAUSE_MS
-            : LIVE_BRIDGE_SUBTITLE_TICK_MS;
-        if (queuedLiveSubtitleText) {
-          liveSubtitlePumpTimer = window.setTimeout(pumpLiveSubtitle, pause);
-        }
-      };
-
       const queueLiveSubtitleText = (text: string) => {
         if (!text || isStale() || !liveBridgeTts) {
           return;
         }
-        queuedLiveSubtitleText += text;
-        if (liveSubtitlePumpTimer === null) {
-          liveSubtitlePumpTimer = window.setTimeout(pumpLiveSubtitle, 0);
+        liveSubtitleText += text;
+      };
+
+      const refreshLiveBridgeSubtitle = () => {
+        if (isStale() || !liveBridgeTts || !liveSubtitleAudioStarted) {
+          return;
         }
+        if (liveSubtitleText !== liveSubtitleTimelineText) {
+          liveSubtitleTimelineText = liveSubtitleText;
+          liveSubtitleTimeline = createEstimatedSubtitleWordBoundaries(
+            liveSubtitleTimelineText,
+            0.22 / Math.max(0.7, ttsRuntimeSettings.ttsPlaybackRate),
+          );
+        }
+        const elapsedSeconds =
+          ttsManager.getPlaybackPositionSeconds() ??
+          (subtitleStartedAtRef.current === null
+            ? 0
+            : (performance.now() - subtitleStartedAtRef.current) / 1000);
+        setSubtitleText(
+          getPlaybackSubtitleLine(
+            liveSubtitleTimelineText,
+            liveSubtitleTimeline,
+            elapsedSeconds,
+            SUBTITLE_WORD_WINDOW,
+          ),
+        );
+      };
+
+      const startLiveBridgeSubtitle = () => {
+        if (liveSubtitleAudioStarted || isStale() || !liveBridgeTts) {
+          return;
+        }
+        liveSubtitleAudioStarted = true;
+        stopSubtitleTracking(false);
+        subtitleStartedAtRef.current = performance.now();
+        refreshLiveBridgeSubtitle();
+        subtitleIntervalRef.current = window.setInterval(refreshLiveBridgeSubtitle, 80);
       };
 
       const enqueueSpeech = (chunk: string) => {
@@ -3409,14 +3393,11 @@ function App() {
           window.clearTimeout(displayPumpTimer);
           displayPumpTimer = null;
         }
-        if (liveSubtitlePumpTimer !== null) {
-          window.clearTimeout(liveSubtitlePumpTimer);
-          liveSubtitlePumpTimer = null;
-        }
         queuedDisplayText = '';
-        queuedLiveSubtitleText = '';
+        liveSubtitleText = '';
         pendingText = '';
         liveBridgeSubtitleActiveRef.current = false;
+        stopSubtitleTracking(true);
         if (liveBridgeSink) {
           void liveBridgeSink.close().catch(() => undefined);
           liveBridgeSink = null;
@@ -3435,6 +3416,7 @@ function App() {
           return;
         }
         liveBridgeAudioChunkCount += 1;
+        startLiveBridgeSubtitle();
         if (latencyTrace.firstAudioAt === null) {
           latencyTrace.firstAudioAt = performance.now();
           if (isAppDiagnosticsEnabled()) {
@@ -3564,7 +3546,6 @@ function App() {
               queuedDisplayText = '';
               queueDisplayText(normalizedFinal);
               liveSubtitleText = '';
-              queuedLiveSubtitleText = '';
               queueLiveSubtitleText(normalizedFinal);
             }
             pendingText += suffix;
@@ -3576,20 +3557,14 @@ function App() {
 
         const finalSpeechText = (fullText.trim() || normalizedFinal).trim();
         if (liveBridgeTts) {
-          if (liveSubtitlePumpTimer !== null && queuedLiveSubtitleText.length > 0) {
-            window.clearTimeout(liveSubtitlePumpTimer);
-            liveSubtitlePumpTimer = null;
-            let flushedChunks = 0;
-            while (queuedLiveSubtitleText.length > 0 && flushedChunks < 12 && !isStale()) {
-              pumpLiveSubtitle();
-              flushedChunks += 1;
-            }
-            if (queuedLiveSubtitleText.length > 0 && !isStale()) {
-              liveSubtitlePumpTimer = window.setTimeout(pumpLiveSubtitle, 0);
-            }
-          }
           if (liveBridgeSink) {
-            speechPromises.push(liveBridgeSink.close());
+            speechPromises.push(
+              liveBridgeSink.close().finally(() => {
+                if (!isStale()) {
+                  liveBridgeSubtitleActiveRef.current = false;
+                }
+              }),
+            );
           }
           if (
             shouldRetrySilentLiveBridge(
@@ -3599,9 +3574,10 @@ function App() {
             )
           ) {
             console.warn('[TTS] Fish live bridge returned no audio; retrying the final reply.');
+            liveBridgeSubtitleActiveRef.current = false;
+            stopSubtitleTracking(true);
             enqueueSpeech(finalSpeechText);
           }
-          liveBridgeSubtitleActiveRef.current = false;
         } else if (chunkTtsRequests) {
           consumeSpeakableChunks(true);
         } else {
@@ -3934,7 +3910,12 @@ function App() {
         ? 0
         : (performance.now() - subtitleStartedAtRef.current) / 1000);
     setSubtitleText(
-      getSubtitleLine(subtitleData.text, subtitleData.wordBoundaries, elapsedSeconds),
+      getPlaybackSubtitleLine(
+        subtitleData.text,
+        subtitleData.wordBoundaries,
+        elapsedSeconds,
+        SUBTITLE_WORD_WINDOW,
+      ),
     );
   }, [ttsManager]);
 
@@ -3952,10 +3933,11 @@ function App() {
       subtitleStartedAtRef.current = performance.now();
       const elapsedSeconds = ttsManager.getPlaybackPositionSeconds() ?? 0;
       setSubtitleText(
-        getSubtitleLine(
+        getPlaybackSubtitleLine(
           normalizedSubtitleData.text,
           normalizedSubtitleData.wordBoundaries,
           elapsedSeconds,
+          SUBTITLE_WORD_WINDOW,
         ),
       );
       subtitleIntervalRef.current = window.setInterval(refreshSubtitleFromAudio, 80);
