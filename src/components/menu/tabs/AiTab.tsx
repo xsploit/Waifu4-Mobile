@@ -7,7 +7,7 @@ import {
   type ProviderEndpointInfo,
   type ProviderModelInfo,
 } from '../../../brain/modelCapability';
-import type { AiProxyHealth, AiSettings } from '../../../lib/chat/types';
+import type { AiProxyHealth, AiSettings, RuntimeErrorEntry } from '../../../lib/chat/types';
 import {
   applyLlmProviderSwitchDefaults,
   filterSafeProviderModels,
@@ -24,8 +24,10 @@ type AiTabProps = {
   availableModels: string[];
   modelsError: string | null;
   modelsLoading: boolean;
+  onClearRuntimeErrors: () => void;
   onRefreshAiProxyHealth: () => void;
   onRefreshModels: () => void;
+  runtimeErrors: RuntimeErrorEntry[];
   setAiSettings: Dispatch<SetStateAction<AiSettings>>;
   vercelProviderSlugs: string[];
   vercelProviderEndpoints: ProviderEndpointInfo[];
@@ -181,8 +183,10 @@ export function AiTab({
   availableModels,
   modelsError,
   modelsLoading,
+  onClearRuntimeErrors,
   onRefreshAiProxyHealth,
   onRefreshModels,
+  runtimeErrors,
   setAiSettings,
   vercelProviderSlugs,
   vercelProviderEndpoints,
@@ -601,6 +605,36 @@ export function AiTab({
           Runtime Situation is injected into the current-scene prompt every turn. Use it for the
           current setup, not permanent character facts.
         </div>
+      </div>
+
+      <div className="control-group">
+        <div className="control-label">Chat Runtime</div>
+        <div className="status-copy">
+          Errors are kept out of the conversation, subtitles, memory, and stream overlay.
+        </div>
+        {runtimeErrors.length > 0 ? (
+          <div className="memory-list">
+            {runtimeErrors.slice().reverse().map((entry) => (
+              <div className="memory-entry" key={entry.id}>
+                <div className="memory-entry-header">
+                  <strong>{entry.scope}</strong>
+                  <span>{new Date(entry.createdAt).toLocaleTimeString()}</span>
+                </div>
+                <p>{entry.message}</p>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <div className="field-hint">No chat runtime errors this session.</div>
+        )}
+        <button
+          className="btn-tech secondary"
+          disabled={runtimeErrors.length === 0}
+          onClick={onClearRuntimeErrors}
+          type="button"
+        >
+          Clear Runtime Errors
+        </button>
       </div>
     </>
   );

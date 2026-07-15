@@ -9,6 +9,7 @@ import type {
   PersonaProfile,
   PersonaVoiceBinding,
   RelationshipMemory,
+  RuntimeErrorEntry,
   TwitchSettings,
   VoiceLabVoice,
 } from '../../lib/chat/types';
@@ -92,6 +93,7 @@ type SettingsPanelProps = {
   onClearChat: () => void;
   onClearDraft: () => void;
   onClearMemory: () => void;
+  onClearRuntimeErrors: () => void;
   onDeleteSavedVrmModel: (modelId: string) => void;
   onLoadBundledModel: (modelId: string) => void;
   onLoadModelFile: (file: File) => void;
@@ -150,6 +152,7 @@ type SettingsPanelProps = {
   backendGrilloTickBusy: boolean;
   grilloRuntimeStatus: LadybugGrilloRuntimeStatus | null;
   relationshipMemory: RelationshipMemory;
+  runtimeErrors: RuntimeErrorEntry[];
   memoryAgentBusy: boolean;
   memoryAgentPendingCounts: Record<string, number>;
   memoryAgentStatus: string;
@@ -238,6 +241,7 @@ export function SettingsPanel({
   onClearChat,
   onClearDraft,
   onClearMemory,
+  onClearRuntimeErrors,
   onClose,
   onDeletePersona,
   onDeleteSavedVrmModel,
@@ -289,6 +293,7 @@ export function SettingsPanel({
   backendGrilloTickBusy,
   grilloRuntimeStatus,
   relationshipMemory,
+  runtimeErrors,
   memoryAgentBusy,
   memoryAgentPendingCounts,
   memoryAgentStatus,
@@ -400,8 +405,10 @@ export function SettingsPanel({
         aiProxyHealthError={aiProxyHealthError}
         modelsError={modelsError}
         modelsLoading={modelsLoading}
+        onClearRuntimeErrors={onClearRuntimeErrors}
         onRefreshAiProxyHealth={onRefreshAiProxyHealth}
         onRefreshModels={onRefreshModels}
+        runtimeErrors={runtimeErrors}
         setAiSettings={setAiSettings}
         vercelProviderSlugs={vercelProviderSlugs}
         vercelProviderEndpoints={vercelProviderEndpoints}

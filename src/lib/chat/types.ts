@@ -14,6 +14,13 @@ export type ChatMessage = {
   createdAt: number;
 };
 
+export type RuntimeErrorEntry = {
+  createdAt: number;
+  id: string;
+  message: string;
+  scope: string;
+};
+
 export type PersonaProfile = {
   id: string;
   name: string;

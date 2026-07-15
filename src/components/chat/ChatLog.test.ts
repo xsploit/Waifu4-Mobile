@@ -1,5 +1,8 @@
+import { createElement } from 'react';
+import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it } from 'vitest';
 import {
+  ChatLog,
   getOverlayEmptyState,
   getVisibleOverlayHistory,
   sanitizeOverlayLabel,
@@ -43,6 +46,27 @@ describe('chat overlay copy', () => {
     expect(sanitizeOverlayText(`see http://localhost:8787/path and ${fakeKey}`)).toBe(
       'see [local] and [key]',
     );
+  });
+
+  it('shows transient tool activity without adding it to chat history', () => {
+    const history = [{
+      content: 'please look this up',
+      createdAt: 1,
+      id: 'user-1',
+      role: 'user' as const,
+    }];
+    const html = renderToStaticMarkup(createElement(ChatLog, {
+      activityLabel: 'Searching the web...',
+      history,
+      isGenerating: true,
+      onClear: () => {},
+      onToggle: () => {},
+      open: true,
+    }));
+
+    expect(html).toContain('Searching the web...');
+    expect(history).toHaveLength(1);
+    expect(history[0]?.content).toBe('please look this up');
   });
 
   it('keeps older messages visible while expanded and only expires collapsed overlay messages', () => {

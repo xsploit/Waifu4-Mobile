@@ -58,6 +58,7 @@ function createProps(activeTab: SettingsTabId): SettingsPanelProps {
     onClearChat: noop,
     onClearDraft: noop,
     onClearMemory: noop,
+    onClearRuntimeErrors: noop,
     onClose: noop,
     onCreateVoiceLabProviderVoice: async () => ({
       id: 'created-voice',
@@ -121,6 +122,7 @@ function createProps(activeTab: SettingsTabId): SettingsPanelProps {
     remoteTtsVoices: [],
     remoteVoicesError: null,
     remoteVoicesLoading: false,
+    runtimeErrors: [],
     savedVrmModels: [],
     savedVrmStatus: 'Ready',
     sequencerSettings: createDefaultSequencerSettings(),
@@ -221,6 +223,22 @@ describe('SettingsPanel tab smoke', () => {
     expect(html).toContain('Max tool rounds');
     expect(html).toContain('Prompt cache:');
     expect(html).toContain('tavily_search');
+  });
+
+  it('keeps runtime failures in the AI diagnostics surface', () => {
+    const props = createProps('ai');
+    props.runtimeErrors = [{
+      createdAt: 1,
+      id: 'runtime-error-1',
+      message: 'Provider request timed out.',
+      scope: 'Chat',
+    }];
+
+    const html = renderToStaticMarkup(<SettingsPanel {...props} />);
+
+    expect(html).toContain('Chat Runtime');
+    expect(html).toContain('Provider request timed out.');
+    expect(html).toContain('Clear Runtime Errors');
   });
 
   it('shows configured AI truth instead of fabricated health defaults', () => {

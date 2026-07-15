@@ -135,6 +135,7 @@ import type {
   PersonaProfile,
   PersonaVoiceBinding,
   RelationshipMemory,
+  RuntimeErrorEntry,
   TwitchSettings,
   VoiceLabVoice,
 } from './lib/chat/types';
@@ -474,16 +475,25 @@ type AppCompletionResponse = {
 };
 
 type AiProxyStreamEvent = {
-  type?: 'delta' | 'done' | 'error' | 'audio' | 'tts-error';
+  type?: 'delta' | 'done' | 'error' | 'audio' | 'tts-error' | 'tool-status';
   audio?: string;
   delta?: string;
   error?: string;
+  label?: string;
   mimeType?: string;
   meta?: AiProxyHealth['providerState'] | AssistantReplyMetadata | null;
   ok?: boolean;
+  phase?: 'started' | 'completed' | 'failed';
   replyMetadata?: AssistantReplyMetadata | null;
   sampleRate?: number;
   text?: string;
+  toolName?: string;
+};
+
+type ChatToolStatus = {
+  label: string;
+  phase?: 'started' | 'completed' | 'failed';
+  toolName?: string;
 };
 
 type AppEmbeddingResponse = {
@@ -1006,6 +1016,7 @@ async function readAiProxyStream(
   response: Response,
   onTextDelta?: (delta: string) => void,
   onAudioChunk?: (chunk: RemoteTtsAudioChunk) => void,
+  onToolStatus?: (status: ChatToolStatus) => void,
   signal?: AbortSignal,
 ): Promise<{
   meta?: AiProxyHealth['providerState'];
@@ -1054,6 +1065,14 @@ async function readAiProxyStream(
       if (chunk) {
         onAudioChunk?.(chunk);
       }
+      return;
+    }
+    if (event.type === 'tool-status' && event.label) {
+      onToolStatus?.({
+        label: event.label,
+        phase: event.phase,
+        toolName: event.toolName,
+      });
       return;
     }
     if (event.type === 'delta' && event.delta) {
@@ -1236,6 +1255,7 @@ async function requestChatCompletion({
   llmProvider = 'vercel-gateway',
   onAudioChunk,
   onTextDelta,
+  onToolStatus,
   responseFormat,
   stateKey,
   stateScope = 'chat',
@@ -1259,6 +1279,7 @@ async function requestChatCompletion({
   llmProvider?: AiSettings['llmProvider'];
   onAudioChunk?: (chunk: RemoteTtsAudioChunk) => void;
   onTextDelta?: (delta: string) => void;
+  onToolStatus?: (status: ChatToolStatus) => void;
   responseFormat?: AppCompletionResponseFormat;
   stateKey?: string;
   stateScope?: 'chat' | 'memory';
@@ -1316,7 +1337,13 @@ async function requestChatCompletion({
   }
 
   if (onTextDelta && response.headers.get('content-type')?.includes('text/event-stream')) {
-    const streamResult = await readAiProxyStream(response, onTextDelta, onAudioChunk, signal);
+    const streamResult = await readAiProxyStream(
+      response,
+      onTextDelta,
+      onAudioChunk,
+      onToolStatus,
+      signal,
+    );
     const text = streamResult.text;
     if (!text.trim()) {
       throw new Error('Stream bot AI proxy returned an empty response.');
@@ -2133,6 +2160,8 @@ function App() {
   const [chatInput, setChatInput] = useState(() => createDefaultUiState().chatDraft);
   const [chatGenerating, setChatGenerating] = useState(false);
   const [assistantReplyLocked, setAssistantReplyLocked] = useState(false);
+  const [chatActivity, setChatActivity] = useState<string | null>(null);
+  const [runtimeErrors, setRuntimeErrors] = useState<RuntimeErrorEntry[]>([]);
   const [chatDisplayOverrides, setChatDisplayOverrides] = useState<Record<string, string>>({});
   const [twitchChannel, setTwitchChannel] = useState(DIRECT_TWITCH_CHANNEL);
   const [twitchSettings, setTwitchSettings] = useState<TwitchSettings>(createDefaultTwitchSettings);
@@ -4312,7 +4341,7 @@ function App() {
       );
       setRelationshipMemories(nextRelationshipMemories);
       setMenuOpen(false);
-      setChatLogOpen(true);
+      setChatLogOpen(persistedState.uiState.chatLogOpen);
       setChatInput(persistedState.uiState.chatDraft);
       setActiveTab(persistedState.activeTab);
       setTwitchChannel(hydratedTwitchChannel);
@@ -5481,6 +5510,19 @@ function App() {
     );
   }, []);
 
+  const appendRuntimeError = useCallback((scope: string, message: string) => {
+    const createdAt = Date.now();
+    setRuntimeErrors((current) => [
+      ...current,
+      {
+        createdAt,
+        id: `runtime-error-${createdAt}-${Math.random().toString(36).slice(2, 8)}`,
+        message,
+        scope,
+      },
+    ].slice(-50));
+  }, []);
+
   useEffect(() => {
     const desktopBridge = window.webWaifuDesktop;
     if (!desktopBridge?.isDesktop) {
@@ -6024,7 +6066,7 @@ function App() {
           );
         case 'set-chat-overlay':
           setChatLogOpen(command.enabled);
-          respond(`Twitch overlay chat ${command.enabled ? 'expanded' : 'collapsed'}.`);
+          respond(`Chat overlay ${command.enabled ? 'shown' : 'hidden'}.`);
           return true;
       }
     },
@@ -6172,6 +6214,7 @@ function App() {
       try {
         setAssistantReplyLock(true);
         setChatGenerating(true);
+        setChatActivity(null);
         const participantKeys = job.messages.map(getGrilloParticipantKey);
         const preflightStartedAt = performance.now();
         const semanticEmbeddingPromise = getSemanticMemoryQueryEmbedding(
@@ -6361,6 +6404,11 @@ function App() {
           stateScope: 'chat',
           onAudioChunk: speechPlayer.pushAudioChunk,
           onTextDelta: speechPlayer.pushDelta,
+          onToolStatus: (status) => {
+            if (chatRequestRunRef.current === requestRun) {
+              setChatActivity(status.label);
+            }
+          },
           responseFormat: assistantResponseFormat,
           temperature: settings.temperature,
           toolChoiceMode: settings.toolChoiceMode,
@@ -6516,18 +6564,21 @@ function App() {
         }
         const message = getAiErrorMessage(error, 'chat');
         setChatHistory((current) =>
-          trimChatHistory(
-            current.map((entry) =>
-              entry.id === assistantMessage.id
-                ? {
-                    ...entry,
-                    content: `Request failed: ${message}`,
-                  }
-                : entry,
-            ),
-          ),
+          trimChatHistory(current.filter((entry) => entry.id !== assistantMessage.id)),
         );
-        appendSystemMessage(`[Chat] AI reply failed: ${message}`);
+        setChatHistories((current) => {
+          const next = {
+            ...current,
+            [stateKey]: trimChatHistory(
+              (current[stateKey] ?? []).filter((entry) => entry.id !== assistantMessage.id),
+            ),
+          };
+          chatHistoriesRef.current = next;
+          return next;
+        });
+        clearChatDisplayOverride(assistantMessage.id);
+        appendRuntimeError('Chat', message);
+        console.error('[Chat] AI reply failed', error);
       } finally {
         window.clearTimeout(chatHardTimeout);
         if (activeChatAbortControllerRef.current === chatAbortController) {
@@ -6536,12 +6587,14 @@ function App() {
         if (chatRequestRunRef.current === requestRun) {
           setChatGenerating(false);
           setAssistantReplyLock(false);
+          setChatActivity(null);
         }
       }
     },
     [
       activePersona,
-      appendSystemMessage,
+      appendRuntimeError,
+      clearChatDisplayOverride,
       commitScopedRelationshipMemory,
       createStreamingAssistantPlayer,
       getScopedRelationshipMemory,
@@ -7551,18 +7604,21 @@ function App() {
               Controls
             </button>
           ) : null}
-          <ChatLog
-            activePersonaName={activePersona?.name ?? DEFAULT_PERSONA.name}
-            botMentionTag={activePersonaMentionTag}
-            channelName={twitchChannel}
-            displayOverrides={chatDisplayOverrides}
-            history={chatHistory}
-            isGenerating={chatGenerating || assistantReplyLocked}
-            modeLabel={twitchModeLabel}
-            onClear={handleClearChat}
-            onToggle={handleToggleChatLog}
-            open={chatLogOpen}
-          />
+          {chatLogOpen ? (
+            <ChatLog
+              activePersonaName={activePersona?.name ?? DEFAULT_PERSONA.name}
+              activityLabel={chatActivity}
+              botMentionTag={activePersonaMentionTag}
+              channelName={twitchChannel}
+              displayOverrides={chatDisplayOverrides}
+              history={chatHistory}
+              isGenerating={chatGenerating || assistantReplyLocked}
+              modeLabel={twitchModeLabel}
+              onClear={handleClearChat}
+              onToggle={handleToggleChatLog}
+              open
+            />
+          ) : null}
 
           <MenuFab onToggle={handleToggleMenu} open={menuOpen} />
 
@@ -7595,8 +7651,10 @@ function App() {
               onClearChat={handleClearChat}
               onClearDraft={handleClearDraft}
               onClearMemory={handleClearMemory}
+              onClearRuntimeErrors={() => setRuntimeErrors([])}
               modelsError={modelsError}
               modelsLoading={modelsLoading}
+              runtimeErrors={runtimeErrors}
               vercelProviderSlugs={vercelProviderSlugs}
               vercelProviderEndpoints={vercelProviderEndpoints}
               vercelProvidersError={vercelProvidersError}
@@ -7795,6 +7853,29 @@ function App() {
               {subtitleText}
             </div>
           ) : null}
+
+          <button
+            className={`chat-overlay-toggle ${chatLogOpen ? 'active' : ''}`}
+            onClick={(event) => {
+              event.stopPropagation();
+              setChatLogOpen((current) => !current);
+            }}
+            title={chatLogOpen ? 'Hide chat overlay' : 'Show chat overlay'}
+            type="button"
+          >
+            <svg
+              aria-hidden="true"
+              fill="none"
+              stroke="currentColor"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              strokeWidth="2"
+              viewBox="0 0 24 24"
+            >
+              <path d="M2 12s3.5-6 10-6 10 6 10 6-3.5 6-10 6S2 12 2 12z" />
+              <circle cx="12" cy="12" r="3" />
+            </svg>
+          </button>
 
           <button
             className={`chat-bar-toggle ${chatBarOpen ? 'active' : ''}`}

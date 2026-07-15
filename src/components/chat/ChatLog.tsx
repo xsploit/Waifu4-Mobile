@@ -4,6 +4,7 @@ import type { ChatMessage } from '../../lib/chat/types';
 
 type ChatLogProps = {
   activePersonaName?: string;
+  activityLabel?: string | null;
   botMentionTag?: string;
   channelName?: string;
   displayOverrides?: Record<string, string>;
@@ -121,6 +122,7 @@ export function getVisibleOverlayHistory<T extends { message: ChatMessage }>(
 
 export const ChatLog = memo(function ChatLog({
   activePersonaName = 'Riko',
+  activityLabel,
   botMentionTag = '@Riko',
   channelName = 'subsect',
   displayOverrides = {},
@@ -231,7 +233,7 @@ export const ChatLog = memo(function ChatLog({
         <button
           className="log-header-main"
           onClick={onToggle}
-          title={open ? 'Collapse Twitch overlay chat' : 'Expand Twitch overlay chat'}
+          title={open ? 'Hide chat overlay' : 'Show chat overlay'}
           type="button"
         >
           <span className="log-live-dot" />
@@ -284,7 +286,7 @@ export const ChatLog = memo(function ChatLog({
           <div className="log-msg assistant streaming">
             <span className="msg-role">WIFEY</span>
             <span className="msg-text">
-              Thinking
+              {sanitizeOverlayText(activityLabel ?? '') || 'Thinking'}
               <span className="cursor-blink">_</span>
             </span>
           </div>

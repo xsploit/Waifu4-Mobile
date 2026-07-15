@@ -156,7 +156,7 @@ export function TwitchTab({
             onClick={() => onToggleChatOverlay(!chatOverlayOpen)}
             type="button"
           >
-            {chatOverlayOpen ? 'Collapse Overlay Chat' : 'Open Overlay Chat'}
+            {chatOverlayOpen ? 'Hide Overlay Chat' : 'Show Overlay Chat'}
           </button>
         </div>
         <div className="field-hint">
@@ -211,7 +211,7 @@ export function TwitchTab({
             Batch pending: <strong>{batchPending}</strong>
           </div>
           <div className="status-copy">
-            Overlay chat: <strong>{chatOverlayOpen ? 'Open' : 'Collapsed'}</strong>
+            Overlay chat: <strong>{chatOverlayOpen ? 'Visible' : 'Hidden'}</strong>
           </div>
           <div className="status-copy">
             Direct intake: <strong>{twitchSettings.directChatterLimit} chatters</strong>
