@@ -137,7 +137,7 @@ export function buildChatDoneEventPayload(
   };
 }
 
-/** POST /ai/chat — SSE stream. Events: `delta` (visible text), `done`, `error`. */
+/** POST /ai/chat — SSE stream. Events: `delta`, `tool-status`, `done`, `error`. */
 export async function handleChat(
   req: Request,
   res: Response,
@@ -284,6 +284,9 @@ export async function handleChat(
         apiKey: keys.llmKey,
         byokOpenAiKey: keys.byokOpenAiKey,
         tavilyKey: keys.tavilyKey,
+        onToolProgress: (progress) => {
+          send('tool-status', progress);
+        },
         signal: controller.signal,
       },
       (text) => {

@@ -27,7 +27,7 @@ import {
 } from '../../src/brain/replyParser';
 import type { OpenRouterReasoningEffort } from '../../src/brain/modelCapability';
 import { createLogger } from '../../src/shared/logger';
-import { createTavilyTools } from './tavilyTools';
+import { createTavilyTools, type ToolProgressHandler } from './tavilyTools';
 
 const log = createLogger('llm');
 
@@ -46,6 +46,7 @@ export type StreamChatRequest = {
   tavilyKey?: string;
   toolChoiceMode?: 'off' | 'auto' | 'required';
   maxToolRounds?: number;
+  onToolProgress?: ToolProgressHandler;
   openRouterRouting?: {
     mode: 'auto' | 'latency' | 'throughput' | 'pinned';
     providers?: string[];
@@ -72,6 +73,7 @@ export type CompleteChatRequest = {
   tavilyKey?: string;
   toolChoiceMode?: 'off' | 'auto' | 'required';
   maxToolRounds?: number;
+  onToolProgress?: ToolProgressHandler;
   openRouterRouting?: StreamChatRequest['openRouterRouting'];
   vercelRouting?: StreamChatRequest['vercelRouting'];
   signal?: AbortSignal;
@@ -289,7 +291,9 @@ export async function completeChat(req: CompleteChatRequest): Promise<CompleteCh
     && req.provider === 'vercel-gateway'
     && req.model === 'deepseek/deepseek-v4-pro';
   const model = createModel(req, req.jsonMode === true && !strictOutputTool);
-  const tavilyTools = req.toolChoiceMode === 'off' ? undefined : createTavilyTools(req.tavilyKey);
+  const tavilyTools = req.toolChoiceMode === 'off'
+    ? undefined
+    : createTavilyTools(req.tavilyKey, req.onToolProgress);
   const outputToolName = req.outputName?.trim() || 'structured_output';
   const tools = strictOutputTool
     ? {
@@ -372,7 +376,9 @@ export async function streamChat(
       || (req.provider === 'vercel-gateway' && req.model === 'deepseek/deepseek-v4-pro')
     );
   const model = createModel(req, structured && !strictReplyTool);
-  const tavilyTools = req.toolChoiceMode === 'off' ? undefined : createTavilyTools(req.tavilyKey);
+  const tavilyTools = req.toolChoiceMode === 'off'
+    ? undefined
+    : createTavilyTools(req.tavilyKey, req.onToolProgress);
   const tools = strictReplyTool
     ? {
         ...tavilyTools,
