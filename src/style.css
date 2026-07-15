@@ -253,8 +253,8 @@ select {
 .desktop-controls-reveal {
   position: fixed;
   top: 10px;
-  right: calc(72px + var(--safe-right, 0px));
-  left: auto;
+  right: auto;
+  left: calc(72px + var(--safe-left, 0px));
   z-index: 80;
   min-height: 28px;
   padding: 0.28rem 0.5rem;
