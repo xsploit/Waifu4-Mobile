@@ -4618,6 +4618,7 @@ function App() {
     if (
       !hydrated ||
       !ttsRuntimeSettings.ttsEnabled ||
+      ttsRuntimeSettings.ttsProvider !== 'piper' ||
       !selectedTtsVoice ||
       selectedTtsCached ||
       ttsBusy ||
@@ -4688,6 +4689,7 @@ function App() {
     };
   }, [
     ttsRuntimeSettings.ttsEnabled,
+    ttsRuntimeSettings.ttsProvider,
     hydrated,
     refreshStoredTtsVoices,
     selectedTtsCached,
