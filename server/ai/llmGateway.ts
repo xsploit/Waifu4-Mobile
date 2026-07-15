@@ -559,9 +559,9 @@ export async function streamChat(
   };
 }
 
-function isStructuredCompatibilityError(error: unknown) {
+export function isStructuredCompatibilityError(error: unknown) {
   const message = error instanceof Error ? error.message : String(error);
-  return /no object generated|could not parse|failed to parse|invalid json|structured output/i.test(message);
+  return /no object generated|could not parse|failed to parse|invalid json|empty structured reply|structured output/i.test(message);
 }
 
 /** Retry native structured-output failures through the same schema as a strict tool call. */

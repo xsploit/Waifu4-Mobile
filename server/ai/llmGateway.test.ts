@@ -1,5 +1,10 @@
 import { describe, expect, it } from 'vitest';
-import { buildProviderOptions, resolveTemperature, toModelMessages } from './llmGateway';
+import {
+  buildProviderOptions,
+  isStructuredCompatibilityError,
+  resolveTemperature,
+  toModelMessages,
+} from './llmGateway';
 
 describe('LLM gateway message mapping', () => {
   it('passes Twitch stream frames as user image parts', () => {
@@ -246,5 +251,16 @@ describe('LLM gateway generation settings', () => {
 
   it('keeps temperature for ordinary chat models', () => {
     expect(resolveTemperature({ model: 'deepseek/deepseek-v4-flash', temperature: 0.85 })).toBe(0.85);
+  });
+});
+
+describe('LLM structured compatibility fallback', () => {
+  it('retries the exact empty structured reply reported by the live stream', () => {
+    expect(
+      isStructuredCompatibilityError(
+        new Error('Model returned an empty structured reply (try lower reasoning effort or another model).'),
+      ),
+    ).toBe(true);
+    expect(isStructuredCompatibilityError(new Error('Provider request timed out.'))).toBe(false);
   });
 });
