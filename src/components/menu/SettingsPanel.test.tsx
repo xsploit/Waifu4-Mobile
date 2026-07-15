@@ -173,6 +173,16 @@ describe('SettingsPanel tab smoke', () => {
     ['tts', 'Speech Output'],
   ];
 
+  it('renders character voice preset controls in the Character tab', () => {
+    const markup = renderToStaticMarkup(<SettingsPanel {...createProps('character')} />);
+
+    expect(markup).toContain('Character Voice');
+    expect(markup).toContain('Use Current TTS Setup');
+    expect(markup).toContain('Piper Local');
+    expect(markup).toContain('Fish Speech');
+    expect(markup).toContain('Inworld');
+  });
+
   it.each(tabMarkers)('renders the %s tab without blanking the panel', (activeTab, marker) => {
     const html = renderToStaticMarkup(<SettingsPanel {...createProps(activeTab)} />);
 

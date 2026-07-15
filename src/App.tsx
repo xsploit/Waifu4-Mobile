@@ -99,6 +99,11 @@ import {
 } from './lib/chat/chat-turn';
 import { resolveScopedConversationSnapshot, selectConversationStateKey } from './lib/chat/conversation-scope';
 import {
+  applyPersonaVoiceBindingToSettings,
+  capturePersonaVoiceTuning,
+  createPersonaVoiceBindingFromSettings,
+} from './lib/chat/persona-voice';
+import {
   describeTwitchAiQueueBackpressure,
   enqueueTwitchAiJobWithBackpressure,
   shouldApplyTwitchReplyGap,
@@ -4806,20 +4811,32 @@ function App() {
     refreshSavedVrmModels,
   ]);
 
-  const handleSavePersona = useCallback((draft: PersonaDraft, personaId?: string) => {
-    const nextId = personaId ?? `persona-${Date.now()}`;
-    const nextPersona: PersonaProfile = {
-      id: nextId,
-      ...draft,
-    };
+  const handleSavePersona = useCallback(
+    (draft: PersonaDraft, personaId?: string, voicePreset?: PersonaVoiceBinding) => {
+      const nextId = personaId ?? `persona-${Date.now()}`;
+      const nextPersona: PersonaProfile = {
+        id: nextId,
+        ...draft,
+      };
 
-    setPersonas((current) =>
-      current.some((persona) => persona.id === nextId)
-        ? current.map((persona) => (persona.id === nextId ? nextPersona : persona))
-        : [...current, nextPersona],
-    );
-    setActivePersonaId(nextId);
-  }, []);
+      setPersonas((current) =>
+        current.some((persona) => persona.id === nextId)
+          ? current.map((persona) => (persona.id === nextId ? nextPersona : persona))
+          : [...current, nextPersona],
+      );
+      setPersonaVoiceBindings((current) => {
+        const next = { ...current };
+        if (voicePreset) {
+          next[nextId] = voicePreset;
+        } else {
+          delete next[nextId];
+        }
+        return next;
+      });
+      setActivePersonaId(nextId);
+    },
+    [],
+  );
 
   const handleDeletePersona = useCallback((personaId: string) => {
     setPersonas((current) => {
@@ -4834,53 +4851,7 @@ function App() {
   }, []);
 
   const applyPersonaVoiceBinding = useCallback((binding: PersonaVoiceBinding) => {
-    setAiSettings((current) => {
-      if (
-        binding.provider === 'piper' &&
-        current.ttsProvider === 'piper' &&
-        current.ttsVoice === binding.voiceId
-      ) {
-        return current;
-      }
-      if (
-        binding.provider === 'fish-speech' &&
-        current.ttsProvider === 'fish-speech' &&
-        current.fishSpeechVoiceId === binding.voiceId &&
-        (!binding.modelId || current.fishSpeechModel === binding.modelId)
-      ) {
-        return current;
-      }
-      if (
-        binding.provider === 'inworld' &&
-        current.ttsProvider === 'inworld' &&
-        current.inworldVoiceId === binding.voiceId &&
-        (!binding.modelId || current.inworldModelId === binding.modelId)
-      ) {
-        return current;
-      }
-
-      if (binding.provider === 'piper') {
-        return {
-          ...current,
-          ttsProvider: 'piper',
-          ttsVoice: binding.voiceId,
-        };
-      }
-      if (binding.provider === 'fish-speech') {
-        return {
-          ...current,
-          fishSpeechModel: binding.modelId || current.fishSpeechModel,
-          fishSpeechVoiceId: binding.voiceId,
-          ttsProvider: 'fish-speech',
-        };
-      }
-      return {
-        ...current,
-        inworldModelId: binding.modelId || current.inworldModelId,
-        inworldVoiceId: binding.voiceId,
-        ttsProvider: 'inworld',
-      };
-    });
+    setAiSettings((current) => applyPersonaVoiceBindingToSettings(current, binding));
   }, []);
 
   const handleApplyPersonaVoice = useCallback(
@@ -4896,39 +4867,13 @@ function App() {
 
   const handleUseCurrentVoiceAsPersonaDefault = useCallback(
     (personaId: string) => {
-      const now = Date.now();
-      let binding: PersonaVoiceBinding | null = null;
-      if (ttsRuntimeSettings.ttsProvider === 'piper') {
-        const voice = ttsVoices.find((entry) => entry.key === ttsRuntimeSettings.ttsVoice);
-        binding = {
-          label: voice?.name ?? ttsRuntimeSettings.ttsVoice,
-          provider: 'piper',
-          updatedAt: now,
-          voiceId: ttsRuntimeSettings.ttsVoice,
-        };
-      } else if (
-        ttsRuntimeSettings.ttsProvider === 'fish-speech' &&
-        ttsRuntimeSettings.fishSpeechVoiceId.trim()
-      ) {
-        binding = {
-          label: `Fish Speech ${ttsRuntimeSettings.fishSpeechVoiceId.trim()}`,
-          modelId: ttsRuntimeSettings.fishSpeechModel,
-          provider: 'fish-speech',
-          updatedAt: now,
-          voiceId: ttsRuntimeSettings.fishSpeechVoiceId.trim(),
-        };
-      } else if (
-        ttsRuntimeSettings.ttsProvider === 'inworld' &&
-        ttsRuntimeSettings.inworldVoiceId.trim()
-      ) {
-        binding = {
-          label: `Inworld ${ttsRuntimeSettings.inworldVoiceId.trim()}`,
-          modelId: ttsRuntimeSettings.inworldModelId,
-          provider: 'inworld',
-          updatedAt: now,
-          voiceId: ttsRuntimeSettings.inworldVoiceId.trim(),
-        };
-      }
+      const piperVoice =
+        ttsRuntimeSettings.ttsProvider === 'piper'
+          ? ttsVoices.find((entry) => entry.key === ttsRuntimeSettings.ttsVoice)
+          : null;
+      const binding = createPersonaVoiceBindingFromSettings(ttsRuntimeSettings, {
+        label: piperVoice?.name,
+      });
 
       if (!binding) {
         return;
@@ -4942,34 +4887,38 @@ function App() {
     [ttsRuntimeSettings, ttsVoices],
   );
 
-  const handleSaveVoiceLabVoice = useCallback((voice: VoiceLabVoice) => {
-    setVoiceLabVoices((current) =>
-      current.some((entry) => entry.id === voice.id)
-        ? current.map((entry) => (entry.id === voice.id ? voice : entry))
-        : [...current, voice],
-    );
+  const handleSaveVoiceLabVoice = useCallback(
+    (voice: VoiceLabVoice) => {
+      setVoiceLabVoices((current) =>
+        current.some((entry) => entry.id === voice.id)
+          ? current.map((entry) => (entry.id === voice.id ? voice : entry))
+          : [...current, voice],
+      );
 
-    const voiceId = voice.providerVoiceId.trim();
-    if (!voiceId || voice.assignedPersonaIds.length === 0) {
-      return;
-    }
-
-    const binding: PersonaVoiceBinding = {
-      customVoiceId: voice.id,
-      label: voice.name,
-      modelId: voice.modelId || undefined,
-      provider: voice.provider,
-      updatedAt: voice.updatedAt,
-      voiceId,
-    };
-    setPersonaVoiceBindings((current) => {
-      const next = { ...current };
-      for (const personaId of voice.assignedPersonaIds) {
-        next[personaId] = binding;
+      const voiceId = voice.providerVoiceId.trim();
+      if (!voiceId || voice.assignedPersonaIds.length === 0) {
+        return;
       }
-      return next;
-    });
-  }, []);
+
+      const binding: PersonaVoiceBinding = {
+        customVoiceId: voice.id,
+        label: voice.name,
+        modelId: voice.modelId || undefined,
+        provider: voice.provider,
+        tuning: capturePersonaVoiceTuning(voice.provider, ttsRuntimeSettings),
+        updatedAt: voice.updatedAt,
+        voiceId,
+      };
+      setPersonaVoiceBindings((current) => {
+        const next = { ...current };
+        for (const personaId of voice.assignedPersonaIds) {
+          next[personaId] = binding;
+        }
+        return next;
+      });
+    },
+    [ttsRuntimeSettings],
+  );
 
   const handleDeleteVoiceLabVoice = useCallback((voiceId: string) => {
     setVoiceLabVoices((current) => current.filter((voice) => voice.id !== voiceId));

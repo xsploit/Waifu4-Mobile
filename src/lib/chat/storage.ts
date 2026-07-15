@@ -54,6 +54,7 @@ import {
 } from './memory-shared';
 import { normalizeReplyLengthMode } from './reply-length';
 import { normalizeAffectState } from './affect-bridge';
+import { capturePersonaVoiceTuning } from './persona-voice';
 
 function getLocalStorage() {
   if (typeof window === 'undefined') {
@@ -166,6 +167,20 @@ function normalizePersonaVoiceBinding(value: unknown): PersonaVoiceBinding | nul
     return null;
   }
 
+  const tuningSource =
+    source.tuning && typeof source.tuning === 'object' && !Array.isArray(source.tuning)
+      ? source.tuning
+      : null;
+  const tuning = tuningSource
+    ? capturePersonaVoiceTuning(
+        provider,
+        normalizeAiSettings({
+          ...createDefaultAiSettings(),
+          ...tuningSource,
+        }),
+      )
+    : undefined;
+
   return {
     customVoiceId:
       typeof source.customVoiceId === 'string' && source.customVoiceId.trim()
@@ -174,6 +189,7 @@ function normalizePersonaVoiceBinding(value: unknown): PersonaVoiceBinding | nul
     label: String(source.label ?? voiceId).slice(0, 120),
     modelId: normalizeProviderVoiceModelId(provider, source.modelId) || undefined,
     provider,
+    tuning,
     updatedAt:
       typeof source.updatedAt === 'number' && Number.isFinite(source.updatedAt)
         ? Math.max(0, Math.round(source.updatedAt))

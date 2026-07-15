@@ -134,7 +134,11 @@ type SettingsPanelProps = {
   onRunBackendGrilloSemanticIndexing: () => void;
   onRunBackendGrilloTick: () => void;
   onRunMemoryAgent: () => void;
-  onSavePersona: (draft: PersonaDraft, personaId?: string) => void;
+  onSavePersona: (
+    draft: PersonaDraft,
+    personaId?: string,
+    voicePreset?: PersonaVoiceBinding,
+  ) => void;
   onSaveVoiceLabVoice: (voice: VoiceLabVoice) => void;
   onSelectVoice: (voiceId: string) => void;
   onSetTwitchChannel: (channel: string) => void;
@@ -367,10 +371,17 @@ export function SettingsPanel({
     ) : activeTab === 'character' ? (
       <CharacterTab
         activePersona={activePersona}
+        aiSettings={aiSettings}
         onActivatePersona={onActivatePersona}
         onDeletePersona={onDeletePersona}
         onSavePersona={onSavePersona}
+        personaVoiceBinding={activePersona ? personaVoiceBindings[activePersona.id] : undefined}
         personas={personas}
+        remoteTtsVoices={[
+          ...remoteTtsVoiceCatalog['fish-speech'],
+          ...remoteTtsVoiceCatalog.inworld,
+        ]}
+        ttsVoices={ttsVoices}
       />
     ) : activeTab === 'voice-lab' ? (
       <VoiceLabTab

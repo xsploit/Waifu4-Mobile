@@ -114,11 +114,42 @@ export type AiSettings = {
   lipSyncVolumeInfluence: number;
 };
 
+export type PersonaVoiceTuning = Partial<
+  Pick<
+    AiSettings,
+    | 'remoteTtsMode'
+    | 'ttsSimulatedStreaming'
+    | 'fishSpeechVoiceScope'
+    | 'fishSpeechLatency'
+    | 'fishSpeechTransport'
+    | 'fishSpeechFormat'
+    | 'fishSpeechSampleRate'
+    | 'fishSpeechConditionOnPreviousChunks'
+    | 'fishSpeechChunkLength'
+    | 'fishSpeechLiveChunkingStrategy'
+    | 'inworldTransport'
+    | 'inworldSampleRate'
+    | 'inworldTimestampType'
+    | 'inworldTimestampTransportStrategy'
+    | 'inworldDeliveryMode'
+    | 'inworldBufferCharThreshold'
+    | 'inworldMaxBufferDelayMs'
+    | 'inworldAutoMode'
+    | 'ttsPlaybackRate'
+    | 'ttsVolume'
+    | 'lipSyncMode'
+    | 'lipSyncSmoothing'
+    | 'lipSyncGain'
+    | 'lipSyncVolumeInfluence'
+  >
+>;
+
 export type PersonaVoiceBinding = {
   customVoiceId?: string;
   label: string;
   modelId?: string;
   provider: PersonaVoiceProvider;
+  tuning?: PersonaVoiceTuning;
   updatedAt: number;
   voiceId: string;
 };

@@ -671,6 +671,44 @@ describe('chat settings persistence', () => {
     expect(loaded.voiceLabVoices[0]?.modelId).toBe('s2');
   });
 
+  it('persists normalized provider tuning with persona voice presets', async () => {
+    window.localStorage.setItem(
+      STORAGE_KEYS.personaVoiceBindings,
+      JSON.stringify({
+        [DEFAULT_PERSONA.id]: {
+          label: 'Hikari Fish',
+          modelId: 's2.1-pro-free',
+          provider: 'fish-speech',
+          tuning: {
+            fishSpeechChunkLength: 9999,
+            fishSpeechTransport: 'timestamp-sse',
+            inworldTransport: 'websocket',
+            lipSyncGain: 1.4,
+            ttsOutputMode: 'discord-only',
+          },
+          updatedAt: 1778889600000,
+          voiceId: 'fish-hikari',
+        },
+      }),
+    );
+
+    const loaded = await loadPersistedChatState();
+    const binding = loaded.personaVoiceBindings[DEFAULT_PERSONA.id];
+
+    expect(binding).toMatchObject({
+      modelId: 's2.1-pro-free',
+      provider: 'fish-speech',
+      tuning: {
+        fishSpeechChunkLength: 300,
+        fishSpeechTransport: 'timestamp-sse',
+        lipSyncGain: 1.4,
+      },
+      voiceId: 'fish-hikari',
+    });
+    expect(binding?.tuning).not.toHaveProperty('inworldTransport');
+    expect(binding?.tuning).not.toHaveProperty('ttsOutputMode');
+  });
+
   it('normalizes copied chat model ids away from provider embedding settings', async () => {
     window.localStorage.setItem(
       STORAGE_KEYS.aiSettings,
