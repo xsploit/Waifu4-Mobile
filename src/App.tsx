@@ -4384,7 +4384,6 @@ function App() {
       setVisualSettings(hydratedVisualSettings);
 
       setHydrated(true);
-      void loadAvailableModels();
       void refreshAiProxyHealth();
       void loadTtsVoices();
     }
@@ -4394,7 +4393,7 @@ function App() {
     return () => {
       cancelled = true;
     };
-  }, [loadAvailableModels, loadTtsVoices, refreshAiProxyHealth]);
+  }, [loadTtsVoices, refreshAiProxyHealth]);
 
   useEffect(() => {
     if (!menuOpen) {
