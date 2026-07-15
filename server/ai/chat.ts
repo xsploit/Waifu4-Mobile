@@ -6,7 +6,7 @@ import {
   normalizeLiveTtsBridge,
   waitForLiveTtsBridge,
 } from './liveTtsBridge';
-import { completeChat, streamChat } from './llmGateway';
+import { completeChat, streamChatWithCompatibilityFallback } from './llmGateway';
 import type { StreamChatResult } from './llmGateway';
 import { readProviderKeys } from './providerKeys';
 import { streamFishTtsTextStream } from '../tts/FishTtsStream';
@@ -51,6 +51,7 @@ const chatRequestInputSchema = z.object({
   replyFormat: replyFormatSchema.optional(),
   responseFormat: z.unknown().optional(),
   reasoningEffort: z.enum(['minimal', 'low', 'medium', 'high']).optional(),
+  openRouterReasoningEffort: z.enum(['none', 'minimal', 'low', 'medium', 'high']).optional(),
   temperature: z.number().min(0).max(2).optional(),
   maxTokens: z.number().int().positive().optional(),
   toolChoiceMode: toolChoiceModeSchema.optional(),
@@ -76,6 +77,7 @@ export function normalizeChatRequest(input: z.infer<typeof chatRequestInputSchem
     messages: input.messages,
     replyFormat: input.replyFormat ?? (input.responseFormat ? 'structured' : 'text'),
     reasoningEffort: input.reasoningEffort,
+    openRouterReasoningEffort: input.openRouterReasoningEffort,
     temperature: input.temperature,
     maxTokens: input.maxTokens,
     toolChoiceMode: input.toolChoiceMode,
@@ -257,7 +259,7 @@ export async function handleChat(
     : null;
 
   try {
-    const result = await streamChat(
+    const result = await streamChatWithCompatibilityFallback(
       {
         ...request,
         apiKey: keys.llmKey,

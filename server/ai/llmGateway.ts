@@ -25,6 +25,7 @@ import {
   extractStructuredReply,
   monotonicDelta,
 } from '../../src/brain/replyParser';
+import type { OpenRouterReasoningEffort } from '../../src/brain/modelCapability';
 import { createLogger } from '../../src/shared/logger';
 import { createTavilyTools } from './tavilyTools';
 
@@ -38,6 +39,8 @@ export type StreamChatRequest = {
   temperature?: number;
   maxTokens?: number;
   reasoningEffort?: ReasoningEffort;
+  openRouterReasoningEffort?: OpenRouterReasoningEffort;
+  structuredTransport?: 'native' | 'strict-tool';
   apiKey: string;
   byokOpenAiKey?: string;
   tavilyKey?: string;
@@ -63,6 +66,7 @@ export type CompleteChatRequest = {
   temperature?: number;
   maxTokens?: number;
   reasoningEffort?: ReasoningEffort;
+  openRouterReasoningEffort?: OpenRouterReasoningEffort;
   apiKey: string;
   byokOpenAiKey?: string;
   tavilyKey?: string;
@@ -116,7 +120,7 @@ export type StreamChatResult = {
 };
 
 export function buildProviderOptions(
-  req: Pick<StreamChatRequest, 'provider' | 'model' | 'reasoningEffort' | 'byokOpenAiKey' | 'openRouterRouting' | 'vercelRouting'>,
+  req: Pick<StreamChatRequest, 'provider' | 'model' | 'reasoningEffort' | 'openRouterReasoningEffort' | 'byokOpenAiKey' | 'openRouterRouting' | 'vercelRouting'>,
   structured: boolean,
   hasTools = false,
 ): Record<string, unknown> | undefined {
@@ -175,10 +179,20 @@ export function buildProviderOptions(
       provider.only = req.openRouterRouting.providers;
       provider.allow_fallbacks = req.openRouterRouting.allowFallbacks ?? false;
     }
-    options.openrouter = {
-      reasoning: { effort: 'none' },
+    const openrouter = {
+      ...(req.openRouterReasoningEffort
+        ? {
+            reasoning: {
+              effort: req.openRouterReasoningEffort,
+              ...(req.openRouterReasoningEffort === 'none' ? {} : { exclude: true }),
+            },
+          }
+        : {}),
       ...(Object.keys(provider).length > 0 ? { provider } : {}),
     };
+    if (Object.keys(openrouter).length > 0) {
+      options.openrouter = openrouter;
+    }
   }
 
   return Object.keys(options).length > 0 ? options : undefined;
@@ -310,8 +324,10 @@ export async function streamChat(
 ): Promise<StreamChatResult> {
   const structured = req.replyFormat === 'structured';
   const strictReplyTool = structured
-    && req.provider === 'vercel-gateway'
-    && req.model === 'deepseek/deepseek-v4-pro';
+    && (
+      req.structuredTransport === 'strict-tool'
+      || (req.provider === 'vercel-gateway' && req.model === 'deepseek/deepseek-v4-pro')
+    );
   const model = createModel(req, structured && !strictReplyTool);
   const tavilyTools = req.toolChoiceMode === 'off' ? undefined : createTavilyTools(req.tavilyKey);
   const tools = strictReplyTool
@@ -482,4 +498,37 @@ export async function streamChat(
     provider: req.provider,
     model: req.model,
   };
+}
+
+function isStructuredCompatibilityError(error: unknown) {
+  const message = error instanceof Error ? error.message : String(error);
+  return /no object generated|could not parse|failed to parse|invalid json|structured output/i.test(message);
+}
+
+/** Retry native structured-output failures through the same schema as a strict tool call. */
+export async function streamChatWithCompatibilityFallback(
+  req: StreamChatRequest,
+  onDelta: (text: string) => void,
+): Promise<StreamChatResult> {
+  let emittedVisibleText = false;
+  const emit = (text: string) => {
+    if (text) {
+      emittedVisibleText = true;
+    }
+    onDelta(text);
+  };
+
+  try {
+    return await streamChat(req, emit);
+  } catch (error) {
+    if (req.replyFormat !== 'structured' || emittedVisibleText || !isStructuredCompatibilityError(error)) {
+      throw error;
+    }
+    log.warn('native structured reply failed before visible output; retrying strict tool transport', {
+      provider: req.provider,
+      model: req.model,
+      error: error instanceof Error ? error.message : String(error),
+    });
+    return streamChat({ ...req, structuredTransport: 'strict-tool' }, emit);
+  }
 }

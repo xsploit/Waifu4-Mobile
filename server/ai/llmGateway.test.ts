@@ -150,12 +150,11 @@ describe('LLM gateway provider options', () => {
     ).toEqual({
       openrouter: {
         provider: { require_parameters: true },
-        reasoning: { effort: 'none' },
       },
     });
   });
 
-  it('disables OpenRouter reasoning without requiring structured parameters for plain text', () => {
+  it('does not send reasoning options to ordinary OpenRouter models', () => {
     expect(
       buildProviderOptions(
         {
@@ -165,7 +164,30 @@ describe('LLM gateway provider options', () => {
         false,
         false,
       ),
-    ).toEqual({ openrouter: { reasoning: { effort: 'none' } } });
+    ).toBeUndefined();
+  });
+
+  it('uses explicit catalog-derived OpenRouter reasoning policy', () => {
+    expect(buildProviderOptions({
+      provider: 'openrouter-responses',
+      model: 'moonshotai/kimi-k2.6',
+      openRouterReasoningEffort: 'none',
+    }, true)).toEqual({
+      openrouter: {
+        provider: { require_parameters: true },
+        reasoning: { effort: 'none' },
+      },
+    });
+    expect(buildProviderOptions({
+      provider: 'openrouter-responses',
+      model: 'google/gemini-3.5-flash',
+      openRouterReasoningEffort: 'minimal',
+    }, true)).toEqual({
+      openrouter: {
+        provider: { require_parameters: true },
+        reasoning: { effort: 'minimal', exclude: true },
+      },
+    });
   });
 
   it('disables DeepSeek thinking for every Vercel DeepSeek model and lane', () => {

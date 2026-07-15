@@ -81,6 +81,7 @@ import { getAffectExpressionBoost, getMetadataVad, updateAffectState } from './l
 import {
   isEmbeddingModel,
   isChatModel,
+  selectOpenRouterReasoningEffort,
   selectReplyFormat,
   selectVercelEndpointReplyFormat,
   supportsImageInput,
@@ -1244,6 +1245,7 @@ async function requestChatCompletion({
   ttsBridge,
   providerKeyVaultWorkspaceId,
   openRouterRouting,
+  openRouterReasoningEffort,
   vercelRouting,
   signal,
 }: {
@@ -1266,6 +1268,7 @@ async function requestChatCompletion({
   ttsBridge?: RemoteTtsRequest;
   providerKeyVaultWorkspaceId?: string;
   openRouterRouting?: ReturnType<typeof buildOpenRouterRouting>;
+  openRouterReasoningEffort?: ReturnType<typeof selectOpenRouterReasoningEffort>;
   vercelRouting?: ReturnType<typeof buildVercelRouting>;
   signal?: AbortSignal;
 }): Promise<AppCompletionResponse> {
@@ -1288,6 +1291,7 @@ async function requestChatCompletion({
     mode,
     model: safeModel,
     openAiStateMode: 'stateless',
+    openRouterReasoningEffort,
     openRouterRouting,
     vercelRouting,
     responseFormat,
@@ -6076,6 +6080,11 @@ function App() {
       const assistantResponseFormat = replyFormat === 'structured'
         ? ASSISTANT_REPLY_JSON_FORMAT
         : undefined;
+      const openRouterReasoningEffort = settings.llmProvider === 'openrouter-responses'
+        ? selectOpenRouterReasoningEffort(
+            availableModelMetadataRef.current.get(selectedModel) ?? null,
+          )
+        : undefined;
       const prompt = buildChatAiPrompt(
         job,
         persona,
@@ -6358,6 +6367,7 @@ function App() {
           transportMode: settings.aiTransportMode,
           ttsBridge,
           providerKeyVaultWorkspaceId,
+          openRouterReasoningEffort,
           openRouterRouting: buildOpenRouterRouting(settings),
           vercelRouting: buildVercelRouting(settings),
           signal: chatAbortController.signal,

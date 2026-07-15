@@ -1,4 +1,13 @@
-import type { GatewayId, ReplyFormat } from './BrainTypes';
+import type { GatewayId, ReasoningEffort, ReplyFormat } from './BrainTypes';
+
+export type OpenRouterReasoningEffort = ReasoningEffort | 'none';
+
+export type ProviderReasoningInfo = {
+  defaultEffort?: string;
+  defaultEnabled?: boolean;
+  mandatory?: boolean;
+  supportedEfforts?: string[];
+};
 
 /**
  * Minimum model metadata the lane decision needs. A model list can never be
@@ -13,6 +22,7 @@ export type ProviderModelInfo = {
   maxTokens?: number;
   name?: string;
   outputModalities?: string[];
+  reasoning?: ProviderReasoningInfo;
   supportedParameters: string[];
   supportsImplicitCaching?: boolean;
   supportsStructuredOutputs: boolean;
@@ -55,6 +65,30 @@ function normalizeTags(values: string[]) {
 
 function asNumber(value: unknown) {
   return typeof value === 'number' && Number.isFinite(value) ? value : undefined;
+}
+
+function parseReasoningInfo(value: unknown): ProviderReasoningInfo | undefined {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    return undefined;
+  }
+  const reasoning = value as {
+    default_effort?: unknown;
+    default_enabled?: unknown;
+    mandatory?: unknown;
+    supported_efforts?: unknown;
+  };
+  const supportedEfforts = asStringArray(reasoning.supported_efforts);
+  const parsed: ProviderReasoningInfo = {
+    ...(typeof reasoning.default_effort === 'string'
+      ? { defaultEffort: reasoning.default_effort }
+      : {}),
+    ...(typeof reasoning.default_enabled === 'boolean'
+      ? { defaultEnabled: reasoning.default_enabled }
+      : {}),
+    ...(typeof reasoning.mandatory === 'boolean' ? { mandatory: reasoning.mandatory } : {}),
+    ...(supportedEfforts.length > 0 ? { supportedEfforts } : {}),
+  };
+  return Object.keys(parsed).length > 0 ? parsed : undefined;
 }
 
 export function endpointSupportsStructuredOutputs(endpoint: ProviderEndpointInfo): boolean {
@@ -142,6 +176,7 @@ export function parseOpenRouterModels(payload: unknown): ProviderModelInfo[] {
       context_length?: unknown;
       id?: unknown;
       name?: unknown;
+      reasoning?: unknown;
       supported_parameters?: unknown;
       top_provider?: { max_completion_tokens?: unknown; supported_parameters?: unknown };
       type?: unknown;
@@ -155,6 +190,7 @@ export function parseOpenRouterModels(payload: unknown): ProviderModelInfo[] {
     ]);
     const inputModalities = asStringArray(e.architecture?.input_modalities);
     const outputModalities = asStringArray(e.architecture?.output_modalities);
+    const reasoning = parseReasoningInfo(e.reasoning);
     models.push({
       ...(asNumber(e.context_length) !== undefined ? { contextWindow: asNumber(e.context_length) } : {}),
       id: e.id,
@@ -164,6 +200,7 @@ export function parseOpenRouterModels(payload: unknown): ProviderModelInfo[] {
       ...(typeof e.name === 'string' ? { name: e.name } : {}),
       ...(inputModalities.length > 0 ? { inputModalities: normalizeTags(inputModalities) } : {}),
       ...(outputModalities.length > 0 ? { outputModalities: normalizeTags(outputModalities) } : {}),
+      ...(reasoning ? { reasoning } : {}),
       supportedParameters: [...params],
       supportsStructuredOutputs: params.has(STRUCTURED_PARAM),
       tags: normalizeTags(inputModalities),
@@ -261,6 +298,25 @@ export function selectReplyFormat(
     return info.supportsStructuredOutputs ? 'structured' : 'text';
   }
   return info?.supportsStructuredOutputs ? 'structured' : 'text';
+}
+
+/**
+ * OpenRouter reasoning is model-specific. Omitting the option keeps ordinary
+ * models from being filtered out by require_parameters. Optional reasoning is
+ * disabled; mandatory reasoning uses the cheapest effort the model advertises.
+ */
+export function selectOpenRouterReasoningEffort(
+  info?: ProviderModelInfo | null,
+): OpenRouterReasoningEffort | undefined {
+  const reasoning = info?.reasoning;
+  if (!reasoning) {
+    return undefined;
+  }
+  if (!reasoning.mandatory) {
+    return 'none';
+  }
+  const supported = new Set((reasoning.supportedEfforts ?? []).map((effort) => effort.toLowerCase()));
+  return (['minimal', 'low', 'medium', 'high'] as const).find((effort) => supported.has(effort));
 }
 
 export function isChatModel(info?: ProviderModelInfo | null) {

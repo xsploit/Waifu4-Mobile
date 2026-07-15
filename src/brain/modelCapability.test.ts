@@ -5,6 +5,7 @@ import {
   isEmbeddingModel,
   parseOpenRouterModels,
   parseVercelGatewayModels,
+  selectOpenRouterReasoningEffort,
   selectReplyFormat,
   selectVercelEndpointReplyFormat,
   supportsImageInput,
@@ -17,6 +18,12 @@ const SAMPLE = {
       architecture: { input_modalities: ['text', 'IMAGE'], output_modalities: ['text'] },
       context_length: 128000,
       name: 'GPT-4o mini',
+      reasoning: {
+        mandatory: true,
+        default_enabled: true,
+        default_effort: 'medium',
+        supported_efforts: ['high', 'medium', 'low', 'minimal'],
+      },
       supported_parameters: ['tools', 'response_format', 'structured_outputs'],
       top_provider: { max_completion_tokens: 16384, supported_parameters: ['structured_outputs'] },
     },
@@ -45,6 +52,12 @@ describe('parseOpenRouterModels', () => {
       maxTokens: 16384,
       name: 'GPT-4o mini',
       outputModalities: ['text'],
+      reasoning: {
+        defaultEffort: 'medium',
+        defaultEnabled: true,
+        mandatory: true,
+        supportedEfforts: ['high', 'medium', 'low', 'minimal'],
+      },
       supportsStructuredOutputs: true,
       tags: ['text', 'image'],
     });
@@ -66,6 +79,29 @@ describe('parseOpenRouterModels', () => {
     expect(parseOpenRouterModels(null)).toEqual([]);
     expect(parseOpenRouterModels({ data: 'nope' })).toEqual([]);
     expect(parseOpenRouterModels({ data: [42, null, {}] })).toEqual([]);
+  });
+});
+
+describe('selectOpenRouterReasoningEffort', () => {
+  it('omits ordinary models, disables optional reasoning, and minimizes mandatory reasoning', () => {
+    expect(selectOpenRouterReasoningEffort(null)).toBeUndefined();
+    expect(selectOpenRouterReasoningEffort({
+      id: 'openai/gpt-4o-mini',
+      supportedParameters: [],
+      supportsStructuredOutputs: true,
+    })).toBeUndefined();
+    expect(selectOpenRouterReasoningEffort({
+      id: 'moonshotai/kimi-k2.6',
+      reasoning: { defaultEnabled: true, mandatory: false },
+      supportedParameters: ['reasoning'],
+      supportsStructuredOutputs: true,
+    })).toBe('none');
+    expect(selectOpenRouterReasoningEffort({
+      id: 'google/gemini-3.5-flash',
+      reasoning: { mandatory: true, supportedEfforts: ['high', 'low', 'minimal'] },
+      supportedParameters: ['reasoning'],
+      supportsStructuredOutputs: true,
+    })).toBe('minimal');
   });
 });
 
