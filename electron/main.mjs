@@ -15,6 +15,7 @@ import path from 'node:path';
 import { randomBytes } from 'node:crypto';
 import { spawn } from 'node:child_process';
 import { fileURLToPath, pathToFileURL } from 'node:url';
+import { stopOwnedBackendChild } from './backend-lifecycle.mjs';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const appRoot = path.resolve(__dirname, '..');
@@ -417,16 +418,17 @@ async function stopBackendIfNeeded() {
     return;
   }
   const child = backendProcess;
-  backendStopping ??= new Promise((resolve) => {
-    const timeout = setTimeout(() => {
-      child.kill('SIGKILL');
-      resolve();
-    }, 3000);
-    child.once('exit', () => {
-      clearTimeout(timeout);
-      resolve();
-    });
-    child.kill('SIGTERM');
+  backendStopping ??= stopOwnedBackendChild({
+    child,
+    requestShutdown: () =>
+      postBackendJson(backendPort, '/desktop/shutdown', 1500, getBackendOwnerHeaders()),
+    onShutdownError: (error) => {
+      logDesktop(`failed to request backend shutdown: ${formatError(error)}`);
+    },
+  }).then((result) => {
+    if (result.forced) {
+      logDesktop('backend did not exit after graceful shutdown request; forced process exit');
+    }
   }).finally(() => {
     if (backendProcess === child) {
       backendProcess = null;

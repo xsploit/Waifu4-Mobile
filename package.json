@@ -40,6 +40,7 @@
     "smoke:runtime": "tsx scripts/smoke-runtime.ts",
     "typecheck": "tsc --noEmit --pretty",
     "test": "vitest run",
+    "test:electron": "node --test electron/*.test.mjs",
     "test:watch": "vitest"
   },
   "dependencies": {
