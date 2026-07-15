@@ -7425,7 +7425,9 @@ function App() {
         modelUrl={modelUrl}
         onAnimationTelemetry={patchEmotionTelemetryEvent}
         onFacialExpressionTelemetry={patchEmotionTelemetryEvent}
-        onVrmTelemetry={setVrmTelemetry}
+        onVrmTelemetry={
+          menuOpen && activeTab === 'emotion-telemetry' ? setVrmTelemetry : undefined
+        }
         sequencerSettings={sequencerSettings}
         setSequencerSettings={setSequencerSettings}
         setVisualSettings={setVisualSettings}
