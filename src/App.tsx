@@ -2179,6 +2179,9 @@ function App() {
   const [memoryGraphSummary, setMemoryGraphSummary] = useState<LadybugMemoryGraphSummary | null>(
     null,
   );
+  const memoryDiagnosticsVisible = menuOpen && activeTab === 'context';
+  const memoryDiagnosticsVisibleRef = useRef(memoryDiagnosticsVisible);
+  memoryDiagnosticsVisibleRef.current = memoryDiagnosticsVisible;
   const [memoryPromptDebug, setMemoryPromptDebug] = useState<MemoryPromptDebugSnapshot | null>(
     null,
   );
@@ -2338,7 +2341,11 @@ function App() {
     setMemoryAgentPendingCounts({ ...memoryAgentPendingChatTurnCountsRef.current });
   }, []);
 
-  const refreshMemoryBackendStatus = useCallback(() => {
+  const refreshMemoryBackendStatus = useCallback((force = false) => {
+    if (!force && !memoryDiagnosticsVisibleRef.current) {
+      return Promise.resolve();
+    }
+
     return Promise.all([
       loadLadybugMemoryStatus(),
       loadLadybugMemoryGraph(activeRelationshipStateKeyRef.current),
@@ -2358,12 +2365,16 @@ function App() {
   }, []);
 
   useEffect(() => {
-    void refreshMemoryBackendStatus();
+    if (!memoryDiagnosticsVisible) {
+      return;
+    }
+
+    void refreshMemoryBackendStatus(true);
     const timer = window.setInterval(() => {
       void refreshMemoryBackendStatus();
     }, 15000);
     return () => window.clearInterval(timer);
-  }, [refreshMemoryBackendStatus]);
+  }, [memoryDiagnosticsVisible, refreshMemoryBackendStatus]);
 
   const getScopedRelationshipMemory = useCallback((stateKey: string) => {
     return relationshipMemoriesRef.current[stateKey] ?? createDefaultRelationshipMemory();
