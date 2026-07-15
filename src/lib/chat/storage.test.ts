@@ -15,6 +15,7 @@ import {
   loadPersistedChatState,
   normalizePersistedChatStateSnapshot,
   savePersistedChatState,
+  savePersistedUiState,
 } from './storage';
 import { createDefaultSequencerSettings, createDefaultVisualSettings } from '../menu/defaults';
 import type { PersistedChatState } from './types';
@@ -38,6 +39,23 @@ describe('chat settings persistence', () => {
 
   afterEach(() => {
     vi.unstubAllGlobals();
+  });
+
+  it('persists a draft without rewriting unrelated settings', async () => {
+    window.localStorage.setItem(STORAGE_KEYS.aiSettings, 'unchanged');
+
+    await savePersistedUiState({
+      chatDraft: 'new draft',
+      chatLogOpen: false,
+      menuOpen: true,
+    });
+
+    expect(window.localStorage.getItem(STORAGE_KEYS.aiSettings)).toBe('unchanged');
+    expect(JSON.parse(window.localStorage.getItem(STORAGE_KEYS.uiState) ?? '{}')).toEqual({
+      chatDraft: 'new draft',
+      chatLogOpen: false,
+      menuOpen: false,
+    });
   });
 
   it('round-trips the current operator settings surface', async () => {

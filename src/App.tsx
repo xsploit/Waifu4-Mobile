@@ -128,7 +128,11 @@ import {
   commitScopedRelationshipMemoryState,
   shouldExposeScopedRelationshipMemory,
 } from './lib/chat/scoped-relationship-memory';
-import { loadPersistedChatState, savePersistedChatState } from './lib/chat/storage';
+import {
+  loadPersistedChatState,
+  savePersistedChatState,
+  savePersistedUiState,
+} from './lib/chat/storage';
 import type {
   AiSettings,
   AiProxyHealth,
@@ -4506,13 +4510,11 @@ function App() {
     aiSettings,
     chatHistories,
     chatHistory,
-    chatInput,
     chatLogOpen,
     currentCustomVrmModelId,
     currentBundledModelId,
     hydrated,
     emotionTelemetryEvents,
-    menuOpen,
     personas,
     personaVoiceBindings,
     relationshipMemory,
@@ -4524,6 +4526,42 @@ function App() {
     visualSettings,
     voiceLabVoices,
   ]);
+
+  useEffect(() => {
+    if (!hydrated) {
+      return;
+    }
+
+    let cancelled = false;
+    let idleHandle: number | null = null;
+    const persist = () => {
+      if (cancelled) {
+        return;
+      }
+      void savePersistedUiState({
+        chatDraft: chatInputRef.current,
+        chatLogOpen,
+        menuOpen: false,
+      }).catch((error) => {
+        console.warn('[App] Failed to persist UI state', error);
+      });
+    };
+    const timer = window.setTimeout(() => {
+      if ('requestIdleCallback' in window) {
+        idleHandle = window.requestIdleCallback(persist, { timeout: 1500 });
+        return;
+      }
+      persist();
+    }, PERSIST_DEBOUNCE_MS);
+
+    return () => {
+      cancelled = true;
+      window.clearTimeout(timer);
+      if (idleHandle !== null) {
+        window.cancelIdleCallback(idleHandle);
+      }
+    };
+  }, [chatInput, chatLogOpen, hydrated]);
 
   useEffect(() => {
     const currentBlobUrls = new Set(

@@ -1780,3 +1780,7 @@ export async function savePersistedChatState(state: PersistedChatState) {
     }),
   );
 }
+
+export async function savePersistedUiState(state: UiState) {
+  await setPersistedItem(STORAGE_KEYS.uiState, JSON.stringify(normalizeUiState(state)));
+}
