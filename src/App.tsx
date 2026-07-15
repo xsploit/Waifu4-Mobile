@@ -2166,6 +2166,8 @@ function App() {
   const [chatHistory, setChatHistory] = useState<ChatMessage[]>([]);
   const [chatHistories, setChatHistories] = useState<Record<string, ChatMessage[]>>({});
   const [chatInput, setChatInput] = useState(() => createDefaultUiState().chatDraft);
+  const chatInputRef = useRef(chatInput);
+  const [chatInputRevision, setChatInputRevision] = useState(0);
   const [chatGenerating, setChatGenerating] = useState(false);
   const [assistantReplyLocked, setAssistantReplyLocked] = useState(false);
   const [chatActivity, setChatActivity] = useState<string | null>(null);
@@ -2302,6 +2304,21 @@ function App() {
   const immediateAiActiveRef = useRef(false);
   const immediateAiRunRef = useRef(0);
   const twitchAiProcessingRef = useRef(false);
+
+  const replaceChatInput = useCallback((value: string) => {
+    chatInputRef.current = value;
+    setChatInput(value);
+    setChatInputRevision((current) => current + 1);
+  }, []);
+
+  const trackChatInput = useCallback((value: string) => {
+    chatInputRef.current = value;
+  }, []);
+
+  const commitChatInput = useCallback((value: string) => {
+    chatInputRef.current = value;
+    setChatInput((current) => (current === value ? current : value));
+  }, []);
   const twitchLastReplyAtRef = useRef(0);
   const twitchBatchTimerRef = useRef<number | null>(null);
   const twitchStreamTranscriptsRef = useRef<TwitchStreamTranscript[]>([]);
@@ -4351,7 +4368,7 @@ function App() {
       setRelationshipMemories(nextRelationshipMemories);
       setMenuOpen(false);
       setChatLogOpen(persistedState.uiState.chatLogOpen);
-      setChatInput(persistedState.uiState.chatDraft);
+      replaceChatInput(persistedState.uiState.chatDraft);
       setActiveTab(persistedState.activeTab);
       setTwitchChannel(hydratedTwitchChannel);
       setTwitchSettings(persistedState.twitchSettings);
@@ -4436,7 +4453,7 @@ function App() {
         uiState: {
           menuOpen: false,
           chatLogOpen,
-          chatDraft: chatInput,
+          chatDraft: chatInputRef.current,
         },
         activeTab,
         currentBundledModelId,
@@ -4941,8 +4958,8 @@ function App() {
   }, [activeRelationshipStateKey, cancelAssistantPresentation]);
 
   const handleClearDraft = useCallback(() => {
-    setChatInput('');
-  }, []);
+    replaceChatInput('');
+  }, [replaceChatInput]);
 
   const handleClearMemory = useCallback(() => {
     const relationshipClear = clearScopedRelationshipMemory(activeRelationshipStateKey);
@@ -4979,7 +4996,7 @@ function App() {
   const handleResetContext = useCallback(() => {
     cancelAssistantPresentation(true);
     setChatGenerating(false);
-    setChatInput('');
+    replaceChatInput('');
     setChatHistories((current) => {
       const next = { ...current, [activeRelationshipStateKey]: [] };
       chatHistoriesRef.current = next;
@@ -4995,7 +5012,12 @@ function App() {
     );
     syncMemoryAgentPendingCounts();
     setMemoryAgentStatus('Local chat context reset. Durable memory was kept.');
-  }, [activeRelationshipStateKey, cancelAssistantPresentation, syncMemoryAgentPendingCounts]);
+  }, [
+    activeRelationshipStateKey,
+    cancelAssistantPresentation,
+    replaceChatInput,
+    syncMemoryAgentPendingCounts,
+  ]);
 
   const runBackendGrilloTickOnce = useCallback(
     async ({
@@ -5375,8 +5397,8 @@ function App() {
   );
 
   const handleSendMessage = useCallback(
-    async (overrideInput?: string) => {
-      const message = (overrideInput ?? chatInput).trim();
+    async (input: string) => {
+      const message = input.trim();
       if (!message) {
         return;
       }
@@ -5392,7 +5414,7 @@ function App() {
         text: message,
         trustedController: currentTwitchSettings.localTrustedControls,
       });
-      setChatInput('');
+      replaceChatInput('');
 
       const handledCommand =
         currentTwitchSettings.commandsEnabled &&
@@ -5438,11 +5460,11 @@ function App() {
         surface: 'local',
       });
     },
-    [activePersona, chatInput, recordRawChatMemoryTurns],
+    [activePersona, recordRawChatMemoryTurns, replaceChatInput],
   );
 
-  const handleSendChatBarMessage = useCallback(() => {
-    void handleSendMessage();
+  const handleSendChatBarMessage = useCallback((input: string) => {
+    void handleSendMessage(input);
   }, [handleSendMessage]);
 
   const handleToggleChatLog = useCallback(() => {
@@ -7233,7 +7255,7 @@ function App() {
       twitchChannel,
       twitchSettings,
       uiState: {
-        chatDraft: chatInput,
+        chatDraft: chatInputRef.current,
         chatLogOpen,
         menuOpen,
       },
@@ -7362,7 +7384,7 @@ function App() {
         relationshipMemoryRef.current = scopedSnapshot.relationshipMemory;
         setRelationshipMemories(next.relationshipMemories);
         relationshipMemoriesRef.current = next.relationshipMemories;
-        setChatInput(next.uiState.chatDraft);
+        replaceChatInput(next.uiState.chatDraft);
         setChatLogOpen(next.uiState.chatLogOpen);
         setActiveTab(next.activeTab);
         setCurrentBundledModelId(next.currentBundledModelId);
@@ -7834,6 +7856,9 @@ function App() {
             className={`chat-bar-toggle ${chatBarOpen ? 'active' : ''}`}
             onClick={(event) => {
               event.stopPropagation();
+              if (chatBarOpen) {
+                commitChatInput(chatInputRef.current);
+              }
               setChatBarOpen((current) => !current);
             }}
             title={chatBarOpen ? 'Hide local chat bar' : 'Show local chat bar'}
@@ -7855,11 +7880,13 @@ function App() {
           {chatBarOpen ? (
             <ChatBar
               activePersonaName={activePersona?.name ?? DEFAULT_PERSONA.name}
+              inputRevision={chatInputRevision}
               inputValue={chatInput}
               isGenerating={chatGenerating || assistantReplyLocked}
               messageCount={chatHistory.length}
               model={aiSettings.model}
-              onInputChange={setChatInput}
+              onInputChange={trackChatInput}
+              onInputCommit={commitChatInput}
               onSend={handleSendChatBarMessage}
             />
           ) : null}

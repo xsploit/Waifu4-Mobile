@@ -6,11 +6,13 @@ function renderChatBar(isGenerating: boolean) {
   return renderToStaticMarkup(
     <ChatBar
       activePersonaName="Hikari"
+      inputRevision={0}
       inputValue="hello"
       isGenerating={isGenerating}
       messageCount={2}
       model="gpt-test"
       onInputChange={() => {}}
+      onInputCommit={() => {}}
       onSend={() => {}}
     />,
   );

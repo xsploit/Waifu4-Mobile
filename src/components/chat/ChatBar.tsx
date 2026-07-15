@@ -1,26 +1,62 @@
-import { memo, useEffect, useRef } from 'react';
+import { memo, useCallback, useEffect, useRef, useState } from 'react';
+
+const DRAFT_COMMIT_DELAY_MS = 600;
 
 type ChatBarProps = {
   activePersonaName: string;
+  inputRevision: number;
   inputValue: string;
   isGenerating: boolean;
   messageCount: number;
   model: string;
   onInputChange: (value: string) => void;
-  onSend: () => void;
+  onInputCommit: (value: string) => void;
+  onSend: (value: string) => void;
 };
 
 export const ChatBar = memo(function ChatBar({
   activePersonaName,
+  inputRevision,
   inputValue,
   isGenerating,
   messageCount,
   model,
   onInputChange,
+  onInputCommit,
   onSend,
 }: ChatBarProps) {
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
+  const commitTimerRef = useRef<number | null>(null);
+  const [draft, setDraft] = useState(inputValue);
   const sendLocked = isGenerating;
+
+  const commitDraft = useCallback(
+    (value: string) => {
+      if (commitTimerRef.current !== null) {
+        window.clearTimeout(commitTimerRef.current);
+        commitTimerRef.current = null;
+      }
+      onInputCommit(value);
+    },
+    [onInputCommit],
+  );
+
+  useEffect(() => {
+    if (commitTimerRef.current !== null) {
+      window.clearTimeout(commitTimerRef.current);
+      commitTimerRef.current = null;
+    }
+    setDraft(inputValue);
+  }, [inputRevision, inputValue]);
+
+  useEffect(
+    () => () => {
+      if (commitTimerRef.current !== null) {
+        window.clearTimeout(commitTimerRef.current);
+      }
+    },
+    [],
+  );
 
   useEffect(() => {
     const frame = window.requestAnimationFrame(() => {
@@ -34,7 +70,7 @@ export const ChatBar = memo(function ChatBar({
     });
 
     return () => window.cancelAnimationFrame(frame);
-  }, [inputValue]);
+  }, [draft]);
 
   return (
     <div
@@ -59,26 +95,38 @@ export const ChatBar = memo(function ChatBar({
             id="yourwifey-chat-input"
             name="yourwifey-chat-input"
             ref={textareaRef}
-            onChange={(event) => onInputChange(event.target.value)}
+            onBlur={() => commitDraft(draft)}
+            onChange={(event) => {
+              const value = event.target.value;
+              setDraft(value);
+              onInputChange(value);
+              if (commitTimerRef.current !== null) {
+                window.clearTimeout(commitTimerRef.current);
+              }
+              commitTimerRef.current = window.setTimeout(
+                () => commitDraft(value),
+                DRAFT_COMMIT_DELAY_MS,
+              );
+            }}
             onKeyDown={(event) => {
               if (event.key === 'Enter' && !event.shiftKey) {
                 event.preventDefault();
                 if (sendLocked) {
                   return;
                 }
-                onSend();
+                onSend(draft);
               }
             }}
             placeholder={`Talk to ${activePersonaName || 'her'}...`}
             rows={1}
-            value={inputValue}
+            value={draft}
           />
 
           <div className="chat-actions">
             <button
               className={`icon-btn primary ${sendLocked ? 'active' : ''}`}
               disabled={sendLocked}
-              onClick={onSend}
+              onClick={() => onSend(draft)}
               title={sendLocked ? 'Wait for the current reply to finish' : 'Send'}
               type="button"
             >
