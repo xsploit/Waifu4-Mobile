@@ -11,6 +11,12 @@ import {
 
 const TAVILY_BASE_URL = 'https://api.tavily.com';
 
+export const TAVILY_TOOL_NAMES = [
+  'tavily_search',
+  'tavily_extract',
+  'tavily_crawl',
+] as const;
+
 export type ToolProgressPhase = 'started' | 'completed' | 'failed';
 
 export type ToolProgressEvent = {

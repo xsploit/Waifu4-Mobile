@@ -110,7 +110,7 @@ describe('chat request normalization', () => {
         },
         {
           stateKey: 'local:persona:hikari-chan',
-          toolNames: ['tavily_search'],
+          toolNames: ['tavily_search', 'tavily_extract', 'tavily_crawl'],
           toolsAvailable: true,
           toolsSource: 'tavily',
         },
@@ -119,7 +119,7 @@ describe('chat request normalization', () => {
       activeStateKey: 'local:persona:hikari-chan',
       stateMode: 'stateless',
       toolsAvailable: true,
-      toolNames: ['tavily_search'],
+      toolNames: ['tavily_search', 'tavily_extract', 'tavily_crawl'],
       transport: 'http-stream',
     });
   });

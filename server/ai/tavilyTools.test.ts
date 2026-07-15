@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { createTavilyTools } from './tavilyTools';
+import { createTavilyTools, TAVILY_TOOL_NAMES } from './tavilyTools';
 
 describe('Tavily tools', () => {
   afterEach(() => {
@@ -9,6 +9,10 @@ describe('Tavily tools', () => {
   it('is disabled when no request-scoped or env key is available', () => {
     expect(createTavilyTools()).toBeUndefined();
     expect(createTavilyTools('   ')).toBeUndefined();
+  });
+
+  it('reports every registered live-chat tool name', () => {
+    expect(Object.keys(createTavilyTools('tvly-test-key') ?? {})).toEqual(TAVILY_TOOL_NAMES);
   });
 
   it('posts search requests with Tavily bearer auth and copied defaults', async () => {

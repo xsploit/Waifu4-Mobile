@@ -9,6 +9,7 @@ import {
 import { completeChat, streamChatWithCompatibilityFallback } from './llmGateway';
 import type { StreamChatResult } from './llmGateway';
 import { readProviderKeys } from './providerKeys';
+import { TAVILY_TOOL_NAMES } from './tavilyTools';
 import { streamFishTtsTextStream } from '../tts/FishTtsStream';
 import { TtsOutputFanout } from '../tts/outputFanout';
 
@@ -312,7 +313,7 @@ export async function handleChat(
       'done',
       buildChatDoneEventPayload(result, {
         stateKey: parsed.data.stateKey,
-        toolNames: tavilyAvailable ? ['tavily_search'] : [],
+        toolNames: tavilyAvailable ? [...TAVILY_TOOL_NAMES] : [],
         toolsAvailable: tavilyAvailable,
         toolsSource: tavilyAvailable ? 'tavily' : 'none',
         transport: parsed.data.transportMode ?? 'http-stream',
