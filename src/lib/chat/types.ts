@@ -212,12 +212,18 @@ export type AiProxyHealth = {
     };
     activeStateKey?: string;
     cachedTokens?: number;
+    cacheWriteTokens?: number;
     conversationId?: string | null;
     previousResponseId?: string | null;
     model?: string;
     provider?: string;
     promptCacheKey?: string;
+    promptCacheMode?: string;
     promptCacheRetention?: string;
+    inputTokens?: number;
+    outputTokens?: number;
+    reasoningTokens?: number;
+    totalTokens?: number;
     requestedTransport?: string;
     scopedStates?: Array<{
       cachedTokens?: number;

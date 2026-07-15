@@ -89,7 +89,7 @@ export function normalizeChatRequest(input: z.infer<typeof chatRequestInputSchem
 }
 
 export function buildChatDoneEventPayload(
-  result: Pick<StreamChatResult, 'metadata' | 'model' | 'provider' | 'visibleText'>,
+  result: Pick<StreamChatResult, 'metadata' | 'model' | 'provider' | 'usage' | 'visibleText'>,
   runtime: {
     stateKey?: string;
     toolNames?: string[];
@@ -105,6 +105,25 @@ export function buildChatDoneEventPayload(
     meta: {
       provider: result.provider,
       model: result.model,
+      ...(typeof result.usage?.cacheReadTokens === 'number'
+        ? { cachedTokens: result.usage.cacheReadTokens }
+        : {}),
+      ...(typeof result.usage?.cacheWriteTokens === 'number'
+        ? { cacheWriteTokens: result.usage.cacheWriteTokens }
+        : {}),
+      ...(typeof result.usage?.inputTokens === 'number'
+        ? { inputTokens: result.usage.inputTokens }
+        : {}),
+      ...(typeof result.usage?.outputTokens === 'number'
+        ? { outputTokens: result.usage.outputTokens }
+        : {}),
+      ...(typeof result.usage?.reasoningTokens === 'number'
+        ? { reasoningTokens: result.usage.reasoningTokens }
+        : {}),
+      ...(typeof result.usage?.totalTokens === 'number'
+        ? { totalTokens: result.usage.totalTokens }
+        : {}),
+      promptCacheMode: result.provider === 'vercel-gateway' ? 'gateway-auto' : 'provider-implicit',
       activeStateKey: runtime.stateKey,
       requestedTransport: transport,
       stateKey: runtime.stateKey,

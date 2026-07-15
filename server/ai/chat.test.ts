@@ -54,6 +54,7 @@ describe('chat request normalization', () => {
         activeStateKey: undefined,
         provider: 'vercel-gateway',
         model: 'openai/gpt-5-mini',
+        promptCacheMode: 'gateway-auto',
         requestedTransport: 'http-stream',
         stateKey: undefined,
         stateMode: 'stateless',
@@ -68,6 +69,33 @@ describe('chat request normalization', () => {
         arousal: 0.4,
         dominance: 0.1,
       },
+    });
+  });
+
+  it('reports provider cache and token usage when the gateway supplies it', () => {
+    expect(
+      buildChatDoneEventPayload({
+        provider: 'openrouter-responses',
+        model: 'anthropic/claude-sonnet-4.5',
+        visibleText: 'Cached reply.',
+        metadata: null,
+        usage: {
+          cacheReadTokens: 1_200,
+          cacheWriteTokens: 240,
+          inputTokens: 1_500,
+          outputTokens: 80,
+          reasoningTokens: 12,
+          totalTokens: 1_580,
+        },
+      }).meta,
+    ).toMatchObject({
+      cachedTokens: 1_200,
+      cacheWriteTokens: 240,
+      inputTokens: 1_500,
+      outputTokens: 80,
+      reasoningTokens: 12,
+      totalTokens: 1_580,
+      promptCacheMode: 'provider-implicit',
     });
   });
 

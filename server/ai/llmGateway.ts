@@ -84,6 +84,16 @@ export type CompleteChatResult = {
   text: string;
   provider: GatewayId;
   model: string;
+  usage?: ChatUsage;
+};
+
+export type ChatUsage = {
+  cacheReadTokens?: number;
+  cacheWriteTokens?: number;
+  inputTokens?: number;
+  outputTokens?: number;
+  reasoningTokens?: number;
+  totalTokens?: number;
 };
 
 const jsonTextOutput = {
@@ -117,7 +127,35 @@ export type StreamChatResult = {
   metadata: ReplyMetadata | null;
   provider: GatewayId;
   model: string;
+  usage?: ChatUsage;
 };
+
+function normalizeChatUsage(usage: {
+  inputTokens?: number;
+  inputTokenDetails?: {
+    cacheReadTokens?: number;
+    cacheWriteTokens?: number;
+  };
+  outputTokens?: number;
+  outputTokenDetails?: { reasoningTokens?: number };
+  totalTokens?: number;
+}): ChatUsage | undefined {
+  const normalized: ChatUsage = {
+    ...(typeof usage.inputTokens === 'number' ? { inputTokens: usage.inputTokens } : {}),
+    ...(typeof usage.inputTokenDetails?.cacheReadTokens === 'number'
+      ? { cacheReadTokens: usage.inputTokenDetails.cacheReadTokens }
+      : {}),
+    ...(typeof usage.inputTokenDetails?.cacheWriteTokens === 'number'
+      ? { cacheWriteTokens: usage.inputTokenDetails.cacheWriteTokens }
+      : {}),
+    ...(typeof usage.outputTokens === 'number' ? { outputTokens: usage.outputTokens } : {}),
+    ...(typeof usage.outputTokenDetails?.reasoningTokens === 'number'
+      ? { reasoningTokens: usage.outputTokenDetails.reasoningTokens }
+      : {}),
+    ...(typeof usage.totalTokens === 'number' ? { totalTokens: usage.totalTokens } : {}),
+  };
+  return Object.keys(normalized).length > 0 ? normalized : undefined;
+}
 
 export function buildProviderOptions(
   req: Pick<StreamChatRequest, 'provider' | 'model' | 'reasoningEffort' | 'openRouterReasoningEffort' | 'byokOpenAiKey' | 'openRouterRouting' | 'vercelRouting'>,
@@ -150,6 +188,7 @@ export function buildProviderOptions(
     if (req.byokOpenAiKey?.trim()) {
       gateway.byok = { openai: [{ apiKey: req.byokOpenAiKey.trim() }] };
     }
+    gateway.caching = 'auto';
     options.gateway = gateway;
   }
 
@@ -180,6 +219,7 @@ export function buildProviderOptions(
       provider.allow_fallbacks = req.openRouterRouting.allowFallbacks ?? false;
     }
     const openrouter = {
+      usage: { include: true },
       ...(req.openRouterReasoningEffort
         ? {
             reasoning: {
@@ -303,14 +343,17 @@ export async function completeChat(req: CompleteChatRequest): Promise<CompleteCh
     : req.jsonMode && typeof (result as { output?: unknown }).output === 'string'
       ? (result as { output: string }).output
       : result.text;
+  const usage = normalizeChatUsage(result.totalUsage);
   log.info('completion done', {
     provider: req.provider,
     model: req.model,
     lane: req.jsonMode ? 'json' : 'text',
     chars: text.length,
+    cacheReadTokens: usage?.cacheReadTokens ?? 0,
+    cacheWriteTokens: usage?.cacheWriteTokens ?? 0,
     ms: Date.now() - started,
   });
-  return { text, provider: req.provider, model: req.model };
+  return { text, provider: req.provider, model: req.model, usage };
 }
 
 /**
@@ -420,14 +463,17 @@ export async function streamChat(
     }
     const { visibleText, metadata } = extractStructuredReply(parsed.data);
     emit(monotonicDelta(lastMessage, visibleText));
+    const usage = normalizeChatUsage(await result.totalUsage);
     log.info('chat done', {
       lane: 'A/strict-tool',
       deltas: deltaCount,
       chars: visibleText.length,
+      cacheReadTokens: usage?.cacheReadTokens ?? 0,
+      cacheWriteTokens: usage?.cacheWriteTokens ?? 0,
       ms: Date.now() - started,
       emotion: metadata?.emotion ?? 'none',
     });
-    return { visibleText, metadata, provider: req.provider, model: req.model };
+    return { visibleText, metadata, provider: req.provider, model: req.model, usage };
   }
 
   if (structured) {
@@ -459,14 +505,17 @@ export async function streamChat(
         streamError ?? 'Model returned an empty structured reply (try lower reasoning effort or another model).',
       );
     }
+    const usage = normalizeChatUsage(await result.totalUsage);
     log.info('chat done', {
       lane: 'A/structured',
       deltas: deltaCount,
       chars: visibleText.length,
+      cacheReadTokens: usage?.cacheReadTokens ?? 0,
+      cacheWriteTokens: usage?.cacheWriteTokens ?? 0,
       ms: Date.now() - started,
       emotion: metadata?.emotion ?? 'none',
     });
-    return { visibleText, metadata, provider: req.provider, model: req.model };
+    return { visibleText, metadata, provider: req.provider, model: req.model, usage };
   }
 
   // Lane B: plain text + <yw-meta>, stripped incrementally.
@@ -485,10 +534,13 @@ export async function streamChat(
       streamError ?? 'Model returned no visible text (try lower reasoning effort or another model).',
     );
   }
+  const usage = normalizeChatUsage(await result.totalUsage);
   log.info('chat done', {
     lane: 'B/text',
     deltas: deltaCount,
     chars: fin.visibleText.length,
+    cacheReadTokens: usage?.cacheReadTokens ?? 0,
+    cacheWriteTokens: usage?.cacheWriteTokens ?? 0,
     ms: Date.now() - started,
     emotion: fin.metadata?.emotion ?? 'none',
   });
@@ -497,6 +549,7 @@ export async function streamChat(
     metadata: fin.metadata,
     provider: req.provider,
     model: req.model,
+    usage,
   };
 }
 

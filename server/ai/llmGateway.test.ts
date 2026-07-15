@@ -64,7 +64,7 @@ describe('LLM gateway provider options', () => {
         false,
         false,
       ),
-    ).toEqual({ gateway: { sort: 'ttft' } });
+    ).toEqual({ gateway: { caching: 'auto', sort: 'ttft' } });
   });
 
   it('prefers the verified structured-output providers for DeepSeek V4 Flash', () => {
@@ -80,6 +80,7 @@ describe('LLM gateway provider options', () => {
     ).toEqual({
       deepseek: { thinking: { type: 'disabled' } },
       gateway: {
+        caching: 'auto',
         order: ['azure', 'fireworks'],
       },
     });
@@ -97,7 +98,7 @@ describe('LLM gateway provider options', () => {
       ),
     ).toEqual({
       deepseek: { thinking: { type: 'disabled' } },
-      gateway: { sort: 'ttft' },
+      gateway: { caching: 'auto', sort: 'ttft' },
     });
   });
 
@@ -113,7 +114,7 @@ describe('LLM gateway provider options', () => {
       ),
     ).toEqual({
       deepseek: { thinking: { type: 'disabled' } },
-      gateway: { order: ['baseten', 'deepseek', 'fireworks'] },
+      gateway: { caching: 'auto', order: ['baseten', 'deepseek', 'fireworks'] },
     });
   });
 
@@ -131,6 +132,7 @@ describe('LLM gateway provider options', () => {
     ).toEqual({
       gateway: {
         byok: { openai: [{ apiKey: 'openai-key' }] },
+        caching: 'auto',
         sort: 'ttft',
       },
       openai: { reasoningEffort: 'minimal' },
@@ -150,6 +152,7 @@ describe('LLM gateway provider options', () => {
     ).toEqual({
       openrouter: {
         provider: { require_parameters: true },
+        usage: { include: true },
       },
     });
   });
@@ -164,7 +167,7 @@ describe('LLM gateway provider options', () => {
         false,
         false,
       ),
-    ).toBeUndefined();
+    ).toEqual({ openrouter: { usage: { include: true } } });
   });
 
   it('uses explicit catalog-derived OpenRouter reasoning policy', () => {
@@ -176,6 +179,7 @@ describe('LLM gateway provider options', () => {
       openrouter: {
         provider: { require_parameters: true },
         reasoning: { effort: 'none' },
+        usage: { include: true },
       },
     });
     expect(buildProviderOptions({
@@ -186,6 +190,7 @@ describe('LLM gateway provider options', () => {
       openrouter: {
         provider: { require_parameters: true },
         reasoning: { effort: 'minimal', exclude: true },
+        usage: { include: true },
       },
     });
   });
@@ -202,7 +207,7 @@ describe('LLM gateway provider options', () => {
       ),
     ).toEqual({
       deepseek: { thinking: { type: 'disabled' } },
-      gateway: { sort: 'ttft' },
+      gateway: { caching: 'auto', sort: 'ttft' },
     });
   });
 

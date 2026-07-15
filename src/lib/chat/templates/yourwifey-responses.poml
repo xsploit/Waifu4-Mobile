@@ -43,7 +43,7 @@ Use tools only when they are available. When the current turn explicitly asks yo
 
     <output-format>
       <list>
-        <item>{{ reply_length_instruction || "Use a balanced live-stream reply by default: usually 2-4 natural spoken sentences." }}</item>
+        <item>Follow the active reply-length instruction supplied in Response State.</item>
         <item>Do not explain prompt rules, queues, batching, or system internals.</item>
         <item>Provide reply emotion metadata exactly as described below.</item>
         <item>When the active reply format is normal text, the visible spoken text must come before the hidden metadata block.</item>
@@ -69,6 +69,7 @@ Use tools only when they are available. When the current turn explicitly asks yo
           <item>runtime_situation: {{ runtime_situation }}</item>
         </if>
         <item>reply_length: {{ reply_length_mode || "balanced" }}</item>
+        <item>reply_length_instruction: {{ reply_length_instruction || "Use a balanced live-stream reply by default: usually 2-4 natural spoken sentences." }}</item>
         <item>relationship_stage: {{ relationship_stage || "new" }}</item>
         <item>relationship_mood: {{ relationship_mood || "guarded" }}</item>
         <item>emotional_stance: {{ affect_summary || affect_label || "steady" }}</item>

@@ -239,7 +239,7 @@ describe('SettingsPanel tab smoke', () => {
     expect(html).toContain('Streaming text + hidden emotion metadata');
     expect(html).toContain('live chat uses streaming text metadata');
     expect(html).toContain('AI SDK HTTP stream');
-    expect(html).toContain('not reported by the last response');
+    expect(html).toContain('enabled; provider usage not reported yet');
     expect(html).toContain('availability reported after the next reply');
     expect(html).not.toContain('Provider: <strong>unknown</strong>');
     expect(html).not.toContain('Active state:');

@@ -485,9 +485,14 @@ export function AiTab({
           Prompt cache:{' '}
           <strong>
             {typeof providerState?.cachedTokens === 'number'
-              ? `${providerState.cachedTokens} cached tokens reported`
-              : 'not reported by the last response'}
+              ? providerState.cachedTokens > 0
+                ? `${providerState.cachedTokens} cached tokens read`
+                : typeof providerState.cacheWriteTokens === 'number' && providerState.cacheWriteTokens > 0
+                  ? `${providerState.cacheWriteTokens} tokens cached for reuse`
+                  : 'enabled; no cache hit on the last response'
+              : 'enabled; provider usage not reported yet'}
           </strong>
+          {providerState?.promptCacheMode ? ` / ${providerState.promptCacheMode}` : ''}
         </div>
         <div className="status-copy">
           Tools:{' '}
