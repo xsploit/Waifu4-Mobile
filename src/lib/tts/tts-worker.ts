@@ -53,7 +53,7 @@ let phonemizerPromise:
 let activeSessionVoiceId: string | null = null;
 
 const LOCAL_PIPER_WASM_PATHS = {
-  onnxWasm: 'https://cdnjs.cloudflare.com/ajax/libs/onnxruntime-web/1.18.0/',
+  onnxWasm: '',
   piperData: 'https://cdn.jsdelivr.net/npm/@diffusionstudio/piper-wasm@1.0.0/build/piper_phonemize.data',
   piperWasm: 'https://cdn.jsdelivr.net/npm/@diffusionstudio/piper-wasm@1.0.0/build/piper_phonemize.wasm',
 } as const;
