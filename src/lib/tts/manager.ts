@@ -205,6 +205,22 @@ export class TtsManager {
     return this.isPlaying;
   }
 
+  getPlaybackPositionSeconds(): number | null {
+    if (this.currentAudio) {
+      return Math.max(0, this.currentAudio.currentTime);
+    }
+
+    if (
+      this.audioContext &&
+      this.streamScheduledChunkCount > 0 &&
+      this.streamPlaybackStartTime > 0
+    ) {
+      return Math.max(0, this.audioContext.currentTime - this.streamPlaybackStartTime);
+    }
+
+    return null;
+  }
+
   private clearStreamStartedTimer() {
     if (this.streamStartedTimer !== null) {
       window.clearTimeout(this.streamStartedTimer);

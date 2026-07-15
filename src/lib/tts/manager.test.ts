@@ -158,6 +158,29 @@ function createRemotePcmHarness() {
   };
 }
 
+describe('TtsManager playback clock', () => {
+  it('reports the media element playhead for non-streamed audio', () => {
+    const manager = new TtsManager();
+    Object.assign(manager, { currentAudio: { currentTime: 2.75 } });
+
+    expect(manager.getPlaybackPositionSeconds()).toBe(2.75);
+  });
+
+  it('reports streamed PCM time from the scheduled audio start', () => {
+    const manager = new TtsManager();
+    const context = { currentTime: 10 };
+    Object.assign(manager, {
+      audioContext: context,
+      streamPlaybackStartTime: 10.05,
+      streamScheduledChunkCount: 1,
+    });
+
+    expect(manager.getPlaybackPositionSeconds()).toBe(0);
+    context.currentTime = 11.25;
+    expect(manager.getPlaybackPositionSeconds()).toBeCloseTo(1.2);
+  });
+});
+
 describe('TtsManager remote PCM scheduling', () => {
   it('keeps browser playback enabled for every additive output route', () => {
     const manager = new TtsManager();

@@ -3903,7 +3903,7 @@ function App() {
     }
 
     const elapsedSeconds =
-      ttsManager.currentAudio?.currentTime ??
+      ttsManager.getPlaybackPositionSeconds() ??
       (subtitleStartedAtRef.current === null
         ? 0
         : (performance.now() - subtitleStartedAtRef.current) / 1000);
@@ -3924,17 +3924,18 @@ function App() {
             };
       subtitleDataRef.current = normalizedSubtitleData;
       subtitleStartedAtRef.current = performance.now();
+      const elapsedSeconds = ttsManager.getPlaybackPositionSeconds() ?? 0;
       setSubtitleText(
         getSubtitleLine(
           normalizedSubtitleData.text,
           normalizedSubtitleData.wordBoundaries,
-          0,
+          elapsedSeconds,
         ),
       );
       subtitleIntervalRef.current = window.setInterval(refreshSubtitleFromAudio, 80);
       refreshSubtitleFromAudio();
     },
-    [refreshSubtitleFromAudio, stopSubtitleTracking],
+    [refreshSubtitleFromAudio, stopSubtitleTracking, ttsManager],
   );
   const startSubtitleTrackingRef = useRef(startSubtitleTracking);
   const stopSubtitleTrackingRef = useRef(stopSubtitleTracking);
