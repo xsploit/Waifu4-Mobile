@@ -18,6 +18,7 @@ public/assets/*
 !public/assets/
 !public/assets/lipsync-profile.json
 !public/assets/animations/
+!public/assets/woozy.js
 !public/assets/animations/**
 public/cdn-assets/
 !public/cdn-assets/
@@ -27,3 +28,4 @@ public/cdn-assets/
 !public/cdn-assets/models/**
 !public/cdn-assets/piper/
 !public/cdn-assets/piper/**
+.squad/
