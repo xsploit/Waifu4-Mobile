@@ -307,6 +307,11 @@ export async function recoverStrictAssistantReply(
   return null;
 }
 
+export function recoverPartialStructuredReply(partial: unknown) {
+  const recovered = extractStructuredReply(partial);
+  return recovered.visibleText.trim() ? recovered : null;
+}
+
 export function toModelMessages(messages: LlmMessage[]): ModelMessage[] {
   return messages.map((m) => {
     if (m.role !== 'user' || !m.images?.length) {
@@ -546,7 +551,9 @@ export async function streamChat(
 
   if (structured) {
     let lastMessage = '';
+    let lastPartial: unknown;
     for await (const partial of result.partialOutputStream) {
+      lastPartial = partial;
       const next =
         partial && typeof partial === 'object' && typeof (partial as { message?: unknown }).message === 'string'
           ? (partial as { message: string }).message
@@ -561,7 +568,16 @@ export async function streamChat(
     try {
       output = await result.output;
     } catch (err) {
-      throw new Error(streamError ?? (err instanceof Error ? err.message : String(err)));
+      const recovered = recoverPartialStructuredReply(lastPartial);
+      if (!recovered) {
+        throw new Error(streamError ?? (err instanceof Error ? err.message : String(err)));
+      }
+      log.warn('structured final validation failed after visible output; using streamed partial reply', {
+        provider: req.provider,
+        model: req.model,
+        error: streamError ?? (err instanceof Error ? err.message : String(err)),
+      });
+      output = lastPartial;
     }
     const { visibleText, metadata } = extractStructuredReply(output);
     const tail = monotonicDelta(lastMessage, visibleText);

@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   buildProviderOptions,
   isStructuredCompatibilityError,
+  recoverPartialStructuredReply,
   recoverStrictAssistantReply,
   resolveTemperature,
   toModelMessages,
@@ -285,5 +286,19 @@ describe('LLM structured compatibility fallback', () => {
       visibleText: 'I found it.',
       metadata: { emotion: 'curious', valence: 0.4, arousal: 0.5, dominance: 0.2 },
     });
+  });
+
+  it('keeps a streamed reply when final structured validation fails', () => {
+    expect(recoverPartialStructuredReply({
+      message: 'The reply already streamed successfully.',
+      emotion: 'amused',
+      valence: 0.5,
+      arousal: 0.4,
+      dominance: 0.2,
+    })).toEqual({
+      visibleText: 'The reply already streamed successfully.',
+      metadata: { emotion: 'amused', valence: 0.5, arousal: 0.4, dominance: 0.2 },
+    });
+    expect(recoverPartialStructuredReply({ emotion: 'amused' })).toBeNull();
   });
 });
