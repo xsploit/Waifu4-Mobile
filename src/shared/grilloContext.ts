@@ -1,4 +1,4 @@
-export const GRILLO_CONTEXT_QUERY_MAX_CHARS = 4000;
+const GRILLO_CONTEXT_QUERY_MAX_CHARS = 4000;
 
 export function normalizeGrilloContextQuery(value: unknown): string {
   return typeof value === 'string'
