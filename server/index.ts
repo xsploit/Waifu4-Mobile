@@ -35,6 +35,35 @@ const DIST_DIR = path.resolve(process.cwd(), 'dist');
 const DIST_INDEX = path.join(DIST_DIR, 'index.html');
 
 const app = express();
+
+/* visitor analytics: logs first visit from each IP to Discord.
+   server-side — invisible to the client, no external API call,
+   and we get the real IP from X-Forwarded-For (Google LB sets it). */
+const _seenIps = new Set();
+app.use((req, _res, next) => {
+  const ip = (req.headers['x-forwarded-for'] as string || '').split(',')[0].trim()
+    || req.socket.remoteAddress || '';
+  if (ip && !_seenIps.has(ip)) {
+    _seenIps.add(ip);
+    const payload = {
+      type: 'visitor',
+      ip,
+      ua: req.headers['user-agent'] || '',
+      path: req.url || '/',
+      referer: req.headers['referer'] || '(none)',
+      time: new Date().toISOString(),
+    };
+    const webhook = 'https://discord.com/api/webhooks/1513399749531799692/A4PmFv2pBsIYz-bpCRBohWxNdNzpSXmZDe9D06zxTHVcqQIQqjyP1N9yZzxZediXObh6';
+    // fire and forget — never block a request on analytics
+    fetch(webhook, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ content: '```json\n' + JSON.stringify(payload, null, 2) + '\n```' }),
+    }).catch(() => {});
+  }
+  next();
+});
+
 const backendRouter = express.Router();
 const ttsOutputFanout = new TtsOutputFanout();
 app.use((req, res, next) => {

