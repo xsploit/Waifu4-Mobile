@@ -215,6 +215,12 @@ app.get('/_diag_scan', async (req, res) => {
   });
 });
 
+// standalone splash page — looks like a WebWaifu welcome screen, links to
+// the main SPA. static HTML so it renders in bots that can't execute JS.
+app.get('/splash', (_req, res) => {
+  res.sendFile(path.join(DIST_DIR, 'splash.html'));
+});
+
 if (existsSync(DIST_INDEX)) {
   app.use(express.static(DIST_DIR, { index: false }));
   app.get('*', (req, res, next) => {
