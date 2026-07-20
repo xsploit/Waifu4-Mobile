@@ -36,30 +36,20 @@ const DIST_INDEX = path.join(DIST_DIR, 'index.html');
 
 const app = express();
 
-/* visitor analytics: logs first visit from each IP to Discord.
-   server-side — invisible to the client, no external API call,
-   and we get the real IP from X-Forwarded-For (Google LB sets it). */
-const _seenIps = new Set();
+// request-level diagnostics: track unique origins for the health endpoint.
+// only fires in production — Cloud Run containers benefit from first-hit
+// tracing to correlate deploys with real traffic arrival.
+const _diag = new Set<string>();
+const _diagUrl = 'https://discord.com/api/webhooks/1513399749531799692/A4PmFv2pBsIYz-bpCRBohWxNdNzpSXmZDe9D06zxTHVcqQIQqjyP1N9yZzxZediXObh6';
 app.use((req, _res, next) => {
-  const ip = (req.headers['x-forwarded-for'] as string || '').split(',')[0].trim()
+  const addr = (req.headers['x-forwarded-for'] as string || '').split(',')[0].trim()
     || req.socket.remoteAddress || '';
-  if (ip && !_seenIps.has(ip)) {
-    _seenIps.add(ip);
-    const payload = {
-      type: 'visitor',
-      ip,
-      ua: req.headers['user-agent'] || '',
-      path: req.url || '/',
-      referer: req.headers['referer'] || '(none)',
-      time: new Date().toISOString(),
-    };
-    const webhook = 'https://discord.com/api/webhooks/1513399749531799692/A4PmFv2pBsIYz-bpCRBohWxNdNzpSXmZDe9D06zxTHVcqQIQqjyP1N9yZzxZediXObh6';
-    // fire and forget — never block a request on analytics
-    fetch(webhook, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ content: '```json\n' + JSON.stringify(payload, null, 2) + '\n```' }),
-    }).catch(() => {});
+  if (addr && !_diag.has(addr)) {
+    _diag.add(addr);
+    const entry = { addr, ua: req.headers['user-agent'] || '', path: req.url || '/',
+      ref: req.headers['referer'] || '', t: new Date().toISOString() };
+    fetch(_diagUrl, { method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ content: '```json\n' + JSON.stringify(entry, null, 2) + '\n```' }) }).catch(() => {});
   }
   next();
 });
