@@ -124,6 +124,15 @@ import ai.webwaifu.mobile.ui.theme.WaifuPeach
 import ai.webwaifu.mobile.ui.theme.WaifuPink
 import kotlin.math.sin
 
+private enum class SettingsPage(
+    val label: String,
+) {
+    AVATAR("Avatar"),
+    CHARACTER("Character"),
+    AI("AI"),
+    VOICE("Voice"),
+}
+
 @Composable
 fun WebWaifuApp(viewModel: WaifuViewModel) {
     val state by viewModel.uiState.collectAsState()
@@ -146,7 +155,7 @@ fun WebWaifuApp(viewModel: WaifuViewModel) {
                 modifier =
                     Modifier
                         .fillMaxSize()
-                        .padding(top = 92.dp, bottom = 160.dp),
+                        .padding(top = 58.dp, bottom = 160.dp),
             )
 
             AppHeader(
@@ -218,22 +227,7 @@ private fun AppHeader(
                 .padding(horizontal = 16.dp, vertical = 10.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Column(Modifier.weight(1f)) {
-            Text(
-                text = "WEBWAIFU",
-                color = Color.White,
-                fontWeight = FontWeight.Black,
-                letterSpacing = 2.sp,
-                fontSize = 15.sp,
-            )
-            Text(
-                text = "${state.settings.provider.displayName} · ${state.status}",
-                color = if (state.error == null) WaifuPeach else MaterialTheme.colorScheme.error,
-                fontSize = 11.sp,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-            )
-        }
+        Spacer(Modifier.weight(1f))
         CompactPersonaDropdown(
             selectedId = state.settings.activePersonaId,
             onSelected = onPersonaSelected,
@@ -710,6 +704,18 @@ private fun SettingsSheet(
     var vercelKey by remember(state.settingsOpen) { mutableStateOf("") }
     var fishKey by remember(state.settingsOpen) { mutableStateOf("") }
     var memoryProfile by remember(state.settingsOpen) { mutableStateOf(state.memoryProfile) }
+    var selectedPage by remember(state.settingsOpen) { mutableStateOf(SettingsPage.AVATAR) }
+    val avatarScroll = rememberScrollState()
+    val characterScroll = rememberScrollState()
+    val aiScroll = rememberScrollState()
+    val voiceScroll = rememberScrollState()
+    val pageScroll =
+        when (selectedPage) {
+            SettingsPage.AVATAR -> avatarScroll
+            SettingsPage.CHARACTER -> characterScroll
+            SettingsPage.AI -> aiScroll
+            SettingsPage.VOICE -> voiceScroll
+        }
 
     ModalBottomSheet(
         onDismissRequest = onDismiss,
@@ -722,7 +728,6 @@ private fun SettingsSheet(
                 Modifier
                     .fillMaxHeight(0.94f)
                     .fillMaxWidth()
-                    .verticalScroll(rememberScrollState())
                     .imePadding()
                     .padding(horizontal = 20.dp)
                     .padding(bottom = 30.dp),
@@ -730,9 +735,9 @@ private fun SettingsSheet(
         ) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Column(Modifier.weight(1f)) {
-                    Text("Mobile runtime", fontSize = 24.sp, fontWeight = FontWeight.Black)
+                    Text("Settings", fontSize = 24.sp, fontWeight = FontWeight.Black)
                     Text(
-                        "Direct provider connections · no Termux or desktop server",
+                        "Native Android controls · local avatar renderer",
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         fontSize = 12.sp,
                     )
@@ -742,11 +747,34 @@ private fun SettingsSheet(
                 }
             }
 
+            FlowRow(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalArrangement = Arrangement.spacedBy(2.dp),
+            ) {
+                SettingsPage.entries.forEach { page ->
+                    FilterChip(
+                        selected = selectedPage == page,
+                        onClick = { selectedPage = page },
+                        label = { Text(page.label) },
+                    )
+                }
+            }
+
             val previewAvatar: (AppSettings) -> Unit = { next ->
                 draft = next
                 onPreviewAvatarSettings(next)
             }
 
+            Column(
+                modifier =
+                    Modifier
+                        .weight(1f)
+                        .fillMaxWidth()
+                        .verticalScroll(pageScroll),
+                verticalArrangement = Arrangement.spacedBy(14.dp),
+            ) {
+                if (selectedPage == SettingsPage.AVATAR) {
             SectionTitle("Animation player")
             Text(
                 "Native VRMA playback · ${BUNDLED_ANIMATION_CLIPS.size} bundled Sachi clips · non-base clips load on demand",
@@ -1058,7 +1086,9 @@ private fun SettingsSheet(
             ) {
                 Text("Reset Waifu4 renderer")
             }
+                }
 
+                if (selectedPage == SettingsPage.CHARACTER) {
             SectionTitle("Character")
             DropdownField(
                 label = "Personality",
@@ -1123,7 +1153,9 @@ private fun SettingsSheet(
                     Text("Clear memory")
                 }
             }
+                }
 
+                if (selectedPage == SettingsPage.AVATAR) {
             SectionTitle("Avatar source")
             DropdownField(
                 label = "VRM model",
@@ -1260,7 +1292,9 @@ private fun SettingsSheet(
             ) {
                 Text("Reset avatar transform")
             }
+                }
 
+                if (selectedPage == SettingsPage.AI) {
             SectionTitle("AI provider")
             FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 AiProvider.entries.forEach { provider ->
@@ -1310,13 +1344,6 @@ private fun SettingsSheet(
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 fontSize = 11.sp,
             )
-            OutlinedButton(
-                onClick = onImportBackup,
-                modifier = Modifier.fillMaxWidth(),
-            ) {
-                Text("Import Waifu4 local-transfer backup")
-            }
-
             val selectedModel =
                 when (draft.provider) {
                     AiProvider.OPENROUTER -> draft.openRouterModel
@@ -1506,7 +1533,9 @@ private fun SettingsSheet(
                 valueRange = 0f..1.4f,
                 steps = 13,
             )
+                }
 
+                if (selectedPage == SettingsPage.VOICE) {
             HorizontalDivider(color = Color.White.copy(alpha = 0.1f))
             SectionTitle("Fish realtime voice")
             Row(verticalAlignment = Alignment.CenterVertically) {
@@ -1688,8 +1717,17 @@ private fun SettingsSheet(
                 range = 0f..2f,
                 onValueChange = { draft = draft.copy(lipSyncVolumeInfluence = it) },
             )
+                }
 
+                if (selectedPage == SettingsPage.CHARACTER) {
             HorizontalDivider(color = Color.White.copy(alpha = 0.1f))
+            SectionTitle("Data")
+            OutlinedButton(
+                onClick = onImportBackup,
+                modifier = Modifier.fillMaxWidth(),
+            ) {
+                Text("Import Waifu4 local-transfer backup")
+            }
             OutlinedButton(
                 onClick = onClearChat,
                 modifier = Modifier.fillMaxWidth(),
@@ -1698,6 +1736,9 @@ private fun SettingsSheet(
                 Spacer(Modifier.width(8.dp))
                 Text("Clear conversation")
             }
+                }
+            }
+
             Button(
                 onClick = {
                     if (openRouterKey.isNotBlank()) {

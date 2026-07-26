@@ -646,6 +646,9 @@ class WaifuViewModel(application: Application) : AndroidViewModel(application) {
                                             }
                                         },
                                         onFirstAudio = {
+                                            _uiState.update {
+                                                it.copy(isSpeaking = true)
+                                            }
                                             Log.i(
                                                 LATENCY_LOG_TAG,
                                                 "first_pcm_ms=${SystemClock.elapsedRealtime() - turnStartedAt}",

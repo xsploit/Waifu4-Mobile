@@ -276,6 +276,12 @@ class FishRealtimeClient(context: Context) {
                                 while (offset < pcm.size && !cancelled.get()) {
                                     val blockLength =
                                         minOf(ANALYSIS_BLOCK_BYTES, pcm.size - offset)
+                                    // Prime the WebView mouth state before this PCM block reaches
+                                    // AudioTrack. Analyzing after a blocking write let the first
+                                    // audible phoneme beat the native-to-JS bridge on some phones.
+                                    lipSyncAnalyzer.consume(pcm, offset, blockLength)
+                                        .lastOrNull()
+                                        ?.let(onLipSync)
                                     val written =
                                         track.write(
                                             pcm,
@@ -284,9 +290,6 @@ class FishRealtimeClient(context: Context) {
                                             AudioTrack.WRITE_BLOCKING,
                                         )
                                     if (written <= 0) break
-                                    lipSyncAnalyzer.consume(pcm, offset, written)
-                                        .lastOrNull()
-                                        ?.let(onLipSync)
                                     offset += written
                                 }
                             }
