@@ -128,6 +128,11 @@ class SettingsStore(context: Context) {
                     preferences.getString("fish_live_chunking_strategy", null),
                     defaults.fishLiveChunkingStrategy,
                 ),
+            speechRecognizerService =
+                preferences.getString(
+                    "speech_recognizer_service",
+                    defaults.speechRecognizerService,
+                )?.trim().orEmpty(),
             voiceEnabled = preferences.getBoolean("voice_enabled", defaults.voiceEnabled),
             voiceAutoSpeak =
                 preferences.getBoolean("voice_auto_speak", defaults.voiceAutoSpeak),
@@ -330,6 +335,7 @@ class SettingsStore(context: Context) {
                 "fish_live_chunking_strategy",
                 settings.fishLiveChunkingStrategy.name,
             )
+            .putString("speech_recognizer_service", settings.speechRecognizerService.trim())
             .putBoolean("voice_enabled", settings.voiceEnabled)
             .putBoolean("voice_auto_speak", settings.voiceAutoSpeak)
             .putString("lip_sync_mode", settings.lipSyncMode.name)

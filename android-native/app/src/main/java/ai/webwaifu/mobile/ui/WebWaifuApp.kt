@@ -48,11 +48,15 @@ import androidx.compose.material.icons.filled.Clear
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.DeleteOutline
 import androidx.compose.material.icons.filled.GraphicEq
+import androidx.compose.material.icons.filled.Keyboard
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.KeyboardArrowUp
+import androidx.compose.material.icons.filled.Mic
 import androidx.compose.material.icons.filled.Send
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Stop
+import androidx.compose.material.icons.filled.Visibility
+import androidx.compose.material.icons.filled.VisibilityOff
 import androidx.compose.material3.AssistChip
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
@@ -85,6 +89,7 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.scale
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Brush
@@ -93,6 +98,7 @@ import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.platform.LocalFocusManager
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.PasswordVisualTransformation
@@ -155,7 +161,7 @@ fun WebWaifuApp(viewModel: WaifuViewModel) {
                 modifier =
                     Modifier
                         .fillMaxSize()
-                        .padding(top = 58.dp, bottom = 160.dp),
+                        .padding(top = 58.dp, bottom = 106.dp),
             )
 
             AppHeader(
@@ -495,14 +501,60 @@ private fun ConversationPanel(
     val listState = rememberLazyListState()
     val focusManager = LocalFocusManager.current
     var historyOpen by rememberSaveable { mutableStateOf(false) }
+    var keyboardOpen by rememberSaveable { mutableStateOf(false) }
+    var dockVisible by rememberSaveable { mutableStateOf(true) }
+    val speech =
+        rememberNativeSpeechInput(
+            selectedService = state.settings.speechRecognizerService,
+            onBeforeStart = {
+                if (state.isGenerating || state.isSpeaking) onStop()
+            },
+            onPartial = onDraftChange,
+            onFinal = { text ->
+                onDraftChange(text)
+                onSend()
+            },
+        )
     LaunchedEffect(state.messages.size, state.messages.lastOrNull()?.text?.length) {
         if (state.messages.isNotEmpty()) listState.animateScrollToItem(state.messages.lastIndex)
     }
 
+    if (!dockVisible) {
+        Box(
+            modifier =
+                modifier
+                    .navigationBarsPadding()
+                    .padding(bottom = 8.dp, end = 6.dp),
+            contentAlignment = Alignment.BottomEnd,
+        ) {
+            Surface(
+                shape = CircleShape,
+                color = Color(0xD90A0710),
+                border =
+                    androidx.compose.foundation.BorderStroke(
+                        1.dp,
+                        WaifuPink.copy(alpha = 0.34f),
+                    ),
+            ) {
+                IconButton(
+                    onClick = { dockVisible = true },
+                    modifier = Modifier.size(44.dp),
+                ) {
+                    Icon(
+                        Icons.Default.Visibility,
+                        contentDescription = "Show controls",
+                        tint = WaifuPeach,
+                    )
+                }
+            }
+        }
+        return
+    }
+
     Surface(
         modifier = modifier.animateContentSize(),
-        color = Color(0xD10A0710),
-        shape = RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp),
+        color = Color(0xDF0A0710),
+        shape = RoundedCornerShape(30.dp),
         border =
             androidx.compose.foundation.BorderStroke(
                 1.dp,
@@ -516,35 +568,42 @@ private fun ConversationPanel(
                     .navigationBarsPadding()
                     .imePadding(),
         ) {
-            Row(
-                modifier =
-                    Modifier
-                        .fillMaxWidth()
-                        .padding(start = 18.dp, end = 8.dp, top = 7.dp),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                Text(
-                    text =
-                        "${state.settings.activePersona.name} · ${state.settings.activeModel}",
-                    modifier = Modifier.weight(1f),
-                    color = WaifuPeach,
-                    fontSize = 10.sp,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                )
-                IconButton(
-                    onClick = { historyOpen = !historyOpen },
-                    modifier = Modifier.size(34.dp),
+            if (keyboardOpen) {
+                Row(
+                    modifier =
+                        Modifier
+                            .fillMaxWidth()
+                            .padding(start = 18.dp, end = 8.dp, top = 7.dp),
+                    verticalAlignment = Alignment.CenterVertically,
                 ) {
-                    Icon(
-                        if (historyOpen) Icons.Default.KeyboardArrowDown else Icons.Default.KeyboardArrowUp,
-                        contentDescription = if (historyOpen) "Hide chat history" else "Show chat history",
-                        tint = Color.White,
+                    Text(
+                        text =
+                            "${state.settings.activePersona.name} · ${state.settings.activeModel}",
+                        modifier = Modifier.weight(1f),
+                        color = WaifuPeach,
+                        fontSize = 10.sp,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
                     )
+                    IconButton(
+                        onClick = { historyOpen = !historyOpen },
+                        modifier = Modifier.size(34.dp),
+                    ) {
+                        Icon(
+                            if (historyOpen) {
+                                Icons.Default.KeyboardArrowDown
+                            } else {
+                                Icons.Default.KeyboardArrowUp
+                            },
+                            contentDescription =
+                                if (historyOpen) "Hide chat history" else "Show chat history",
+                            tint = Color.White,
+                        )
+                    }
                 }
             }
 
-            state.error?.let { error ->
+            (speech.error ?: state.error)?.let { error ->
                 Text(
                     text = error,
                     color = MaterialTheme.colorScheme.error,
@@ -556,7 +615,7 @@ private fun ConversationPanel(
                 )
             }
 
-            if (historyOpen) {
+            if (keyboardOpen && historyOpen) {
                 LazyColumn(
                     state = listState,
                     modifier =
@@ -578,49 +637,182 @@ private fun ConversationPanel(
                 }
             }
 
+            if (keyboardOpen) {
+                Row(
+                    modifier =
+                        Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 10.dp, vertical = 4.dp),
+                    verticalAlignment = Alignment.Bottom,
+                ) {
+                    OutlinedTextField(
+                        value = state.draft,
+                        onValueChange = onDraftChange,
+                        modifier = Modifier.weight(1f),
+                        enabled = !state.isGenerating,
+                        placeholder = { Text("Type a message…") },
+                        shape = RoundedCornerShape(22.dp),
+                        maxLines = 4,
+                        keyboardOptions = KeyboardOptions(imeAction = ImeAction.Send),
+                        keyboardActions =
+                            KeyboardActions(
+                                onSend = {
+                                    focusManager.clearFocus()
+                                    onSend()
+                                },
+                            ),
+                    )
+                    Spacer(Modifier.width(8.dp))
+                    Surface(
+                        shape = CircleShape,
+                        color = if (state.isGenerating) Color(0xFF362331) else WaifuPink,
+                    ) {
+                        IconButton(
+                            onClick = if (state.isGenerating) onStop else onSend,
+                            modifier = Modifier.size(48.dp),
+                            enabled = state.isGenerating || state.draft.isNotBlank(),
+                        ) {
+                            Icon(
+                                imageVector =
+                                    if (state.isGenerating) Icons.Default.Stop else Icons.Default.Send,
+                                contentDescription = if (state.isGenerating) "Stop" else "Send",
+                                tint = Color.White,
+                            )
+                        }
+                    }
+                }
+            }
+
+            if (!keyboardOpen && speech.partialText.isNotBlank()) {
+                Text(
+                    text = speech.partialText,
+                    modifier =
+                        Modifier
+                            .fillMaxWidth()
+                            .padding(start = 18.dp, end = 18.dp, top = 8.dp),
+                    color = Color.White,
+                    fontSize = 13.sp,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis,
+                )
+            }
+
+            val talkScale by animateFloatAsState(
+                targetValue =
+                    if (speech.isListening) {
+                        1f + speech.rms * 0.1f
+                    } else {
+                        1f
+                    },
+                animationSpec = tween(90),
+                label = "talk-level",
+            )
             Row(
                 modifier =
                     Modifier
                         .fillMaxWidth()
-                        .padding(horizontal = 10.dp, vertical = 7.dp),
-                verticalAlignment = Alignment.Bottom,
+                        .padding(horizontal = 14.dp, vertical = 8.dp),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically,
             ) {
-                OutlinedTextField(
-                    value = state.draft,
-                    onValueChange = onDraftChange,
-                    modifier = Modifier.weight(1f),
-                    enabled = !state.isGenerating,
-                    placeholder = { Text("Talk to her…") },
-                    shape = RoundedCornerShape(22.dp),
-                    maxLines = 4,
-                    keyboardOptions = KeyboardOptions(imeAction = ImeAction.Send),
-                    keyboardActions =
-                        KeyboardActions(
-                            onSend = {
-                                focusManager.clearFocus()
-                                onSend()
-                            },
-                        ),
-                )
-                Spacer(Modifier.width(8.dp))
-                Surface(
-                    shape = CircleShape,
-                    color = if (state.isGenerating) Color(0xFF362331) else WaifuPink,
+                DockButton(
+                    onClick = {
+                        keyboardOpen = !keyboardOpen
+                        if (!keyboardOpen) {
+                            historyOpen = false
+                            focusManager.clearFocus()
+                        }
+                    },
+                    selected = keyboardOpen,
                 ) {
-                    IconButton(
-                        onClick = if (state.isGenerating) onStop else onSend,
-                        modifier = Modifier.size(50.dp),
-                        enabled = state.isGenerating || state.draft.isNotBlank(),
+                    Icon(
+                        Icons.Default.Keyboard,
+                        contentDescription = if (keyboardOpen) "Hide keyboard" else "Open keyboard",
+                        tint = if (keyboardOpen) WaifuInk else Color.White,
+                    )
+                }
+
+                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                    Surface(
+                        modifier = Modifier.size(72.dp).scale(talkScale),
+                        shape = CircleShape,
+                        color =
+                            if (speech.isListening) {
+                                Color(0xFFFF4F76)
+                            } else {
+                                WaifuPink
+                            },
+                        shadowElevation = if (speech.isListening) 10.dp else 4.dp,
                     ) {
-                        Icon(
-                            imageVector = if (state.isGenerating) Icons.Default.Stop else Icons.Default.Send,
-                            contentDescription = if (state.isGenerating) "Stop" else "Send",
-                            tint = Color.White,
-                        )
+                        IconButton(
+                            onClick = {
+                                if (speech.isListening) speech.stop() else speech.start()
+                            },
+                            modifier = Modifier.fillMaxSize(),
+                        ) {
+                            Icon(
+                                imageVector =
+                                    if (speech.isListening) Icons.Default.GraphicEq else Icons.Default.Mic,
+                                contentDescription =
+                                    if (speech.isListening) "Finish speaking" else "Talk",
+                                tint = Color.White,
+                                modifier = Modifier.size(31.dp),
+                            )
+                        }
                     }
+                    Text(
+                        text =
+                            when {
+                                speech.isListening -> "Listening"
+                                speech.usingOnDeviceRecognizer -> "Talk · on-device"
+                                else -> "Talk"
+                            },
+                        color = WaifuPeach,
+                        fontSize = 10.sp,
+                        modifier = Modifier.padding(top = 3.dp),
+                    )
+                }
+
+                DockButton(
+                    onClick = {
+                        if (speech.isListening) speech.stop()
+                        keyboardOpen = false
+                        historyOpen = false
+                        focusManager.clearFocus()
+                        dockVisible = false
+                    },
+                ) {
+                    Icon(
+                        Icons.Default.VisibilityOff,
+                        contentDescription = "Hide controls",
+                        tint = Color.White,
+                    )
                 }
             }
         }
+    }
+}
+
+@Composable
+private fun DockButton(
+    onClick: () -> Unit,
+    selected: Boolean = false,
+    content: @Composable () -> Unit,
+) {
+    Surface(
+        shape = CircleShape,
+        color = if (selected) WaifuPeach else Color(0xFF241A28),
+        border =
+            androidx.compose.foundation.BorderStroke(
+                1.dp,
+                WaifuPink.copy(alpha = 0.24f),
+            ),
+    ) {
+        IconButton(
+            onClick = onClick,
+            modifier = Modifier.size(50.dp),
+            content = content,
+        )
     }
 }
 
@@ -699,6 +891,7 @@ private fun SettingsSheet(
     onClearMemory: () -> Unit,
     onClearChat: () -> Unit,
 ) {
+    val context = LocalContext.current
     var draft by remember(state.settingsOpen) { mutableStateOf(state.settings) }
     var openRouterKey by remember(state.settingsOpen) { mutableStateOf("") }
     var vercelKey by remember(state.settingsOpen) { mutableStateOf("") }
@@ -709,6 +902,11 @@ private fun SettingsSheet(
     val characterScroll = rememberScrollState()
     val aiScroll = rememberScrollState()
     val voiceScroll = rememberScrollState()
+    val speechRecognizerOptions =
+        remember(state.settingsOpen) {
+            listOf("" to "Automatic · prefer on-device") +
+                installedSpeechRecognizers(context).map { it.component to it.label }
+        }
     val pageScroll =
         when (selectedPage) {
             SettingsPage.AVATAR -> avatarScroll
@@ -1536,6 +1734,24 @@ private fun SettingsSheet(
                 }
 
                 if (selectedPage == SettingsPage.VOICE) {
+            HorizontalDivider(color = Color.White.copy(alpha = 0.1f))
+            SectionTitle("Speech input")
+            DropdownField(
+                label = "Phone speech recognizer",
+                value =
+                    draft.speechRecognizerService.takeIf { selected ->
+                        speechRecognizerOptions.any { it.first == selected }
+                    }.orEmpty(),
+                options = speechRecognizerOptions,
+                onSelected = { draft = draft.copy(speechRecognizerService = it) },
+            )
+            Text(
+                "Automatic uses Android's on-device recognizer when this phone exposes one. " +
+                    "Specific entries are the recognition services installed on this phone.",
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                fontSize = 11.sp,
+            )
+
             HorizontalDivider(color = Color.White.copy(alpha = 0.1f))
             SectionTitle("Fish realtime voice")
             Row(verticalAlignment = Alignment.CenterVertically) {

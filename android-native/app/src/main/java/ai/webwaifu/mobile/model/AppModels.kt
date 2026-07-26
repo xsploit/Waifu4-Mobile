@@ -273,6 +273,7 @@ data class AppSettings(
     val fishChunkLength: Int = 160,
     val fishLiveChunkingStrategy: FishLiveChunkingStrategy =
         FishLiveChunkingStrategy.FAST_PHRASE,
+    val speechRecognizerService: String = "",
     val voiceEnabled: Boolean = true,
     val voiceAutoSpeak: Boolean = true,
     val lipSyncMode: LipSyncMode = LipSyncMode.HYBRID,
