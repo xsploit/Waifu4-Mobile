@@ -9,6 +9,7 @@ import type {
   SequencerSettings,
   VisualSettings,
 } from '../lib/menu/types';
+import { DEFAULT_ANIMATIONS } from '../lib/vrm/sequencer';
 import { getTtsManager } from './tts-manager-shim';
 import './stage.css';
 
@@ -24,6 +25,7 @@ type AvatarCommand =
     }; bands: { low: number; midLow: number; midHigh: number; high: number } }
   | { type: 'model'; url: string | null }
   | { type: 'play'; request: ManualPlayRequest | null }
+  | { type: 'playAsset'; url: string }
   | { type: 'sequencer'; settings: Partial<SequencerSettings> }
   | { type: 'visual'; settings: Partial<VisualSettings> };
 
@@ -60,7 +62,7 @@ function MobileAvatarStage() {
   const [manualPlayRequest, setManualPlayRequest] = useState<ManualPlayRequest | null>(null);
   const [facialExpressionRequest, setFacialExpressionRequest] =
     useState<FacialExpressionRequest | null>(null);
-  const readyRef = useRef(false);
+  const manualPlayNonceRef = useRef(Date.now());
 
   const receive = useCallback((json: string) => {
     let command: AvatarCommand;
@@ -98,6 +100,19 @@ function MobileAvatarStage() {
       case 'play':
         setManualPlayRequest(command.request);
         break;
+      case 'playAsset': {
+        const index = DEFAULT_ANIMATIONS.findIndex((entry) => entry.url === command.url);
+        if (index < 0) {
+          postNativeEvent({
+            type: 'error',
+            message: `Animation is not in the Waifu4 playlist: ${command.url}`,
+          });
+          break;
+        }
+        manualPlayNonceRef.current += 1;
+        setManualPlayRequest({ index, nonce: manualPlayNonceRef.current });
+        break;
+      }
       case 'sequencer':
         mergeState(setSequencerSettings, command.settings);
         break;
@@ -109,10 +124,8 @@ function MobileAvatarStage() {
 
   useEffect(() => {
     window.WebWaifuAvatar = { receive };
-    readyRef.current = true;
     window.AndroidAvatar?.onReady?.();
     return () => {
-      readyRef.current = false;
       delete window.WebWaifuAvatar;
     };
   }, [receive]);

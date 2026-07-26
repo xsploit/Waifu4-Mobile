@@ -189,6 +189,9 @@ const ROUTELET_PIXEL_RATIO = ROUTELET_RENDER_MODE
       2,
     )
   : 1;
+const MOBILE_PIXEL_RATIO = ROUTELET_URL_PARAMS.has('mobileDpr')
+  ? THREE.MathUtils.clamp(Number(ROUTELET_URL_PARAMS.get('mobileDpr')) || 1.5, 1, 2)
+  : null;
 const BLINK_CLOSE_SECONDS = 0.045;
 const BLINK_HOLD_SECONDS = 0.028;
 const BLINK_OPEN_SECONDS = 0.105;
@@ -1154,7 +1157,9 @@ function SceneRuntime({
     const cameraRig = getCameraRigVectors(visualSettings);
 
     gl.setPixelRatio(
-      ROUTELET_RENDER_MODE ? ROUTELET_PIXEL_RATIO : Math.min(window.devicePixelRatio, 2),
+      ROUTELET_RENDER_MODE
+        ? ROUTELET_PIXEL_RATIO
+        : (MOBILE_PIXEL_RATIO ?? Math.min(window.devicePixelRatio, 2)),
     );
     gl.setClearColor(0x02040a, 0);
     gl.autoClear = true;
@@ -1995,7 +2000,7 @@ function VrmStageComponent({
       onWheel={handleWheel}
     >
       <Canvas
-        dpr={ROUTELET_RENDER_MODE ? ROUTELET_PIXEL_RATIO : [1, 2]}
+        dpr={ROUTELET_RENDER_MODE ? ROUTELET_PIXEL_RATIO : (MOBILE_PIXEL_RATIO ?? [1, 2])}
         gl={{
           alpha: true,
           antialias: !ROUTELET_RENDER_MODE || ROUTELET_QUALITY_MODE,

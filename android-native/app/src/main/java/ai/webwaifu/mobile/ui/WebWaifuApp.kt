@@ -830,9 +830,9 @@ private fun SettingsSheet(
                 Text("Reset animation player")
             }
 
-            SectionTitle("Render post-processing")
+            SectionTitle("Waifu4 renderer")
             Text(
-                "Waifu4 ACES/RGB correction plus mobile-native Filament effects.",
+                "The original Three.js + Pixiv MToon material, outline, lighting, arm guard, and RGB post-processing controls.",
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 fontSize = 11.sp,
             )
@@ -841,6 +841,29 @@ private fun SettingsSheet(
                 checked = draft.postProcessingEnabled,
                 onCheckedChange = {
                     previewAvatar(draft.copy(postProcessingEnabled = it))
+                },
+            )
+            LabeledSwitch(
+                label = "MToon outline",
+                checked = draft.outlineEnabled,
+                onCheckedChange = {
+                    previewAvatar(draft.copy(outlineEnabled = it))
+                },
+            )
+            SettingSlider(
+                label = "Outline size",
+                value = draft.outlineThickness,
+                range = 0.0005f..0.02f,
+                onValueChange = {
+                    previewAvatar(draft.copy(outlineThickness = it))
+                },
+            )
+            SettingSlider(
+                label = "Outline alpha",
+                value = draft.outlineAlpha,
+                range = 0f..1f,
+                onValueChange = {
+                    previewAvatar(draft.copy(outlineAlpha = it))
                 },
             )
             LabeledSwitch(
@@ -883,61 +906,122 @@ private fun SettingsSheet(
                 },
             )
             LabeledSwitch(
-                label = "Bloom",
-                checked = draft.bloomEnabled,
+                label = "Arm clip guard",
+                checked = draft.armClipGuardEnabled,
                 onCheckedChange = {
-                    previewAvatar(draft.copy(bloomEnabled = it))
+                    previewAvatar(draft.copy(armClipGuardEnabled = it))
                 },
             )
             SettingSlider(
-                label = "Bloom strength",
-                value = draft.bloomStrength,
+                label = "Arm guard strength",
+                value = draft.armClipGuardStrength,
                 range = 0f..1f,
                 onValueChange = {
-                    previewAvatar(draft.copy(bloomStrength = it))
+                    previewAvatar(draft.copy(armClipGuardStrength = it))
+                },
+            )
+            SettingSlider(
+                label = "Arm torso radius",
+                value = draft.armClipTorsoRadius,
+                range = 0.08f..0.55f,
+                onValueChange = {
+                    previewAvatar(draft.copy(armClipTorsoRadius = it))
                 },
             )
             LabeledSwitch(
-                label = "Vignette",
-                checked = draft.vignetteEnabled,
+                label = "Custom MToon tuning",
+                checked = draft.mtoonTuningEnabled,
                 onCheckedChange = {
-                    previewAvatar(draft.copy(vignetteEnabled = it))
+                    previewAvatar(draft.copy(mtoonTuningEnabled = it))
                 },
             )
             SettingSlider(
-                label = "Vignette strength",
-                value = draft.vignetteStrength,
+                label = "MToon shade shift",
+                value = draft.mtoonShadeShift,
+                range = -1f..1f,
+                onValueChange = {
+                    previewAvatar(draft.copy(mtoonShadeShift = it))
+                },
+            )
+            SettingSlider(
+                label = "MToon toony",
+                value = draft.mtoonToony,
                 range = 0f..1f,
                 onValueChange = {
-                    previewAvatar(draft.copy(vignetteStrength = it))
-                },
-            )
-            LabeledSwitch(
-                label = "Ambient occlusion",
-                checked = draft.ambientOcclusionEnabled,
-                onCheckedChange = {
-                    previewAvatar(draft.copy(ambientOcclusionEnabled = it))
+                    previewAvatar(draft.copy(mtoonToony = it))
                 },
             )
             SettingSlider(
-                label = "Occlusion intensity",
-                value = draft.ambientOcclusionIntensity,
+                label = "MToon GI equalize",
+                value = draft.mtoonGiEqualization,
+                range = 0f..1f,
+                onValueChange = {
+                    previewAvatar(draft.copy(mtoonGiEqualization = it))
+                },
+            )
+            SettingSlider(
+                label = "MToon rim lift",
+                value = draft.mtoonRimLift,
+                range = 0f..1f,
+                onValueChange = {
+                    previewAvatar(draft.copy(mtoonRimLift = it))
+                },
+            )
+            SettingSlider(
+                label = "MToon rim power",
+                value = draft.mtoonRimFresnel,
+                range = 0.1f..10f,
+                onValueChange = {
+                    previewAvatar(draft.copy(mtoonRimFresnel = it))
+                },
+            )
+            SettingSlider(
+                label = "MToon rim lighting",
+                value = draft.mtoonRimLightingMix,
+                range = 0f..1f,
+                onValueChange = {
+                    previewAvatar(draft.copy(mtoonRimLightingMix = it))
+                },
+            )
+            SettingSlider(
+                label = "Key light",
+                value = draft.keyLight,
+                range = 0f..3f,
+                onValueChange = {
+                    previewAvatar(draft.copy(keyLight = it))
+                },
+            )
+            SettingSlider(
+                label = "Fill light",
+                value = draft.fillLight,
                 range = 0f..2f,
                 onValueChange = {
-                    previewAvatar(draft.copy(ambientOcclusionIntensity = it))
+                    previewAvatar(draft.copy(fillLight = it))
                 },
             )
-            LabeledSwitch(
-                label = "Dynamic resolution",
-                checked = draft.dynamicResolutionEnabled,
-                onCheckedChange = {
-                    previewAvatar(draft.copy(dynamicResolutionEnabled = it))
+            SettingSlider(
+                label = "Rim light",
+                value = draft.rimLight,
+                range = 0f..2f,
+                onValueChange = {
+                    previewAvatar(draft.copy(rimLight = it))
                 },
             )
-            Text(
-                "Dynamic resolution protects animation and lipsync frame pacing on slower phones.",
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                fontSize = 11.sp,
+            SettingSlider(
+                label = "Hemisphere light",
+                value = draft.hemiLight,
+                range = 0f..2f,
+                onValueChange = {
+                    previewAvatar(draft.copy(hemiLight = it))
+                },
+            )
+            SettingSlider(
+                label = "Ambient light",
+                value = draft.ambientLight,
+                range = 0f..2f,
+                onValueChange = {
+                    previewAvatar(draft.copy(ambientLight = it))
+                },
             )
             OutlinedButton(
                 onClick = {
@@ -949,19 +1033,30 @@ private fun SettingsSheet(
                             colorPowerR = 1.4f,
                             colorPowerG = 1.45f,
                             colorPowerB = 1.45f,
-                            bloomEnabled = false,
-                            bloomStrength = 0.12f,
-                            vignetteEnabled = false,
-                            vignetteStrength = 0.35f,
-                            ambientOcclusionEnabled = false,
-                            ambientOcclusionIntensity = 0.7f,
-                            dynamicResolutionEnabled = true,
+                            outlineEnabled = true,
+                            outlineAlpha = 0.8f,
+                            outlineThickness = 0.003f,
+                            armClipGuardEnabled = true,
+                            armClipGuardStrength = 0.75f,
+                            armClipTorsoRadius = 0.24f,
+                            mtoonTuningEnabled = false,
+                            mtoonGiEqualization = 0.9f,
+                            mtoonRimFresnel = 5f,
+                            mtoonRimLift = 0f,
+                            mtoonRimLightingMix = 1f,
+                            mtoonShadeShift = 0f,
+                            mtoonToony = 0.9f,
+                            keyLight = 0.8f,
+                            fillLight = 0.3f,
+                            rimLight = 0.35f,
+                            hemiLight = 0.35f,
+                            ambientLight = 0.35f,
                         ),
                     )
                 },
                 modifier = Modifier.fillMaxWidth(),
             ) {
-                Text("Reset post-processing")
+                Text("Reset Waifu4 renderer")
             }
 
             SectionTitle("Character")
@@ -1093,7 +1188,7 @@ private fun SettingsSheet(
             SettingSlider(
                 label = "Model scale",
                 value = draft.avatarScale,
-                range = 0.35f..2f,
+                range = 0.25f..4f,
                 onValueChange = {
                     previewAvatar(draft.copy(avatarScale = it))
                 },
@@ -1101,7 +1196,7 @@ private fun SettingsSheet(
             SettingSlider(
                 label = "Move left / right",
                 value = draft.avatarPositionX,
-                range = -1.5f..1.5f,
+                range = -3f..3f,
                 onValueChange = {
                     previewAvatar(draft.copy(avatarPositionX = it))
                 },
@@ -1117,7 +1212,7 @@ private fun SettingsSheet(
             SettingSlider(
                 label = "Move forward / back",
                 value = draft.avatarPositionZ,
-                range = -1.5f..1.5f,
+                range = -3f..3f,
                 onValueChange = {
                     previewAvatar(draft.copy(avatarPositionZ = it))
                 },

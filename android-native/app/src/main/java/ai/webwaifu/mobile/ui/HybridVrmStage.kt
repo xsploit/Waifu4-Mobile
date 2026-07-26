@@ -31,7 +31,7 @@ import org.json.JSONObject
 
 private const val APP_ASSET_HOST = "appassets.androidplatform.net"
 private const val AVATAR_PAGE =
-    "https://$APP_ASSET_HOST/assets/avatar/mobile-avatar.html"
+    "https://$APP_ASSET_HOST/assets/avatar/mobile-avatar.html?mobileDpr=1.5"
 
 /**
  * Android stays responsible for application state, provider traffic, secrets, storage, and audio.
@@ -155,11 +155,30 @@ internal fun HybridVrmStage(
         state.settings.avatarRotationX,
         state.settings.avatarRotationY,
         state.settings.avatarRotationZ,
+        state.settings.postProcessingEnabled,
         state.settings.sceneExposure,
         state.settings.colorCorrectionEnabled,
         state.settings.colorPowerR,
         state.settings.colorPowerG,
         state.settings.colorPowerB,
+        state.settings.outlineEnabled,
+        state.settings.outlineAlpha,
+        state.settings.outlineThickness,
+        state.settings.armClipGuardEnabled,
+        state.settings.armClipGuardStrength,
+        state.settings.armClipTorsoRadius,
+        state.settings.mtoonTuningEnabled,
+        state.settings.mtoonGiEqualization,
+        state.settings.mtoonRimFresnel,
+        state.settings.mtoonRimLift,
+        state.settings.mtoonRimLightingMix,
+        state.settings.mtoonShadeShift,
+        state.settings.mtoonToony,
+        state.settings.keyLight,
+        state.settings.fillLight,
+        state.settings.rimLight,
+        state.settings.hemiLight,
+        state.settings.ambientLight,
     ) {
         if (!rendererReady) return@LaunchedEffect
         val settings = state.settings
@@ -185,10 +204,34 @@ internal fun HybridVrmStage(
                         .put("modelRotationY", settings.avatarRotationY)
                         .put("modelRotationZ", settings.avatarRotationZ)
                         .put("sceneExposure", settings.sceneExposure)
-                        .put("colorCorr", settings.colorCorrectionEnabled)
+                        .put(
+                            "colorCorr",
+                            settings.postProcessingEnabled && settings.colorCorrectionEnabled,
+                        )
                         .put("colorPowR", settings.colorPowerR)
                         .put("colorPowG", settings.colorPowerG)
-                        .put("colorPowB", settings.colorPowerB),
+                        .put("colorPowB", settings.colorPowerB)
+                        .put(
+                            "outline",
+                            settings.postProcessingEnabled && settings.outlineEnabled,
+                        )
+                        .put("outlineAlpha", settings.outlineAlpha)
+                        .put("outlineThickness", settings.outlineThickness)
+                        .put("armClipGuard", settings.armClipGuardEnabled)
+                        .put("armClipGuardStrength", settings.armClipGuardStrength)
+                        .put("armClipTorsoRadius", settings.armClipTorsoRadius)
+                        .put("mtoonTuning", settings.mtoonTuningEnabled)
+                        .put("mtoonGiEqualization", settings.mtoonGiEqualization)
+                        .put("mtoonRimFresnel", settings.mtoonRimFresnel)
+                        .put("mtoonRimLift", settings.mtoonRimLift)
+                        .put("mtoonRimLightingMix", settings.mtoonRimLightingMix)
+                        .put("mtoonShadeShift", settings.mtoonShadeShift)
+                        .put("mtoonToony", settings.mtoonToony)
+                        .put("keyLight", settings.keyLight)
+                        .put("fillLight", settings.fillLight)
+                        .put("rimLight", settings.rimLight)
+                        .put("hemiLight", settings.hemiLight)
+                        .put("ambientLight", settings.ambientLight),
                 ),
         )
     }
@@ -215,6 +258,26 @@ internal fun HybridVrmStage(
                         .put("speed", settings.animationSpeed)
                         .put("duration", settings.animationDurationSeconds),
                 ),
+        )
+    }
+
+    LaunchedEffect(
+        rendererReady,
+        state.settings.animationPlaying,
+        state.settings.animationShuffle,
+        state.settings.selectedAnimationAsset,
+    ) {
+        if (
+            !rendererReady ||
+            !state.settings.animationPlaying ||
+            state.settings.animationShuffle
+        ) {
+            return@LaunchedEffect
+        }
+        webView.sendAvatarCommand(
+            JSONObject()
+                .put("type", "playAsset")
+                .put("url", "/assets/${state.settings.selectedAnimationAsset}"),
         )
     }
 

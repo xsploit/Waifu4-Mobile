@@ -188,6 +188,57 @@ class SettingsStore(context: Context) {
             colorPowerB =
                 preferences.getFloat("color_power_b", defaults.colorPowerB)
                     .coerceIn(1f, 2f),
+            outlineEnabled =
+                preferences.getBoolean("outline_enabled", defaults.outlineEnabled),
+            outlineAlpha =
+                preferences.getFloat("outline_alpha", defaults.outlineAlpha)
+                    .coerceIn(0f, 1f),
+            outlineThickness =
+                preferences.getFloat("outline_thickness", defaults.outlineThickness)
+                    .coerceIn(0.0005f, 0.02f),
+            armClipGuardEnabled =
+                preferences.getBoolean(
+                    "arm_clip_guard_enabled",
+                    defaults.armClipGuardEnabled,
+                ),
+            armClipGuardStrength =
+                preferences.getFloat(
+                    "arm_clip_guard_strength",
+                    defaults.armClipGuardStrength,
+                ).coerceIn(0f, 1f),
+            armClipTorsoRadius =
+                preferences.getFloat("arm_clip_torso_radius", defaults.armClipTorsoRadius)
+                    .coerceIn(0.08f, 0.55f),
+            mtoonTuningEnabled =
+                preferences.getBoolean("mtoon_tuning_enabled", defaults.mtoonTuningEnabled),
+            mtoonGiEqualization =
+                preferences.getFloat("mtoon_gi_equalization", defaults.mtoonGiEqualization)
+                    .coerceIn(0f, 1f),
+            mtoonRimFresnel =
+                preferences.getFloat("mtoon_rim_fresnel", defaults.mtoonRimFresnel)
+                    .coerceIn(0.1f, 10f),
+            mtoonRimLift =
+                preferences.getFloat("mtoon_rim_lift", defaults.mtoonRimLift)
+                    .coerceIn(0f, 1f),
+            mtoonRimLightingMix =
+                preferences.getFloat("mtoon_rim_lighting_mix", defaults.mtoonRimLightingMix)
+                    .coerceIn(0f, 1f),
+            mtoonShadeShift =
+                preferences.getFloat("mtoon_shade_shift", defaults.mtoonShadeShift)
+                    .coerceIn(-1f, 1f),
+            mtoonToony =
+                preferences.getFloat("mtoon_toony", defaults.mtoonToony)
+                    .coerceIn(0f, 1f),
+            keyLight =
+                preferences.getFloat("key_light", defaults.keyLight).coerceIn(0f, 3f),
+            fillLight =
+                preferences.getFloat("fill_light", defaults.fillLight).coerceIn(0f, 2f),
+            rimLight =
+                preferences.getFloat("rim_light", defaults.rimLight).coerceIn(0f, 2f),
+            hemiLight =
+                preferences.getFloat("hemi_light", defaults.hemiLight).coerceIn(0f, 2f),
+            ambientLight =
+                preferences.getFloat("ambient_light", defaults.ambientLight).coerceIn(0f, 2f),
             bloomEnabled =
                 preferences.getBoolean("bloom_enabled", defaults.bloomEnabled),
             bloomStrength =
@@ -224,7 +275,7 @@ class SettingsStore(context: Context) {
                     defaults.cameraViewMode,
                 ),
             avatarScale =
-                preferences.getFloat("avatar_scale", defaults.avatarScale).coerceIn(0.35f, 2f),
+                preferences.getFloat("avatar_scale", defaults.avatarScale).coerceIn(0.25f, 4f),
             avatarPositionX =
                 preferences.getFloat("avatar_position_x", defaults.avatarPositionX)
                     .coerceIn(-3f, 3f),
@@ -300,6 +351,45 @@ class SettingsStore(context: Context) {
             .putFloat("color_power_r", settings.colorPowerR.coerceIn(1f, 2f))
             .putFloat("color_power_g", settings.colorPowerG.coerceIn(1f, 2f))
             .putFloat("color_power_b", settings.colorPowerB.coerceIn(1f, 2f))
+            .putBoolean("outline_enabled", settings.outlineEnabled)
+            .putFloat("outline_alpha", settings.outlineAlpha.coerceIn(0f, 1f))
+            .putFloat(
+                "outline_thickness",
+                settings.outlineThickness.coerceIn(0.0005f, 0.02f),
+            )
+            .putBoolean("arm_clip_guard_enabled", settings.armClipGuardEnabled)
+            .putFloat(
+                "arm_clip_guard_strength",
+                settings.armClipGuardStrength.coerceIn(0f, 1f),
+            )
+            .putFloat(
+                "arm_clip_torso_radius",
+                settings.armClipTorsoRadius.coerceIn(0.08f, 0.55f),
+            )
+            .putBoolean("mtoon_tuning_enabled", settings.mtoonTuningEnabled)
+            .putFloat(
+                "mtoon_gi_equalization",
+                settings.mtoonGiEqualization.coerceIn(0f, 1f),
+            )
+            .putFloat(
+                "mtoon_rim_fresnel",
+                settings.mtoonRimFresnel.coerceIn(0.1f, 10f),
+            )
+            .putFloat("mtoon_rim_lift", settings.mtoonRimLift.coerceIn(0f, 1f))
+            .putFloat(
+                "mtoon_rim_lighting_mix",
+                settings.mtoonRimLightingMix.coerceIn(0f, 1f),
+            )
+            .putFloat(
+                "mtoon_shade_shift",
+                settings.mtoonShadeShift.coerceIn(-1f, 1f),
+            )
+            .putFloat("mtoon_toony", settings.mtoonToony.coerceIn(0f, 1f))
+            .putFloat("key_light", settings.keyLight.coerceIn(0f, 3f))
+            .putFloat("fill_light", settings.fillLight.coerceIn(0f, 2f))
+            .putFloat("rim_light", settings.rimLight.coerceIn(0f, 2f))
+            .putFloat("hemi_light", settings.hemiLight.coerceIn(0f, 2f))
+            .putFloat("ambient_light", settings.ambientLight.coerceIn(0f, 2f))
             .putBoolean("bloom_enabled", settings.bloomEnabled)
             .putFloat("bloom_strength", settings.bloomStrength.coerceIn(0f, 1f))
             .putBoolean("vignette_enabled", settings.vignetteEnabled)
@@ -313,7 +403,7 @@ class SettingsStore(context: Context) {
             .putBoolean("memory_enabled", settings.memoryEnabled)
             .putInt("memory_max_highlights", settings.memoryMaxHighlights.coerceIn(2, 10))
             .putString("camera_view_mode", settings.cameraViewMode.name)
-            .putFloat("avatar_scale", settings.avatarScale.coerceIn(0.35f, 2f))
+            .putFloat("avatar_scale", settings.avatarScale.coerceIn(0.25f, 4f))
             .putFloat("avatar_position_x", settings.avatarPositionX.coerceIn(-3f, 3f))
             .putFloat(
                 "avatar_vertical_offset",

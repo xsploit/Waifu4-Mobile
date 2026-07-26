@@ -286,6 +286,74 @@ internal fun parseLocalTransferSettings(
         colorPowerB =
             (visual?.floatOr("colorPowB", current.colorPowerB) ?: current.colorPowerB)
                 .coerceIn(1f, 2f),
+        outlineEnabled =
+            visual?.booleanOr("outline", current.outlineEnabled)
+                ?: current.outlineEnabled,
+        outlineAlpha =
+            (visual?.floatOr("outlineAlpha", current.outlineAlpha) ?: current.outlineAlpha)
+                .coerceIn(0f, 1f),
+        outlineThickness =
+            (
+                visual?.floatOr("outlineThickness", current.outlineThickness)
+                    ?: current.outlineThickness
+            ).coerceIn(0.0005f, 0.02f),
+        armClipGuardEnabled =
+            visual?.booleanOr("armClipGuard", current.armClipGuardEnabled)
+                ?: current.armClipGuardEnabled,
+        armClipGuardStrength =
+            (
+                visual?.floatOr("armClipGuardStrength", current.armClipGuardStrength)
+                    ?: current.armClipGuardStrength
+            ).coerceIn(0f, 1f),
+        armClipTorsoRadius =
+            (
+                visual?.floatOr("armClipTorsoRadius", current.armClipTorsoRadius)
+                    ?: current.armClipTorsoRadius
+            ).coerceIn(0.08f, 0.55f),
+        mtoonTuningEnabled =
+            visual?.booleanOr("mtoonTuning", current.mtoonTuningEnabled)
+                ?: current.mtoonTuningEnabled,
+        mtoonGiEqualization =
+            (
+                visual?.floatOr("mtoonGiEqualization", current.mtoonGiEqualization)
+                    ?: current.mtoonGiEqualization
+            ).coerceIn(0f, 1f),
+        mtoonRimFresnel =
+            (
+                visual?.floatOr("mtoonRimFresnel", current.mtoonRimFresnel)
+                    ?: current.mtoonRimFresnel
+            ).coerceIn(0.1f, 10f),
+        mtoonRimLift =
+            (visual?.floatOr("mtoonRimLift", current.mtoonRimLift) ?: current.mtoonRimLift)
+                .coerceIn(0f, 1f),
+        mtoonRimLightingMix =
+            (
+                visual?.floatOr("mtoonRimLightingMix", current.mtoonRimLightingMix)
+                    ?: current.mtoonRimLightingMix
+            ).coerceIn(0f, 1f),
+        mtoonShadeShift =
+            (
+                visual?.floatOr("mtoonShadeShift", current.mtoonShadeShift)
+                    ?: current.mtoonShadeShift
+            ).coerceIn(-1f, 1f),
+        mtoonToony =
+            (visual?.floatOr("mtoonToony", current.mtoonToony) ?: current.mtoonToony)
+                .coerceIn(0f, 1f),
+        keyLight =
+            (visual?.floatOr("keyLight", current.keyLight) ?: current.keyLight)
+                .coerceIn(0f, 3f),
+        fillLight =
+            (visual?.floatOr("fillLight", current.fillLight) ?: current.fillLight)
+                .coerceIn(0f, 2f),
+        rimLight =
+            (visual?.floatOr("rimLight", current.rimLight) ?: current.rimLight)
+                .coerceIn(0f, 2f),
+        hemiLight =
+            (visual?.floatOr("hemiLight", current.hemiLight) ?: current.hemiLight)
+                .coerceIn(0f, 2f),
+        ambientLight =
+            (visual?.floatOr("ambientLight", current.ambientLight) ?: current.ambientLight)
+                .coerceIn(0f, 2f),
         cameraViewMode =
             when (visual?.optString("cameraViewMode")) {
                 "full-body" -> CameraViewMode.FULL_BODY
@@ -294,13 +362,16 @@ internal fun parseLocalTransferSettings(
             },
         avatarScale =
             (visual?.floatOr("modelScale", current.avatarScale) ?: current.avatarScale)
-                .coerceIn(0.35f, 2f),
+                .coerceIn(0.25f, 4f),
         avatarPositionX =
             (visual?.floatOr("modelPositionX", current.avatarPositionX) ?: current.avatarPositionX)
                 .coerceIn(-3f, 3f),
         avatarVerticalOffset =
             (
-                visual?.floatOr("modelVerticalOffset", current.avatarVerticalOffset)
+                visual?.floatOr(
+                    "modelVerticalOffset",
+                    current.avatarVerticalOffset - WEB_WAIFU_BASE_VERTICAL_OFFSET,
+                )?.minus(WEB_WAIFU_BASE_VERTICAL_OFFSET)
                     ?: current.avatarVerticalOffset
             )
                 .coerceIn(-2f, 2f),
@@ -323,6 +394,8 @@ internal fun parseLocalTransferSettings(
 
 private fun JSONObject.stringOr(key: String, fallback: String): String =
     if (has(key) && opt(key) is String) optString(key).trim() else fallback
+
+private const val WEB_WAIFU_BASE_VERTICAL_OFFSET = -0.62f
 
 private fun JSONObject.booleanOr(key: String, fallback: Boolean): Boolean =
     if (has(key) && opt(key) is Boolean) optBoolean(key) else fallback
