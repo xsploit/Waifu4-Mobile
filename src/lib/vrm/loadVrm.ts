@@ -202,6 +202,9 @@ export async function loadVrm(url: string): Promise<VRM> {
   vrm.scene.position.set(0, 0.5, 0);
   vrm.scene.rotation.set(0, Math.PI, 0);
   vrm.scene.scale.set(1, 1, 1);
+  vrm.humanoid.resetNormalizedPose();
+  vrm.humanoid.update();
+  vrm.scene.updateMatrixWorld(true);
 
   return vrm;
 }

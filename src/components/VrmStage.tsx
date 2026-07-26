@@ -196,6 +196,7 @@ const BLINK_CLOSE_SECONDS = 0.045;
 const BLINK_HOLD_SECONDS = 0.028;
 const BLINK_OPEN_SECONDS = 0.105;
 const BLINK_TOTAL_SECONDS = BLINK_CLOSE_SECONDS + BLINK_HOLD_SECONDS + BLINK_OPEN_SECONDS;
+const MODEL_T_POSE_SETTLE_MS = 500;
 const BLINK_EXPRESSION_CACHE = new WeakMap<VrmExpressionManager, readonly string[]>();
 const FACIAL_EXPRESSION_ATTACK_MS = 140;
 const FACIAL_EXPRESSION_MIN_DURATION_MS = 500;
@@ -1392,6 +1393,7 @@ function VrmStageComponent({
     THREE.MathUtils.clamp(value, SCALE_LIMITS.min, SCALE_LIMITS.max);
   const [vrm, setVrm] = useState<VRM | null>(null);
   const [mixer, setMixer] = useState<THREE.AnimationMixer | null>(null);
+  const [modelSettled, setModelSettled] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [modelScale, setModelScale] = useState(() => clampScale(visualSettings.modelScale));
   const modelScaleTargetRef = useRef(clampScale(visualSettings.modelScale));
@@ -1406,6 +1408,7 @@ function VrmStageComponent({
     startOffset: number;
   } | null>(null);
   const animationRequestRef = useRef(0);
+  const firstAnimationAfterLoadRef = useRef(true);
   const lastManualPlayNonceRef = useRef<number | null>(null);
   const sequencerRef = useRef<AnimationSequencer | null>(null);
   const autoStartTimerRef = useRef<number | null>(null);
@@ -1531,9 +1534,13 @@ function VrmStageComponent({
                   currentIndex: index,
                 },
           );
+          const fadeDuration = firstAnimationAfterLoadRef.current
+            ? 0
+            : visualSettings.crossfadeDuration;
+          firstAnimationAfterLoadRef.current = false;
           crossfadeToAction(
             nextMixer.clipAction(clip),
-            visualSettings.crossfadeDuration,
+            fadeDuration,
             sequencerSettings.speed,
             {
               clampWhenFinished: entry.loopEligible === false,
@@ -1558,8 +1565,10 @@ function VrmStageComponent({
     setModelScale(clampScale(visualSettings.modelScale));
     vrmRef.current = null;
     mixerRef.current = null;
+    firstAnimationAfterLoadRef.current = true;
     setVrm(null);
     setMixer(null);
+    setModelSettled(false);
     if (autoStartTimerRef.current !== null) {
       window.clearTimeout(autoStartTimerRef.current);
       autoStartTimerRef.current = null;
@@ -1598,6 +1607,7 @@ function VrmStageComponent({
             return;
           }
 
+          setModelSettled(true);
           setSequencerSettings((current) => {
             const hasEnabledEntries = current.playlist.some((entry) => entry.enabled);
             if (!hasEnabledEntries) {
@@ -1609,7 +1619,7 @@ function VrmStageComponent({
               playing: true,
             };
           });
-        }, 500);
+        }, MODEL_T_POSE_SETTLE_MS);
       })
       .catch((nextError: unknown) => {
         if (disposed) {
@@ -1692,6 +1702,9 @@ function VrmStageComponent({
     if (!manualPlayRequest) {
       return;
     }
+    if (!modelSettled) {
+      return;
+    }
     if (!vrm) {
       if (manualPlayRequest.telemetryId) {
         onAnimationTelemetry?.({
@@ -1735,7 +1748,14 @@ function VrmStageComponent({
       });
     }
     playAnimation(entry, manualPlayRequest.index);
-  }, [manualPlayRequest, onAnimationTelemetry, playAnimation, sequencerSettings.playlist, vrm]);
+  }, [
+    manualPlayRequest,
+    modelSettled,
+    onAnimationTelemetry,
+    playAnimation,
+    sequencerSettings.playlist,
+    vrm,
+  ]);
 
   useEffect(() => {
     if (!facialExpressionRequest) {
@@ -1791,7 +1811,7 @@ function VrmStageComponent({
   }, [facialExpressionRequest, onFacialExpressionTelemetry, vrm]);
 
   useEffect(() => {
-    if (!vrm) {
+    if (!vrm || !modelSettled) {
       return;
     }
 
@@ -1850,6 +1870,7 @@ function VrmStageComponent({
     };
   }, [
     playAnimation,
+    modelSettled,
     sequencerSettings.duration,
     sequencerSettings.loop,
     sequencerSettings.playing,
