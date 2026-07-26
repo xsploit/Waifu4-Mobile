@@ -9,6 +9,7 @@
   "scripts": {
     "dev": "concurrently -n web,server -c cyan,magenta \"npm:dev:web\" \"npm:dev:server\"",
     "dev:web": "vite",
+    "build:mobile-avatar": "vite build --config vite.mobile-avatar.config.ts",
     "dev:server": "tsx watch server/index.ts",
     "desktop:clean": "node scripts/clean-desktop-release.mjs",
     "desktop:dev": "concurrently -k -n web,server,electron -c cyan,magenta,yellow \"npm:dev:web\" \"npm:dev:server\" \"wait-on http://127.0.0.1:5173/ http://127.0.0.1:8797/health && cross-env ELECTRON_DEV_SERVER_URL=http://127.0.0.1:5173 ELECTRON_BACKEND_EXTERNAL=true ELECTRON_BOT_PORT=8797 electron electron/main.mjs\"",

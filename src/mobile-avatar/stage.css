@@ -1,0 +1,48 @@
+:root,
+html,
+body,
+#avatar-root,
+.stage-root {
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  overflow: hidden;
+  background: transparent;
+  touch-action: none;
+}
+
+body {
+  position: fixed;
+  inset: 0;
+  color: #fff;
+  font-family: system-ui, sans-serif;
+  -webkit-tap-highlight-color: transparent;
+  user-select: none;
+}
+
+.stage-root {
+  position: relative;
+}
+
+.stage-root canvas {
+  display: block;
+  width: 100% !important;
+  height: 100% !important;
+}
+
+.stage-badge {
+  max-width: min(80vw, 24rem);
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  border-radius: 999px;
+  padding: 0.65rem 1rem;
+  background: rgba(8, 7, 12, 0.76);
+  color: rgba(255, 255, 255, 0.86);
+  font-size: 0.8rem;
+  white-space: nowrap;
+  backdrop-filter: blur(12px);
+}
+
+.stage-badge-error {
+  border-color: rgba(255, 85, 130, 0.55);
+  color: #ffb0c7;
+}

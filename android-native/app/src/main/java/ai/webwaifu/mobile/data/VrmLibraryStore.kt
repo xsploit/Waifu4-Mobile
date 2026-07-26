@@ -6,6 +6,7 @@ import android.provider.OpenableColumns
 import ai.webwaifu.mobile.model.SavedVrmModel
 import ai.webwaifu.mobile.model.BUNDLED_VRM_MODELS
 import java.io.File
+import java.io.InputStream
 import java.util.UUID
 import org.json.JSONArray
 import org.json.JSONObject
@@ -106,6 +107,13 @@ class VrmLibraryStore(private val context: Context) {
             "Saved VRM file is missing."
         }
         return file.readBytes()
+    }
+
+    fun openStream(id: String): InputStream? {
+        val model = list().firstOrNull { it.id == id } ?: return null
+        val file = modelFile(model)
+        if (!file.isFile || file.canonicalFile.parentFile != directory.canonicalFile) return null
+        return file.inputStream().buffered()
     }
 
     private fun modelFile(model: SavedVrmModel) = File(directory, model.storageFileName)

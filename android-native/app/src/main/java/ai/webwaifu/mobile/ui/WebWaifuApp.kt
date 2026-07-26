@@ -317,7 +317,7 @@ private fun AvatarStage(
     state: WaifuUiState,
     modifier: Modifier = Modifier,
 ) {
-    NativeVrmStage(
+    HybridVrmStage(
         state = state,
         modifier = modifier,
     )
