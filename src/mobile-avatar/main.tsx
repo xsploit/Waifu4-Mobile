@@ -13,6 +13,17 @@ import { DEFAULT_ANIMATIONS } from '../lib/vrm/sequencer';
 import { getTtsManager } from './tts-manager-shim';
 import './stage.css';
 
+const MOBILE_ANIMATIONS = DEFAULT_ANIMATIONS.filter((entry) =>
+  entry.url.startsWith('/assets/animations/sachi-vrma/'),
+);
+
+function createMobileSequencerSettings(): SequencerSettings {
+  return {
+    ...createDefaultSequencerSettings(),
+    playlist: MOBILE_ANIMATIONS.map((entry) => ({ ...entry })),
+  };
+}
+
 type AvatarCommand =
   | { type: 'active'; active: boolean }
   | { type: 'expression'; request: FacialExpressionRequest | null }
@@ -58,7 +69,7 @@ function MobileAvatarStage() {
   const [active, setActive] = useState(true);
   const [modelUrl, setModelUrl] = useState<string | null>(null);
   const [visualSettings, setVisualSettings] = useState(createDefaultVisualSettings);
-  const [sequencerSettings, setSequencerSettings] = useState(createDefaultSequencerSettings);
+  const [sequencerSettings, setSequencerSettings] = useState(createMobileSequencerSettings);
   const [manualPlayRequest, setManualPlayRequest] = useState<ManualPlayRequest | null>(null);
   const [facialExpressionRequest, setFacialExpressionRequest] =
     useState<FacialExpressionRequest | null>(null);
@@ -101,7 +112,7 @@ function MobileAvatarStage() {
         setManualPlayRequest(command.request);
         break;
       case 'playAsset': {
-        const index = DEFAULT_ANIMATIONS.findIndex((entry) => entry.url === command.url);
+        const index = MOBILE_ANIMATIONS.findIndex((entry) => entry.url === command.url);
         if (index < 0) {
           postNativeEvent({
             type: 'error',

@@ -1394,6 +1394,7 @@ function VrmStageComponent({
   const [vrm, setVrm] = useState<VRM | null>(null);
   const [mixer, setMixer] = useState<THREE.AnimationMixer | null>(null);
   const [modelSettled, setModelSettled] = useState(false);
+  const [modelPresentationReady, setModelPresentationReady] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [modelScale, setModelScale] = useState(() => clampScale(visualSettings.modelScale));
   const modelScaleTargetRef = useRef(clampScale(visualSettings.modelScale));
@@ -1547,6 +1548,11 @@ function VrmStageComponent({
               loop: entry.loopEligible !== false,
             },
           );
+          // Apply the first animation pose before mounting the model into the visible scene.
+          // The VRM still gets its short normalized-pose settle internally, but a slow mobile
+          // clip decode must never expose that T-pose to the user.
+          nextMixer.update(0);
+          setModelPresentationReady(true);
         })
         .catch((nextError) => {
           console.error('[VrmStage] Failed to load animation:', nextError);
@@ -1569,6 +1575,7 @@ function VrmStageComponent({
     setVrm(null);
     setMixer(null);
     setModelSettled(false);
+    setModelPresentationReady(false);
     if (autoStartTimerRef.current !== null) {
       window.clearTimeout(autoStartTimerRef.current);
       autoStartTimerRef.current = null;
@@ -1664,6 +1671,12 @@ function VrmStageComponent({
     // Avatar scale application keep modelScale in sync after load.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [cancelScaleAnimation, modelUrl, setSequencerSettings]);
+
+  useEffect(() => {
+    if (vrm && modelSettled && !sequencerSettings.playing) {
+      setModelPresentationReady(true);
+    }
+  }, [modelSettled, sequencerSettings.playing, vrm]);
 
   useEffect(() => {
     if (!vrm) {
@@ -2072,7 +2085,7 @@ function VrmStageComponent({
           modelRotationZ={visualSettings.modelRotationZ}
           modelScale={modelScale}
           modelVerticalOffset={visualSettings.modelVerticalOffset}
-          vrm={vrm}
+          vrm={modelPresentationReady ? vrm : null}
         />
 
         {error ? (
@@ -2081,7 +2094,7 @@ function VrmStageComponent({
           </Html>
         ) : null}
 
-        {!vrm && !error ? (
+        {(!vrm || !modelPresentationReady) && !error ? (
           <Html center>
             <div className="stage-badge">Loading VRM...</div>
           </Html>
