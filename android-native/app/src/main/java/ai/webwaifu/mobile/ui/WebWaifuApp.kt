@@ -902,6 +902,10 @@ private fun SettingsSheet(
     val characterScroll = rememberScrollState()
     val aiScroll = rememberScrollState()
     val voiceScroll = rememberScrollState()
+    val animationClips =
+        remember(state.settingsOpen) {
+            availableAndroidAnimationClips(context)
+        }
     val speechRecognizerOptions =
         remember(state.settingsOpen) {
             listOf("" to "Automatic · prefer on-device") +
@@ -975,7 +979,7 @@ private fun SettingsSheet(
                 if (selectedPage == SettingsPage.AVATAR) {
             SectionTitle("Animation player")
             Text(
-                "Native VRMA playback · ${BUNDLED_ANIMATION_CLIPS.size} bundled Sachi clips · non-base clips load on demand",
+                "Waifu4 hybrid playback · ${animationClips.size} bundled VRMA, BVH, and FBX clips · clips load on demand",
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 fontSize = 11.sp,
             )
@@ -1004,7 +1008,7 @@ private fun SettingsSheet(
                 label = "Manual animation",
                 value = draft.selectedAnimationAsset,
                 options =
-                    BUNDLED_ANIMATION_CLIPS.map {
+                    animationClips.map {
                         it.assetPath to
                             if (it.safeAutoplay) {
                                 "${it.label} · base"

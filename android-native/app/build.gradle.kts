@@ -1,3 +1,5 @@
+import org.gradle.api.tasks.Sync
+
 plugins {
     id("com.android.application")
     id("org.jetbrains.kotlin.android")
@@ -13,6 +15,18 @@ val hasReleaseSigning = listOf(
     releaseKeyAlias,
     releaseKeyPassword,
 ).all { !it.isNullOrBlank() }
+
+val generatedWaifuAssets = layout.buildDirectory.dir("generated/waifuAssets")
+val syncWaifuAnimationAssets =
+    tasks.register<Sync>("syncWaifuAnimationAssets") {
+        from(rootProject.file("../public/assets/animations")) {
+            include("*.fbx")
+            include("silly-bvh/**")
+            include("silly-tavern/**")
+            into("animations")
+        }
+        into(generatedWaifuAssets)
+    }
 
 android {
     namespace = "ai.webwaifu.mobile"
@@ -83,6 +97,14 @@ android {
     androidResources {
         noCompress += listOf("vrm", "vrma")
     }
+
+    sourceSets {
+        getByName("main").assets.srcDir(generatedWaifuAssets)
+    }
+}
+
+tasks.named("preBuild").configure {
+    dependsOn(syncWaifuAnimationAssets)
 }
 
 dependencies {
