@@ -1,8 +1,0 @@
-/.gradle/
-/.idea/
-/local.properties
-/**/build/
-*.jks
-*.keystore
-/webwaifu-*.png
-/webwaifu-*.xml

@@ -1,5 +1,0 @@
-import { repairDesktopPomlRuntime } from './desktop-poml-runtime.mjs';
-
-export default async function afterPack(context) {
-  await repairDesktopPomlRuntime(context.packager.projectDir, context.appOutDir);
-}
