@@ -1,0 +1,56 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1920" height="520" viewBox="0 0 1920 520" role="img" aria-labelledby="title desc">
+  <title id="title">Waifu4 Mobile</title>
+  <desc id="desc">Neon pink and cyan Waifu4 Mobile logo on a transparent background.</desc>
+  <defs>
+    <linearGradient id="markFill" x1="90" y1="70" x2="430" y2="445" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#ff007f"/>
+      <stop offset="0.52" stop-color="#ff3fa0"/>
+      <stop offset="1" stop-color="#00ffff"/>
+    </linearGradient>
+    <linearGradient id="wordFill" x1="545" y1="155" x2="1735" y2="375" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#ffffff"/>
+      <stop offset="0.56" stop-color="#fff1fa"/>
+      <stop offset="1" stop-color="#bfffff"/>
+    </linearGradient>
+    <filter id="neonGlow" x="-40%" y="-40%" width="180%" height="180%" color-interpolation-filters="sRGB">
+      <feGaussianBlur stdDeviation="18" result="blur"/>
+      <feColorMatrix in="blur" type="matrix" values="1 0 0 0 0.55  0 0.35 0 0 0  0 0 0.8 0 0.55  0 0 0 0.72 0"/>
+      <feMerge>
+        <feMergeNode/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+    <filter id="softShadow" x="-20%" y="-30%" width="140%" height="170%">
+      <feDropShadow dx="0" dy="14" stdDeviation="14" flood-color="#030107" flood-opacity="0.72"/>
+    </filter>
+    <clipPath id="markClip">
+      <path d="M106 134 264 60l158 74v171c0 91-66 148-158 169-92-21-158-78-158-169V134Z"/>
+    </clipPath>
+  </defs>
+
+  <g filter="url(#softShadow)">
+    <path d="M106 134 264 60l158 74v171c0 91-66 148-158 169-92-21-158-78-158-169V134Z" fill="#030107" stroke="url(#markFill)" stroke-width="12" stroke-linejoin="round"/>
+    <g clip-path="url(#markClip)" opacity="0.28" filter="url(#neonGlow)">
+      <circle cx="150" cy="185" r="120" fill="#ff007f"/>
+      <circle cx="380" cy="355" r="130" fill="#00ffff"/>
+    </g>
+    <path d="m156 176 37 174 71-126 71 126 37-174" fill="none" stroke="#fff7fb" stroke-width="30" stroke-linecap="round" stroke-linejoin="round"/>
+    <path d="m156 176 37 174 71-126 71 126 37-174" fill="none" stroke="url(#markFill)" stroke-width="10" stroke-linecap="round" stroke-linejoin="round"/>
+    <path d="M344 356h91v91h-91z" fill="#030107" stroke="#00ffff" stroke-width="7"/>
+    <path d="M410 373v58M410 402h-50l43-32" fill="none" stroke="#ffffff" stroke-width="12" stroke-linecap="square" stroke-linejoin="bevel"/>
+    <path d="M410 373v58M410 402h-50l43-32" fill="none" stroke="#ff007f" stroke-width="4" stroke-linecap="square" stroke-linejoin="bevel"/>
+  </g>
+
+  <g filter="url(#softShadow)">
+    <text x="530" y="324" fill="url(#wordFill)" font-family="Arial Black, Impact, Arial, sans-serif" font-size="190" font-weight="900">WAIFU</text>
+    <text x="1215" y="324" fill="#ff007f" stroke="#ff007f" stroke-width="3" font-family="Arial Black, Impact, Arial, sans-serif" font-size="222" font-weight="900">4</text>
+    <rect x="1438" y="184" width="350" height="142" rx="25" fill="#030107" stroke="#00ffff" stroke-width="6"/>
+    <text x="1477" y="280" fill="#ffffff" font-family="Arial Black, Impact, Arial, sans-serif" font-size="76" font-weight="900" letter-spacing="3">MOBILE</text>
+    <path d="M541 374h1247" fill="none" stroke="#ff007f" stroke-width="8"/>
+    <path d="M541 392h975" fill="none" stroke="#00ffff" stroke-width="4"/>
+    <text x="545" y="448" fill="#ffffff" font-family="Consolas, Menlo, monospace" font-size="34" font-weight="700" letter-spacing="8">ANDROID AI COMPANION</text>
+    <circle cx="1515" cy="438" r="8" fill="#ff007f"/>
+    <circle cx="1549" cy="438" r="8" fill="#00ffff"/>
+    <path d="M1587 438h167" stroke="#ffffff" stroke-width="4" stroke-linecap="round" opacity="0.7"/>
+  </g>
+</svg>
